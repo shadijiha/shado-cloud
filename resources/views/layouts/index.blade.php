@@ -99,12 +99,15 @@
                             </a>
 
                             <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown">
+                                <a class="dropdown-item" href="#"
+                                   onclick="UpdateApp();" id="update_link">
+                                    Update App
+                                </a>
                                 <a class="dropdown-item" href="{{ route('logout') }}"
                                    onclick="event.preventDefault();
                                                      document.getElementById('logout-form').submit();">
                                     {{ __('Logout') }}
                                 </a>
-
                                 <form id="logout-form" action="{{ route('logout') }}" method="POST" class="d-none">
                                     @csrf
                                 </form>
@@ -127,7 +130,24 @@
         @yield('content')
     </main>
 </div>
+<script>
+    async function UpdateApp() {
+        const DOM = document.getElementById("update_link");
+        DOM.innerHTML = `<i class="fas fa-sync rotate"></i> Updating`;
 
+        // Get response from server
+        const data = await fetch('{{route("update")}}');
+        const json = await data.json();
+        console.log(json);
+
+        if (json.status == {{ \App\Http\Controllers\UpdateController::SUCCESS  }}) {
+            DOM.innerHTML = `<i class="fas fa-check"></i> Up to date`;
+        } else {
+            DOM.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error`;
+        }
+
+    }
+</script>
 <script>
     // This script is reponsible for the Content div animation
     const content_div = document.getElementById("main_content");

@@ -21,6 +21,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/', [App\Http\Controllers\HomeController::class, 'index'])->name('index');
 
     Route::get("/search", "App\Http\Controllers\SearchController@search");
+    Route::get("/update", [\App\Http\Controllers\UpdateController::class, "update"])->name("update");
 
     // TODO: Move API function outside of middleware, require api key instead
     Route::get("/dir", [App\Http\Controllers\FileFetcherController::class, 'indexDirectoriesAPI']);
