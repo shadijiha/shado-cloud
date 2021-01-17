@@ -6,7 +6,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Str;
+use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
 class UpdateController extends Controller
@@ -15,6 +15,7 @@ class UpdateController extends Controller
     const ERROR = 1;
 
     private $output = "";
+    private $status = UpdateController::SUCCESS;
 
     /**
      * @param Request $request
@@ -23,59 +24,56 @@ class UpdateController extends Controller
      */
     public function update(Request $request)
     {
-        $status = UpdateController::SUCCESS;
-        $output = "";
+        $this->output = "";
+        $message      = "";
 
         try {
-            // Pull from github
             $base_command = "cd ".base_path();
-            $process      = Process::fromShellCommandline("$base_command && git checkout master");
-            $process->start();
-            $process->wait($this->onError());
-            $output .= $process->getOutput();
+
+            // Pull from github
+            $process = Process::fromShellCommandline("$base_command && git checkout master");
+            $process->run();
+            $this->output .= $this->getOutput($process);
 
             // Pull
             $process = Process::fromShellCommandline("$base_command && git pull");
-            $process->start();
-            $process->wait($this->onError());
-            $output .= $process->getOutput();
+            $process->run();
+            $this->output .= $this->getOutput($process);
 
             // Install composer dependencies
             $process = Process::fromShellCommandline("$base_command && composer install");
-            $process->start();
-            $process->wait($this->onError());
-            $output .= $process->getOutput();
+            $process->run();
+            $this->output .= $this->getOutput($process);
 
             // Install npm dependencies
             $process = Process::fromShellCommandline("$base_command && npm install");
-            $process->start();
-            $process->wait($this->onError());
-            $output .= $process->getOutput();
+            $process->run();
+            $this->output .= $this->getOutput($process);
 
             // Run npm production
             $process = Process::fromShellCommandline("$base_command && npm run prod");
             $process->start();
 
-        } catch (\Exception $e) {
-            $status = UpdateController::ERROR;
+        } catch (ProcessFailedException  $e) {
+            $status  = UpdateController::ERROR;
+            $message = $e->getMessage();
         }
 
         return response([
-            "status" => $status,
-            "output" => $output
+            "status"  => $this->status,
+            "output"  => $this->output,
+            "message" => $message
         ]);
     }
 
     /**
-     * @return \Closure
+     * @param Process $process
+     *
+     * @return string
      */
-    private function onError()
+    private function getOutput(Process $process)
     {
-        return function ($type, $buffer) {
-            if (Process::ERR === $type) {
-                if (Str::contains(Str::lower($buffer), "error"))
-                    throw new \Exception("An error has occurred!$buffer");
-            }
-        };
+        $this->status = $process->getExitCode();
+        return $process->getOutput() == "" ? $process->getErrorOutput() : $process->getOutput();
     }
 }
