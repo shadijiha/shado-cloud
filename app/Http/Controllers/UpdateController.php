@@ -30,12 +30,12 @@ class UpdateController extends Controller
         try {
             $base_command = "cd ".base_path();
 
-            $process = Process::fromShellCommandline("$base_command && git pull");
+            $process = Process::fromShellCommandline("$base_command && ./update.sh");
             $process->run();
 
             if (!$process->isSuccessful()) {
                 $this->status = UpdateController::ERROR;
-                $this->output = $process->getErrorOutput();
+                $this->output .= $process->getErrorOutput();
             }
 
         } catch (ProcessFailedException  $e) {
