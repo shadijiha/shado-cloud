@@ -31,19 +31,16 @@ class UpdateController extends Controller
             $base_command = "cd ".base_path();
 
             // Pull from github;
-            exec("$base_command && git checkout master", $this->output, $this->status);
-
-            // Pull
-            exec("$base_command && git pull", $this->output, $this->status);
+            exec("git pull", $this->output, $this->status);
 
             // Install composer dependencies
-            exec("$base_command && composer install", $this->output, $this->status);
+            //exec("$base_command && composer install", $this->output, $this->status);
 
             // Install npm dependencies
-            exec("$base_command && npm install", $this->output, $this->status);
+            //exec("$base_command && npm install", $this->output, $this->status);
 
             // Run npm production
-            exec("$base_command && npm run prod", $this->output, $this->status);
+            //exec("$base_command && npm run prod", $this->output, $this->status);
 
         } catch (ProcessFailedException  $e) {
             $status  = UpdateController::ERROR;
