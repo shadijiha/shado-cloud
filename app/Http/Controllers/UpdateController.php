@@ -35,7 +35,7 @@ class UpdateController extends Controller
 
             if (!$process->isSuccessful()) {
                 $this->status = UpdateController::ERROR;
-                $this->output = $process->getOutput();
+                $this->output = $process->getErrorOutput();
             }
 
         } catch (ProcessFailedException  $e) {
