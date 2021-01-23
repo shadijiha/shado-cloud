@@ -11,8 +11,26 @@
 @import "sidebar";
 @import "auth";
 
+.folder, .file {
+    display: inline-block;
+    margin-right: 20px;
+    margin-left: 20px;
+    text-align: center;
+    cursor: pointer;
+
+    img {
+        width: 100px;
+        height: 100px;
+    }
+
+    span {
+        text-align: center;
+    }
+}
+
 .file_thumnail {
-    width: 100px;
+    width: 75px !important;
+    height: 75px !important;
 }
 
 .rotate {
@@ -26,4 +44,19 @@
     to {
         transform: rotate(359deg);
     }
+}
+
+#file_content {
+    padding: 20px;
+    border: solid gray 1px;
+    width: 50%;
+    min-width: 500px;
+    margin: auto;
+}
+
+#file_preview_dashboard {
+    width: 50%;
+    min-width: 500px;
+    margin: auto;
+    margin-bottom: 30px;
 }

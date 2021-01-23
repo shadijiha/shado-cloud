@@ -15,3 +15,4 @@ require('./bootstrap');
 require('./components/Example');
 require('./components/SearchBar')
 require('./components/Sidebar')
+require('./components/FilePreviewDashboard')
