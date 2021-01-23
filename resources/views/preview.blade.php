@@ -27,7 +27,6 @@
             });
 
             const json = await response.json();
-            console.log(json);
 
             // If Success
             if (json.status == {{ App\Http\Controllers\SaveController::SUCESSFUL_SAVE }}) {
