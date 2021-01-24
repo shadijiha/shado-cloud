@@ -2043,26 +2043,80 @@ var FilePreviewDashboard = /*#__PURE__*/function (_React$Component) {
 
   var _super = _createSuper(FilePreviewDashboard);
 
-  function FilePreviewDashboard() {
+  function FilePreviewDashboard(props) {
+    var _this;
+
     _classCallCheck(this, FilePreviewDashboard);
 
-    return _super.apply(this, arguments);
+    _this = _super.call(this, props); //Bind
+
+    _this.input = /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1__.createRef();
+    _this.copyURL = _this.copyURL.bind(_assertThisInitialized(_this)); // Redirect console log
+
+    if (typeof console != "undefined") if (typeof console.log != 'undefined') console.olog = console.log;else console.olog = function () {};
+
+    console.log = function (message) {
+      console.olog(message);
+      document.getElementById("debugDiv").innerHTML += "<div>" + message + "</div>";
+    };
+
+    console.error = console.debug = console.info = console.log;
+    return _this;
   }
 
   _createClass(FilePreviewDashboard, [{
+    key: "runScript",
+    value: function runScript() {
+      var script = document.getElementById("file_content").innerText;
+
+      try {
+        eval(script);
+      } catch (e) {
+        console.log("<span style=\"color: #b30400\">".concat(e, "</span>"));
+      }
+    }
+  }, {
+    key: "copyURL",
+    value: function copyURL() {
+      selectText('api_file_url');
+      document.execCommand('copy'); // This is just personal preference.
+      // I prefer to not show the whole text area selected.
+    }
+  }, {
     key: "render",
     value: function render() {
       return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)(react__WEBPACK_IMPORTED_MODULE_1__.Fragment, {
-        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", {
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("button", {
+          onClick: this.runScript,
+          className: "run_btn",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("i", {
+            className: "fas fa-play"
+          }), "Run script"]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("label", {
+          className: "switch",
+          title: "Toggle auto save",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", {
+            type: "checkbox",
+            defaultChecked: true,
+            id: "auto_save"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", {
+            className: "slider round"
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", {
           id: "status",
-          children: "No changes to save"
-        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", {
-          type: "checkbox",
-          id: "auto_save",
           style: {
-            marginLeft: 100
-          }
-        }), " Auto save"]
+            marginLeft: 20
+          },
+          children: "No changes to save"
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("br", {}), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", {
+          children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", {
+            className: "url",
+            id: "api_file_url",
+            ref: this.input,
+            onClick: this.copyURL,
+            children: file.url
+          })
+        })]
       });
     }
   }]);

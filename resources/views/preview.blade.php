@@ -1,19 +1,40 @@
 @extends('layouts.index')
 
+@section('scripts')
+    <script>
+        const file = {!! json_encode($file) !!};
+    </script>
+@endsection
+
 @section('content')
     <div id="file_preview_dashboard"></div>
     <div id="file_content" contenteditable="true">
-        @foreach(file($file->getPathname()) as $line)
+        @foreach(file($file->getNative()->getPathname()) as $line)
             {{$line}}
             <br/>
         @endforeach
     </div>
+    <br/>
+    <div id="debugDiv"></div>
 
 
     <script defer>
+        const SAVE_INTERVAL = 5;    // Seconds
+        let lastSavedContent = "";
+        let autoSaver = setInterval(function () {
+            // Check if content has changed and auto save is enabled, then save
+            if (document.getElementById("file_content").innerText !== lastSavedContent && document.getElementById("auto_save").checked)
+                SaveFile();
+            else
+                document.getElementById("status").innerText = "Nothing to save";
+        }, SAVE_INTERVAL * 1000);
+
         async function SaveFile() {
+
+            document.getElementById("status").innerHTML = "Saving...";
+
             const data = {
-                path: "{{str_replace("\\", "\\\\", $file->getRealPath())}}",
+                path: "{{str_replace("\\", "\\\\", $file->getNative()->getRealPath())}}",
                 content: document.getElementById("file_content").innerText
             };
 
@@ -34,21 +55,30 @@
             } else {
                 document.getElementById("status").innerHTML = "Error! " + json.message;
             }
+
+            lastSavedContent = data.content;
         }
 
-        // Set and unset auto save
-        window.onload = function () {
-            const CHECK_BOX = document.getElementById("auto_save");
-            CHECK_BOX.onchange = function () {
-                if (CHECK_BOX.checked) {
-                    document.getElementById("file_content").onkeyup = SaveFile;
-                } else {
-                    document.getElementById("file_content").onkeyup = function () {
-                    }
-                }
+        // Add the Ctrl + S shortcut
+        function DetectKeyStrocks(e) {
+            //event.preventDefault();
+            map[e.keyCode] = e.type == 'keydown';
+            if (map[17] && map[83]) {
+                e.preventDefault();
+                // Check if content has changed
+                if (document.getElementById("file_content").innerText !== lastSavedContent)
+                    SaveFile();
+                else
+                    document.getElementById("status").innerText = "Nothing to save";
             }
-
-            CHECK_BOX.click();
         }
+
+        let map = [];
+        window.addEventListener("keydown", function (event) {
+            DetectKeyStrocks(event);
+        });
+        window.addEventListener("keyup", function (event) {
+            DetectKeyStrocks(event);
+        });
     </script>
 @endsection

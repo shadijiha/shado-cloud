@@ -74,6 +74,7 @@ class FileStruct
     public $extension;
     public $path;
     public $native;
+    public $url;
 
     public function __construct(\SplFileInfo $file)
     {
@@ -81,6 +82,7 @@ class FileStruct
         $this->extension = $file->getExtension();
         $this->path      = $file->getRealPath();
         $this->native    = $file;
+        $this->url       = url("/")."/api?key={YOU_API_KEY}&path=$this->path";
     }
 
     /**
@@ -89,6 +91,14 @@ class FileStruct
     public function getRelativePath(): string
     {
         return str_replace("\\", "/", str_replace(FileFetcherController::getCloudPath()."\\", "", $this->path));
+    }
+
+    /**
+     * @return \SplFileInfo
+     */
+    public function getNative()
+    {
+        return $this->native;
     }
 }
 
@@ -141,6 +151,27 @@ class FileFetcherController extends Controller
     public function getTreeAPI(Request $request)
     {
         return response(["data" => new DirectoryStruct($request->get("path"))]);
+    }
+
+    /**
+     * Gets the content of a file
+     *
+     * @param Request $request
+     *
+     * @return false|string
+     */
+    public function getFileAPI(Request $request)
+    {
+        // TODO: Verify API token
+        $path = $request->get('path');
+
+        try {
+            $buffer = file_get_contents($path);
+        } catch (\Exception $e) {
+            $buffer = "Error! ".$e->getMessage();
+        }
+
+        return $buffer;
     }
 
     /**

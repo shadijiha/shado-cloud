@@ -10,6 +10,7 @@
 // The rest
 @import "sidebar";
 @import "auth";
+@import "switchCheckbox";
 
 .folder, .file {
     display: inline-block;
@@ -51,7 +52,11 @@
     border: solid gray 1px;
     width: 50%;
     min-width: 500px;
+    min-height: 1000px;
+    height: 80%;
+    font-size: $file_content_font_size;
     margin: auto;
+    font-family: $file_content_font_family;
 }
 
 #file_preview_dashboard {
@@ -59,4 +64,37 @@
     min-width: 500px;
     margin: auto;
     margin-bottom: 30px;
+}
+
+#debugDiv {
+    padding: 10px;
+    border: solid lightgrey 1px;
+    font-family: $file_content_font_family;
+    width: 50%;
+    min-width: 500px;
+    margin: auto;
+    height: 300px;
+    overflow: auto;
+}
+
+.run_btn {
+    border: solid lightgray 1px;
+
+    i {
+        color: green;
+        margin-right: 10px;
+    }
+}
+
+.switch, #status {
+    margin-left: 70%;
+}
+
+div.url {
+    padding: 5px;
+    border: solid gray 1px;
+    background: lightgray;
+    border-radius: 5px;
+    overflow-x: auto;
+    width: 75%;
 }

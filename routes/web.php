@@ -24,9 +24,15 @@ Route::middleware('auth')->group(function () {
     Route::get("/update", [\App\Http\Controllers\UpdateController::class, "update"])->name("update");
     Route::post("/save", [\App\Http\Controllers\SaveController::class, "save"])->name("save");
 
+
+});
+
+Route::prefix('api')->group(function () {
     // TODO: Move API function outside of middleware, require api key instead
     Route::get("/dir", [App\Http\Controllers\FileFetcherController::class, 'indexDirectoriesAPI']);
     Route::get("/tree", [App\Http\Controllers\FileFetcherController::class, 'getTreeAPI']);
+
+    Route::get("", [\App\Http\Controllers\FileFetcherController::class, 'getFileAPI']);
 });
 
 

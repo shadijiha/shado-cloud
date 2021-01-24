@@ -10099,6 +10099,63 @@ label #sidebar_btn:hover {
   color: white !important;
 }
 
+/**
+*
+*
+ */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: 0.4s;
+}
+
+input:checked + .slider {
+  background-color: #2196F3;
+}
+input:focus + .slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
 .folder, .file {
   display: inline-block;
   margin-right: 20px;
@@ -10146,7 +10203,11 @@ label #sidebar_btn:hover {
   border: solid gray 1px;
   width: 50%;
   min-width: 500px;
+  min-height: 1000px;
+  height: 80%;
+  font-size: 25px;
   margin: auto;
+  font-family: "consolas", serif;
 }
 
 #file_preview_dashboard {
@@ -10154,6 +10215,38 @@ label #sidebar_btn:hover {
   min-width: 500px;
   margin: auto;
   margin-bottom: 30px;
+}
+
+#debugDiv {
+  padding: 10px;
+  border: solid lightgrey 1px;
+  font-family: "consolas", serif;
+  width: 50%;
+  min-width: 500px;
+  margin: auto;
+  height: 300px;
+  overflow: auto;
+}
+
+.run_btn {
+  border: solid lightgray 1px;
+}
+.run_btn i {
+  color: green;
+  margin-right: 10px;
+}
+
+.switch, #status {
+  margin-left: 70%;
+}
+
+div.url {
+  padding: 5px;
+  border: solid gray 1px;
+  background: lightgray;
+  border-radius: 5px;
+  overflow-x: auto;
+  width: 75%;
 }
 /**
 *

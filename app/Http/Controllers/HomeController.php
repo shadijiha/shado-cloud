@@ -38,7 +38,7 @@ class HomeController extends Controller
         } else {
             if (File::exists($path))
                 return view('preview')->with([
-                    "file" => new \SplFileInfo($path)
+                    "file" => new FileStruct(new \SplFileInfo($path))
                 ]);
             else
                 return abort(404);
