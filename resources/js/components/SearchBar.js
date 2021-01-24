@@ -5,7 +5,7 @@ class SearchBar extends React.Component {
     render() {
         return (
             <div className="d-flex justify-content-center">
-                <form className="form-inline" method="GET" action={APP_URL + "/search"}>
+                <form className="form-inline" method="GET" action={Routes.search}>
                     <input type="hidden" name="_token" value={csrf_token}/>
                     <input className="form-control mr-sm-2" type="search" placeholder="Search"
                            aria-label="Search" name="search"/>

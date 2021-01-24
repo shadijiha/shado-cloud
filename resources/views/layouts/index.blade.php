@@ -12,8 +12,13 @@
     <!-- Scripts -->
     <script src="{{ asset('js/app.js') }}" defer></script>
     <script>
-        const csrf_token = '<?php echo csrf_token(); ?>';
-        const APP_URL = '<?php echo url("/") ?>';
+        const csrf_token = '{{ csrf_token() }}';
+        const Routes = {
+            index: "{{ route("index") }}",
+            recent: "{{ route("index") }}",
+            settings: "{{ route("settings")  }}",
+            search: "{{ route("search") }}"
+        };
 
         // Slid the Menu sidebar, onload, hover, leave
         window.addEventListener("load", function () {

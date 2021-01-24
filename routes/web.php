@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\FileFetcherController;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\SaveController;
+use App\Http\Controllers\UpdateController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -18,22 +22,22 @@ Auth::routes(['register' => false]);
 
 Route::middleware('auth')->group(function () {
 
-    Route::get('/', [App\Http\Controllers\HomeController::class, 'index'])->name('index');
+    Route::get('/', [HomeController::class, 'index'])->name('index');
+    Route::get("/settings", [HomeController::class, 'settings'])->name('settings');
 
-    Route::get("/search", "App\Http\Controllers\SearchController@search");
-    Route::get("/update", [\App\Http\Controllers\UpdateController::class, "update"])->name("update");
-    Route::post("/save", [\App\Http\Controllers\SaveController::class, "save"])->name("save");
-
+    Route::get("/search", "App\Http\Controllers\SearchController@search")->name("search");
+    Route::get("/update", [UpdateController::class, "update"])->name("update");
+    Route::post("/save", [SaveController::class, "save"])->name("save");
+    Route::post("/generate", [HomeController::class, "generate"])->name("generate");
 
 });
 
 Route::prefix('api')->group(function () {
     // TODO: Move API function outside of middleware, require api key instead
-    Route::get("/dir", [App\Http\Controllers\FileFetcherController::class, 'indexDirectoriesAPI']);
-    Route::get("/tree", [App\Http\Controllers\FileFetcherController::class, 'getTreeAPI']);
+    Route::get("/dir", [FileFetcherController::class, 'indexDirectoriesAPI']);
+    Route::get("/tree", [FileFetcherController::class, 'getTreeAPI']);
 
-    Route::get("", [\App\Http\Controllers\FileFetcherController::class, 'getFileAPI']);
-
+    Route::get("", [FileFetcherController::class, 'getFileAPI']);
 });
 
 

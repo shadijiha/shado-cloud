@@ -30,22 +30,82 @@ class APIToken extends Model
         return !Carbon::parse($this->expires_at)->lessThan(Carbon::now()) && $this->requests < $this->max_requests;
     }
 
+
     /**
-     * @param User                 $user
-     * @param CarbonInterface|null $experiation
+     * @param APITokenBuilder $builder
      *
      * @return APIToken
      */
-    public static function generate(User $user, CarbonInterface $experiation = null, int $max_requests = 100): APIToken
+    public static function generate(APITokenBuilder $builder): APIToken
+    {
+        $token = $builder->build();
+        $token->save();
+        return $token;
+    }
+}
+
+/**
+ * Builder class
+ */
+class APITokenBuilder
+{
+    public $key;
+    public $user_id = -1;
+    public $requests = 0;
+    public $max_requests = 100;
+    public $expires_at;
+    public $readonly;
+
+    public function __construct(User $user)
+    {
+        $this->user_id    = $user->id;
+        $this->expires_at = Carbon::now()->addHours(24);
+        $this->readonly   = true;
+        $this->key        = Str::random(32);
+    }
+
+    /**
+     * @param CarbonInterface $date
+     *
+     * @return $this
+     */
+    public function expiresAt(CarbonInterface $date): APITokenBuilder
+    {
+        $this->expires_at = $date;
+        return $this;
+    }
+
+    /**
+     * @param int $value
+     *
+     * @return $this
+     */
+    public function maxRequests(int $value): APITokenBuilder
+    {
+        $this->max_requests = $value;
+        return $this;
+    }
+
+    /**
+     * @param bool $value
+     *
+     * @return $this
+     */
+    public function readonly(bool $value): APITokenBuilder
+    {
+        $this->readonly = $value;
+        return $this;
+    }
+
+    public function build(): APIToken
     {
         $token               = new APIToken();
-        $token->key          = Str::random(32);
-        $token->user_id      = $user->id;
-        $token->requests     = 0;
-        $token->max_requests = $max_requests;
-        $token->expires_at   = $experiation == null ? Carbon::now()->addHours(24) : $experiation;
-
-        $token->save();
+        $token->key          = $this->key;
+        $token->user_id      = $this->user_id;
+        $token->requests     = $this->requests;
+        $token->max_requests = $this->max_requests;
+        $token->expires_at   = $this->expires_at;
+        $token->readonly     = $this->readonly;
 
         return $token;
     }

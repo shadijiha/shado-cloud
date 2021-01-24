@@ -2,8 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\APIToken;
+use Carbon\Carbon;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\View\Factory;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 class HomeController extends Controller
 {
@@ -43,5 +50,39 @@ class HomeController extends Controller
             else
                 return abort(404);
         }
+    }
+
+    /**
+     * @param Request $request
+     *
+     * @return Application|Factory|View
+     */
+    public function settings(Request $request)
+    {
+        return view('settings')->with(['tokens' => Auth::user()->apiTokens]);
+    }
+
+    /**
+     * Generates an API token and adds it to the database
+     *
+     * @param Request $request
+     *
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function generate(Request $request)
+    {
+        $token           = new APIToken();
+        $token->user_id  = Auth::user()->id;
+        $token->readonly = $request->get("readonly") ?? true;
+
+        $token->expires_at = $request->get("expiration") == null ?
+            Carbon::now()->addHours(24) : Carbon::parse($request->get("expiration"));
+
+        $token->requests     = 0;
+        $token->max_requests = $request->get("max_requests") ?? 100;
+        $token->key          = Str::random(32);
+        $token->save();
+
+        return redirect()->back()->with(['tokens' => Auth::user()->apiTokens]);
     }
 }

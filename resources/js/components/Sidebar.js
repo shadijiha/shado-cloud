@@ -14,15 +14,15 @@ class Sidebar extends React.Component {
         return (
             <Fragment>
                 <h3>Menu</h3>
-                <a href={APP_URL}>
+                <a href={Routes.index}>
                     <i className="fas fa-folder-open"/>
                     <span> Projects</span>
                 </a>
-                <a href={APP_URL}>
+                <a href={Routes.recent}>
                     <i className="fas fa-clock"/>
                     <span> Recent</span>
                 </a>
-                <a href={APP_URL}>
+                <a href={Routes.settings}>
                     <i className="fas fa-cog"/>
                     <span> Settings</span>
                 </a>
