@@ -23,6 +23,14 @@ class APIToken extends Model
     }
 
     /**
+     * @return bool
+     */
+    public function isValid(): bool
+    {
+        return !Carbon::parse($this->expires_at)->lessThan(Carbon::now()) && $this->requests < $this->max_requests;
+    }
+
+    /**
      * @param User                 $user
      * @param CarbonInterface|null $experiation
      *

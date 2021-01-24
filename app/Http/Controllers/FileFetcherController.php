@@ -8,6 +8,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
@@ -84,7 +85,10 @@ class FileStruct
         $this->extension = $file->getExtension();
         $this->path      = $file->getRealPath();
         $this->native    = $file;
-        $this->url       = url("/")."/api?key={YOU_API_KEY}&path=$this->path";
+
+        $token     = Auth::user()->validAPITokens()->first();
+        $token     = $token == null ? "{YOUR_API_KEY}" : $token->key;
+        $this->url = url("/")."/api?key=$token&path=$this->path";
     }
 
     /**

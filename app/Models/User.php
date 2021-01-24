@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 
 class User extends Authenticatable
 {
@@ -46,5 +47,21 @@ class User extends Authenticatable
     public function apiTokens()
     {
         return $this->hasMany(APIToken::class);
+    }
+
+    /**
+     * Gets all user's valid API tokens
+     * @return Collection
+     */
+    public function validAPITokens(): Collection
+    {
+        $collection = new Collection();
+        foreach (APIToken::all() as $token) {
+            if ($token->isValid() && $token->user_id == $this->id) {
+                $collection->add($token);
+            }
+        }
+
+        return $collection;
     }
 }
