@@ -12,7 +12,7 @@ class APIToken extends Model
 {
     use HasFactory;
 
-    protected $table = "apitokens";
+    protected $table = "APITokens";
 
     /**
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
