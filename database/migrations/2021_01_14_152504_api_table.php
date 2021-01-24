@@ -18,6 +18,8 @@ class ApiTable extends Migration
             $table->id();
             $table->integer('user_id');
             $table->string('key');
+            $table->integer('requests');
+            $table->integer('max_requests');
             $table->dateTime('expires_at');
             $table->timestamps();
         });

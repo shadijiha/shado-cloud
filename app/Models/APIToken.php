@@ -28,12 +28,14 @@ class APIToken extends Model
      *
      * @return APIToken
      */
-    public static function generate(User $user, CarbonInterface $experiation = null): APIToken
+    public static function generate(User $user, CarbonInterface $experiation = null, int $max_requests = 100): APIToken
     {
-        $token             = new APIToken();
-        $token->key        = Str::random(32);
-        $token->user_id    = $user->id;
-        $token->expires_at = $experiation == null ? Carbon::now()->addHours(24) : $experiation;
+        $token               = new APIToken();
+        $token->key          = Str::random(32);
+        $token->user_id      = $user->id;
+        $token->requests     = 0;
+        $token->max_requests = $max_requests;
+        $token->expires_at   = $experiation == null ? Carbon::now()->addHours(24) : $experiation;
 
         $token->save();
 

@@ -193,6 +193,8 @@ class FileFetcherController extends Controller
     }
 
     /**
+     * Verifies if the API token is valid, not expired and under the max requests
+     *
      * @param Request $request
      *
      * @return array
@@ -211,6 +213,16 @@ class FileFetcherController extends Controller
                 $message = "Api token expired";
                 $status  = 403;
             }
+
+            // See if the maximum request has been exceeded
+            if ($token->requests >= $token->max_requests) {
+                $message = "Api maximum requests exhausted";
+                $status  = 401;
+            }
+
+            // Update the requests
+            $token->requests += 1;
+            $token->save();
 
         } catch (\Exception $e) {
             $message = "Invalid API token";

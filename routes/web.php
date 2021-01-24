@@ -33,6 +33,7 @@ Route::prefix('api')->group(function () {
     Route::get("/tree", [App\Http\Controllers\FileFetcherController::class, 'getTreeAPI']);
 
     Route::get("", [\App\Http\Controllers\FileFetcherController::class, 'getFileAPI']);
+
 });
 
 
