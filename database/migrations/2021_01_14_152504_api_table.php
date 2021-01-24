@@ -13,7 +13,14 @@ class ApiTable extends Migration
      */
     public function up()
     {
-        //
+        // Create table
+        Schema::create('APITokens', function (Blueprint $table) {
+            $table->id();
+            $table->integer('user_id');
+            $table->string('key');
+            $table->dateTime('expires_at');
+            $table->timestamps();
+        });
     }
 
     /**

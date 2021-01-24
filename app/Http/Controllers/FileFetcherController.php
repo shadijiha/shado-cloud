@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\APIToken;
+use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\Request;
@@ -118,8 +120,12 @@ class FileFetcherController extends Controller
      */
     public function indexDirectoriesAPI(Request $request)
     {
-        $temp = new DirectoryStruct($this->CLOUD_PATH);
-        return response(["data" => $temp]);
+        // Verify token
+        $result = $this->verifyAPIToken($request);
+        if ($result != null)
+            return response($result);
+
+        return response(["data" => new DirectoryStruct($this->CLOUD_PATH)]);
     }
 
     /**
@@ -150,6 +156,11 @@ class FileFetcherController extends Controller
      */
     public function getTreeAPI(Request $request)
     {
+        // Verify token
+        $result = $this->verifyAPIToken($request);
+        if ($result != null)
+            return response($result);
+
         return response(["data" => new DirectoryStruct($request->get("path"))]);
     }
 
@@ -163,15 +174,56 @@ class FileFetcherController extends Controller
     public function getFileAPI(Request $request)
     {
         // TODO: Verify API token
-        $path = $request->get('path');
+        $path  = $request->get('path');
+        $token = $request->get('key');
 
+        // Verify token
+        $result = $this->verifyAPIToken($request);
+        if ($result != null)
+            return response($result);
+
+        // API is ok, get the file content
         try {
             $buffer = file_get_contents($path);
         } catch (\Exception $e) {
-            $buffer = "Error! ".$e->getMessage();
+            $buffer = "[500] ".$e->getMessage();
         }
 
         return $buffer;
+    }
+
+    /**
+     * @param Request $request
+     *
+     * @return array
+     */
+    private function verifyAPIToken(Request $request)
+    {
+        $token   = $request->get("key");
+        $status  = 200;
+        $message = "";
+
+        try {
+            $token = APIToken::where('key', $token)->firstOrFail();
+
+            // See if the API token has expired
+            if (Carbon::parse($token->expires_at)->lessThan(Carbon::now())) {
+                $message = "Api token expired";
+                $status  = 403;
+            }
+
+        } catch (\Exception $e) {
+            $message = "Invalid API token";
+            $status  = 401;
+        }
+
+        if ($status != 200)
+            return [
+                "code"    => $status,
+                "message" => $message
+            ];
+        else
+            return null;
     }
 
     /**
