@@ -85,4 +85,11 @@ class HomeController extends Controller
 
         return redirect()->back()->with(['tokens' => Auth::user()->apiTokens]);
     }
+
+    public function deleteAPIKey(Request $request)
+    {
+        $id = $request->get("id");
+        APIToken::find($id)->delete();
+        return redirect()->back()->with(['tokens' => Auth::user()->apiTokens]);
+    }
 }

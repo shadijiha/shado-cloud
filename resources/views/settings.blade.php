@@ -1,6 +1,12 @@
 @extends('layouts.index')
 
 @section('scripts')
+    <script>
+        function CopyInputText(element) {
+            element.select();
+            document.execCommand("copy");
+        }
+    </script>
 @endsection
 
 @section('content')
@@ -56,17 +62,20 @@
             @foreach($tokens as $token)
                 <tr>
                     <td>
-                        @if ($token->isValid())
-                            <i class="fas fa-check-circle" style="color: green;"></i>
+                        @if ($token->isValid() && doubleval($token->requests) / doubleval($token->max_requests) >= 0.9)
+                            <i title="Will invalid soon" class="fas fa-exclamation-circle" style="color: orange;"></i>
+                        @elseif($token->isValid())
+                            <i title="Valid" class="fas fa-check-circle" style="color: green;"></i>
                         @else
-                            <i class="fas fa-times-circle" style="color: red;"></i>
+                            <i title="Invalid" class="fas fa-times-circle" style="color: red;"></i>
                         @endif
                     </td>
                     <td>
-                        <input type="text" value="{{$token->key}}" readonly style="width: 300px;"/>
+                        <input type="text" value="{{$token->key}}" readonly style="width: 300px;"
+                               onclick="CopyInputText(this);"/>
                     </td>
                     <td>
-                        {{$token->requests}} /{{$token->max_requests}}
+                        {{$token->requests}} / {{$token->max_requests}}
                     </td>
                     <td>
                         @if($token->readonly)
@@ -84,6 +93,13 @@
                         @else
                             -
                         @endif
+                    </td>
+                    <td>
+                        <form action="{{route("deleteKey")}}" method="POST">
+                            @csrf
+                            <input type="hidden" value="{{$token->id}}" name="id"/>
+                            <input type="submit" value="Delete"/>
+                        </form>
                     </td>
                 </tr>
             @endforeach

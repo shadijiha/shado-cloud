@@ -29,7 +29,7 @@ Route::middleware('auth')->group(function () {
     Route::get("/update", [UpdateController::class, "update"])->name("update");
     Route::post("/save", [SaveController::class, "save"])->name("save");
     Route::post("/generate", [HomeController::class, "generate"])->name("generate");
-
+    Route::post("/deleteKey", [HomeController::class, "deleteAPIKey"])->name("deleteKey");
 });
 
 Route::prefix('api')->group(function () {
