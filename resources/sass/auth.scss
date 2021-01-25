@@ -9,24 +9,53 @@
     background-size: cover;
 }
 
-.transparent_card {
+.login_panel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 25%;
+    min-width: 500px;
     background-color: rgba(0, 0, 0, 0.4);
+    padding: 50px;
+    height: 100%;
+    text-align: left;
     color: white;
-}
 
-.transparent_card {
+    div {
+        padding: 10px;
+    }
+
+    .header {
+        font-size: 40pt;
+        padding-bottom: 30px;
+    }
+
     input {
+        padding: 30px;
+        font-size: 20px;
+        border-radius: 0;
         background: transparent;
         color: white;
-        transition: 0.5s all;
+        transition: 1s all;
 
         &:focus, &:hover {
             background: #fff;
             color: black;
         }
     }
+
+    button {
+        width: 100%;
+        border-radius: 0;
+        padding: 25px;
+        font-size: 20px;
+    }
 }
 
+.transparent_card {
+    background-color: rgba(0, 0, 0, 0.4);
+    color: white;
+}
 
 .white_link {
     color: white !important;
