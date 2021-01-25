@@ -40,6 +40,7 @@ Route::prefix('api')->group(function () {
 
     Route::get("", [FileFetcherController::class, 'getFileAPI']);
     Route::post("", [FileFetcherController::class, 'saveFileAPI'])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::get("/delete", [FileFetcherController::class, 'deleteFileAPI']);
 });
 
 

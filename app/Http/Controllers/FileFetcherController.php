@@ -262,6 +262,59 @@ class FileFetcherController extends Controller
         ]);
     }
 
+    public function deleteFileAPI(Request $request)
+    {
+        $key  = $request->get("key");
+        $path = $request->get("path");
+
+        // Verify token
+        $result = $this->verifyAPIToken($request);
+        if ($result != null)
+            return response($result);
+
+        // Verify that token is not readonly
+        if (DB::table('APITokens')->where('key', $key)->first()->readonly)
+            return response([
+                "code"    => 401,
+                "message" => "Cannot modify a file with a readonly API token"
+            ]);
+
+        if (File::exists($path)) {
+
+            // Verify that that path you want to delete is inside the parent cloud directory
+            if (!Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo(env("CLOUD_FILES_PATH")))->getRealPath())) {
+                return response([
+                    "code"    => 403,
+                    "message" => "You do not have permission to modify this path",
+                ]);
+            }
+
+            try {
+                if (File::isDirectory($path))
+                    File::deleteDirectory($path);
+                else
+                    File::delete($path);
+
+            } catch (\Exception $e) {
+                return \response([
+                    "code"    => 401,
+                    "message" => $e->getMessage()
+                ]);
+            }
+
+        } else {
+            return response([
+                "code"    => 401,
+                "message" => "Path does not exist"
+            ]);
+        }
+
+        return \response([
+            "code"    => 200,
+            "message" => "deleted $path with success"
+        ]);
+    }
+
     /**
      * Verifies if the API token is valid, not expired and under the max requests
      *
