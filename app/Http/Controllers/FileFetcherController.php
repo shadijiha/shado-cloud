@@ -48,7 +48,7 @@ class DirectoryStruct
         }
 
         // Compute name
-        $tokens     = explode("\\", $this->path);
+        $tokens     = explode($delimiter, $this->path);
         $this->name = $tokens[count($tokens) - 1];
     }
 
