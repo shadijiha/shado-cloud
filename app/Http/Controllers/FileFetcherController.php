@@ -9,6 +9,7 @@ use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
@@ -177,7 +178,6 @@ class FileFetcherController extends Controller
      */
     public function getFileAPI(Request $request)
     {
-        // TODO: Verify API token
         $path  = $request->get('path');
         $token = $request->get('key');
 
@@ -194,6 +194,72 @@ class FileFetcherController extends Controller
         }
 
         return $buffer;
+    }
+
+    public function saveFileAPI(Request $request)
+    {
+        $key  = $request->get("key");
+        $path = $request->get("path");
+        $data = $request->get("data");
+
+        // Verify token
+        $result = $this->verifyAPIToken($request);
+        if ($result != null)
+            return response($result);
+
+        // Verify that token is not readonly
+        if (DB::table('APITokens')->where('key', $key)->first()->readonly)
+            return response([
+                "code"    => 401,
+                "message" => "Cannot modify a file with a readonly API token"
+            ]);
+
+        if ($path == null)
+            return response([
+                "code"    => 401,
+                "message" => "Path cannot be null"
+            ]);
+
+        // See if the path is a directory
+        if (File::isDirectory($path))
+            return response([
+                "code"    => 401,
+                "message" => "Path cannot be a directory"
+            ]);
+
+        // See if file exists, then write data directly to the file
+        if (File::exists($path)) {
+            try {
+                $stream = fopen($path, "w");
+                fwrite($stream, $data);
+                fclose($stream);
+            } catch (\Exception $e) {
+                return response([
+                    "code"    => 401,
+                    "message" => $e->getMessage()
+                ]);
+            }
+        } else {
+            // Otherwise create that file
+            try {
+                $file = new \SplFileInfo($path);
+                File::makeDirectory($file->getPath(), 0777, true, true);
+
+                $stream = fopen($path, "w");
+                fwrite($stream, $data);
+                fclose($stream);
+            } catch (\Exception $e) {
+                return response([
+                    "code"    => 401,
+                    "message" => $e->getMessage()
+                ]);
+            }
+        }
+
+        return response([
+            "code"    => 200,
+            "message" => ""
+        ]);
     }
 
     /**
@@ -216,17 +282,15 @@ class FileFetcherController extends Controller
             if (Carbon::parse($token->expires_at)->lessThan(Carbon::now())) {
                 $message = "Api token expired";
                 $status  = 403;
-            }
-
-            // See if the maximum request has been exceeded
-            if ($token->requests >= $token->max_requests) {
+            } else if ($token->requests >= $token->max_requests) {
+                // See if the maximum request has been exceeded
                 $message = "Api maximum requests exhausted";
                 $status  = 401;
+            } else {
+                // Update the requests
+                $token->requests += 1;
+                $token->save();
             }
-
-            // Update the requests
-            $token->requests += 1;
-            $token->save();
 
         } catch (\Exception $e) {
             $message = "Invalid API token";

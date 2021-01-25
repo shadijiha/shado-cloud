@@ -4,6 +4,7 @@ use App\Http\Controllers\FileFetcherController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\SaveController;
 use App\Http\Controllers\UpdateController;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -38,6 +39,7 @@ Route::prefix('api')->group(function () {
     Route::get("/tree", [FileFetcherController::class, 'getTreeAPI']);
 
     Route::get("", [FileFetcherController::class, 'getFileAPI']);
+    Route::post("", [FileFetcherController::class, 'saveFileAPI'])->withoutMiddleware(VerifyCsrfToken ::class);
 });
 
 
