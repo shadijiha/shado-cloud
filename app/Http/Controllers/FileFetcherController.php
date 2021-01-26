@@ -207,13 +207,6 @@ class FileFetcherController extends Controller
         if ($result != null)
             return response($result);
 
-        // Verify that token is not readonly
-        if (DB::table('APITokens')->where('key', $key)->first()->readonly)
-            return response([
-                "code"    => 401,
-                "message" => "Cannot modify a file with a readonly API token"
-            ]);
-
         if ($path == null)
             return response([
                 "code"    => 401,
@@ -272,13 +265,6 @@ class FileFetcherController extends Controller
         if ($result != null)
             return response($result);
 
-        // Verify that token is not readonly
-        if (DB::table('APITokens')->where('key', $key)->first()->readonly)
-            return response([
-                "code"    => 401,
-                "message" => "Cannot modify a file with a readonly API token"
-            ]);
-
         if (File::exists($path)) {
 
             // Verify that that path you want to delete is inside the parent cloud directory
@@ -316,14 +302,56 @@ class FileFetcherController extends Controller
     }
 
     /**
+     * @param Request $request
+     *
+     * @return Application|ResponseFactory|Response
+     */
+    public function createDirectory(Request $request)
+    {
+        $path = $request->get("path");
+        try {
+            if ($path == null) {
+                throw new \Exception('The path is null');
+            }
+
+            if (File::exists($path)) {
+                throw new \Exception("The path already exists (Path: $path)");
+            }
+
+            $file = new \SplFileInfo($path."/none.temp");
+            File::makeDirectory($file->getPath(), 0777, true, true);
+
+            return response([
+                "code"    => 200,
+                "message" => "successfully created directory ".$file->getPath()
+            ]);
+
+        } catch (\Exception $e) {
+            return response([
+                "code"    => 401,
+                "message" => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
      * Verifies if the API token is valid, not expired and under the max requests
      *
      * @param Request $request
      *
-     * @return array
+     * @param bool    $checkForReadonly
+     *
+     * @return array|Application|ResponseFactory|Response
      */
-    private function verifyAPIToken(Request $request)
+    private function verifyAPIToken(Request $request, bool $checkForReadonly = false)
     {
+        /**
+         * IF the user is logged in, no need for the API key
+         */
+        if (Auth::check()) {
+            return null;
+        }
+
         $token   = $request->get("key");
         $status  = 200;
         $message = "";
@@ -348,6 +376,14 @@ class FileFetcherController extends Controller
         } catch (\Exception $e) {
             $message = "Invalid API token";
             $status  = 401;
+        }
+
+        // Verify that token is not readonly
+        if ($checkForReadonly) {
+            if (DB::table('APITokens')->where('key', $token)->first()->readonly) {
+                $status  = 401;
+                $message = "Cannot modify a file with a readonly API token";
+            }
         }
 
         if ($status != 200)

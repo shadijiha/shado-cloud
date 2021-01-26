@@ -31,6 +31,8 @@ Route::middleware('auth')->group(function () {
     Route::post("/save", [SaveController::class, "save"])->name("save");
     Route::post("/generate", [HomeController::class, "generate"])->name("generate");
     Route::post("/deleteKey", [HomeController::class, "deleteAPIKey"])->name("deleteKey");
+
+    Route::post("/createDir", [FileFetcherController::class, 'createDirectory'])->name("createDir");
 });
 
 Route::prefix('api')->group(function () {

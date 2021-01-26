@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -40,12 +41,16 @@ class HomeController extends Controller
 
             $data = $controller->indexDirectories($path);
             return view('home')->with(
-                ["files" => $data]);
+                [
+                    "files" => $data,
+                    "path"  => $path ?? env("CLOUD_FILES_PATH")
+                ]);
 
         } else {
             if (File::exists($path))
                 return view('preview')->with([
-                    "file" => new FileStruct(new \SplFileInfo($path))
+                    "file" => new FileStruct(new \SplFileInfo($path)),
+                    "path" => null
                 ]);
             else
                 return abort(404);
@@ -59,7 +64,8 @@ class HomeController extends Controller
      */
     public function settings(Request $request)
     {
-        return view('settings')->with(['tokens' => Auth::user()->apiTokens]);
+        return view('settings')->with(
+            ['tokens' => Auth::user()->apiTokens]);
     }
 
     /**
@@ -67,7 +73,7 @@ class HomeController extends Controller
      *
      * @param Request $request
      *
-     * @return \Illuminate\Http\RedirectResponse
+     * @return RedirectResponse
      */
     public function generate(Request $request)
     {
@@ -86,10 +92,16 @@ class HomeController extends Controller
         return redirect()->back()->with(['tokens' => Auth::user()->apiTokens]);
     }
 
+    /**
+     * @param Request $request
+     *
+     * @return RedirectResponse
+     */
     public function deleteAPIKey(Request $request)
     {
         $id = $request->get("id");
         APIToken::find($id)->delete();
         return redirect()->back()->with(['tokens' => Auth::user()->apiTokens]);
     }
+
 }

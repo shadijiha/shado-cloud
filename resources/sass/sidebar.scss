@@ -117,3 +117,30 @@ label #sidebar_btn {
     }
 }
 
+#context_menu {
+    display: none;
+    position: absolute;
+    background-color: #fff;
+    width: 300px;
+    border-radius: 5px;
+    z-index: 10;
+    border: solid gray 1px;
+
+    ul {
+        padding: 0;
+        margin: 0;
+    }
+
+    li {
+        margin: 0;
+        list-style-type: none;
+        padding: 15px;
+        cursor: pointer;
+        transition: 0.5s all;
+        font-size: 16px;
+
+        &:hover {
+            background: $sidebar_a_hover;
+        }
+    }
+}

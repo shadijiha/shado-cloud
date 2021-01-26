@@ -103,3 +103,28 @@ div.url {
     padding: 10px;
     text-align: center;
 }
+
+#folder_context_menu {
+    display: none;
+    position: absolute;
+    background-color: white !important;
+    font-size: 14px;
+    z-index: 5;
+    border-radius: 5px;
+    border: solid gray 1px;
+    min-width: 200px;
+
+    ul {
+        padding: 0;
+    }
+
+    li {
+        list-style-type: none;
+        padding: 10px;
+        cursor: pointer;
+
+        &:hover {
+            background-color: $sidebar_a_hover;
+        }
+    }
+}

@@ -17,8 +17,11 @@
             index: "{{ route("index") }}",
             recent: "{{ route("index") }}",
             settings: "{{ route("settings")  }}",
-            search: "{{ route("search") }}"
+            search: "{{ route("search") }}",
+            createDir: "{{route("createDir")}}"
         };
+
+        const CURRENT_PATH = '{{str_replace("\\", "\\\\", $path) ?? ""}}';
 
         // Slid the Menu sidebar, onload, hover, leave
         window.addEventListener("load", function () {
@@ -50,6 +53,15 @@
                 window.getSelection().addRange(range);
             }
         }
+
+        const mouse = {
+            x: undefined,
+            y: undefined
+        }
+        window.addEventListener("mousemove", function (e) {
+            mouse.x = e.x;
+            mouse.y = e.y;
+        })
     </script>
 @yield('scripts')
 
