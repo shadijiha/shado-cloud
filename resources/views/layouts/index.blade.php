@@ -21,7 +21,7 @@
             createDir: "{{route("createDir")}}"
         };
 
-        const CURRENT_PATH = '{{str_replace("\\", "\\\\", $path) ?? ""}}';
+        const CURRENT_PATH = '{{str_replace("\\", "\\\\", $path ?? "")}}';
 
         // Slid the Menu sidebar, onload, hover, leave
         window.addEventListener("load", function () {
