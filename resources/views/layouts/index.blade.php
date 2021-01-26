@@ -160,6 +160,9 @@
     <main class="py-4" id="main_content">
         @yield('content')
     </main>
+
+    <div id="popupContainer">
+    </div>
 </div>
 <script>
     async function UpdateApp() {

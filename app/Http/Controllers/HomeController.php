@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\APIToken;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -31,7 +32,7 @@ class HomeController extends Controller
      * @param Request               $request
      * @param FileFetcherController $controller
      *
-     * @return \Illuminate\Contracts\Support\Renderable|void
+     * @return Renderable|void
      */
     public function index(Request $request, FileFetcherController $controller)
     {

@@ -25,5 +25,8 @@
         "sass-loader": "^8.0.0",
         "ts-loader": "^8.0.14",
         "typescript": "^4.1.3"
+    },
+    "dependencies": {
+        "react-popup": "^0.10.0"
     }
 }
