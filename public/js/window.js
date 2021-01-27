@@ -3,14 +3,23 @@
  */
 
 class Window {
+
+    static OK_BUTTON = {
+        value: "OK",
+        onclick: () => {
+            document.body.removeChild(this._dom)
+        },
+    };
+    static CANCEL_BUTTON = {
+        value: "Cancel",
+        onclick: () => {
+            document.body.removeChild(this._dom)
+        },
+    }
+
     constructor(title, actions, body) {
         this.title = title || "Alert";
-        this.actions = actions || [{
-            value: "OK",
-            onclick: () => {
-                document.body.removeChild(this._dom)
-            },
-        }];
+        this.actions = actions || [Window.OK_BUTTON];
 
         this.id = "window_" + Math.floor(Math.random() * 1e6);
         this.body = body || function () {
