@@ -21,9 +21,13 @@ class NewMenu extends React.Component {
                 })
             });
             const json = await response.json();
+            if (json.code != 200) {
+                new Window("Error", null, function () {
+                    return json.message;
+                });
+            }
         }
     }
-
 
     async createFile() {
         const name = "file " + new Date().toDateString().replaceAll(/:|\\|\//g, " ");
@@ -41,7 +45,12 @@ class NewMenu extends React.Component {
                 })
             });
             const json = await response.json();
-            alert(JSON.stringify(json));
+
+            if (json.code != 200) {
+                new Window("Error", null, function () {
+                    return json.message;
+                });
+            }
         }
     }
 

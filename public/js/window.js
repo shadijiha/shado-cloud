@@ -7,7 +7,9 @@ class Window {
         this.title = title || "Alert";
         this.actions = actions || [{
             value: "OK",
-            onclick: this.close,
+            onclick: () => {
+                document.body.removeChild(this._dom)
+            },
         }];
 
         this.id = "window_" + Math.floor(Math.random() * 1e6);
@@ -36,7 +38,9 @@ class Window {
         // Close button action
         close_btn.classList.add("close_btn");
         close_btn.innerText = "X";
-        close_btn.setAttribute("onclick", `document.body.removeChild(document.getElementById('${this.id}'))`)
+        close_btn.addEventListener("click", () => {
+            this.close();
+        });
 
         title_bar.classList.add("title_bar");
         title_bar.appendChild(close_btn);
@@ -70,7 +74,6 @@ class Window {
     }
 
     close() {
-        console.log(document.getElementById(this.id));
         document.body.removeChild(this._dom);
     }
 

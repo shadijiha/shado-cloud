@@ -2311,7 +2311,7 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
                 name = "folder " + new Date().toDateString().replaceAll(/:|\\|\//g, " ");
 
                 if (!(CURRENT_PATH !== "")) {
-                  _context.next = 8;
+                  _context.next = 9;
                   break;
                 }
 
@@ -2335,7 +2335,13 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
               case 7:
                 json = _context.sent;
 
-              case 8:
+                if (json.code != 200) {
+                  new Window("Error", null, function () {
+                    return json.message;
+                  });
+                }
+
+              case 9:
               case "end":
                 return _context.stop();
             }
@@ -2385,7 +2391,12 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
 
               case 7:
                 json = _context2.sent;
-                alert(JSON.stringify(json));
+
+                if (json.code != 200) {
+                  new Window("Error", null, function () {
+                    return json.message;
+                  });
+                }
 
               case 9:
               case "end":
