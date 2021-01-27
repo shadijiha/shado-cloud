@@ -10316,6 +10316,7 @@ div.url {
   border-radius: 5px;
   border: solid gray 1px;
   min-width: 200px;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.3), 0 12px 40px 0 rgba(0, 0, 0, 0.29);
 }
 #folder_context_menu ul {
   padding: 0;
@@ -10324,9 +10325,57 @@ div.url {
   list-style-type: none;
   padding: 10px;
   cursor: pointer;
+  transition: 0.5s all;
 }
 #folder_context_menu li:hover {
-  background-color: #19B3D3;
+  background-color: #2F323A;
+  color: white;
+}
+
+.alertContainer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 400px;
+  min-height: 100px;
+  transform: translate(-50%, -50%);
+  background-color: white;
+  z-index: 6;
+  border-bottom-right-radius: 10px;
+  border-bottom-left-radius: 10px;
+  border: solid gray 1px;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.3), 0 12px 40px 0 rgba(0, 0, 0, 0.29);
+}
+.alertContainer div.title_bar {
+  background-color: #2F323A;
+  color: white;
+  padding: 10px;
+  font-weight: bold;
+}
+.alertContainer div.title_bar button.close_btn {
+  background-color: red;
+  color: white;
+  position: relative;
+  left: 85%;
+  border-radius: 50%;
+  padding: 5px;
+  border: 0;
+  font-weight: bold;
+  width: 30px;
+}
+.alertContainer div.body_container {
+  padding: 15px;
+}
+.alertContainer div.action_container {
+  float: right;
+  padding: 10px;
+}
+.alertContainer div.action_container button {
+  background-color: #2F323A;
+  color: white;
+  border-radius: 5px;
+  padding: 5px;
+  min-width: 50px;
 }
 /**
 *

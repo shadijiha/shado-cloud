@@ -12,6 +12,8 @@
         function hideFolderSettings() {
             document.getElementById("folder_context_menu").style.display = "none";
         }
+
+        new Window();
     </script>
 @endsection
 
