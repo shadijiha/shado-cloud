@@ -80,6 +80,8 @@ class FileStruct
     public $native;
     public $url;
 
+    const IMAGE_EXT = ["jpg", "png", "gif", "jpeg"];
+
     public function __construct(\SplFileInfo $file)
     {
         $this->name      = $file->getFilename();
@@ -106,6 +108,20 @@ class FileStruct
     public function getNative()
     {
         return $this->native;
+    }
+
+    /**
+     * Determins if the file is an image based on its extension
+     * @return bool
+     */
+    public function isImage(): bool
+    {
+        foreach (self::IMAGE_EXT as $ext) {
+            if ($this->native->getExtension() == $ext) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
@@ -302,11 +318,23 @@ class FileFetcherController extends Controller
     }
 
     /**
+     * @param Request        $request
+     * @param HomeController $controller
+     */
+    public function uploadFile(Request $request, HomeController $controller)
+    {
+        $destinationPath = $request->get('path');
+        $request->data->move($destinationPath, $request->data->getClientOriginalName());
+
+        return $controller->index($request, new FileFetcherController());
+    }
+
+    /**
      * @param Request $request
      *
      * @return Application|ResponseFactory|Response
      */
-    public function createDirectory(Request $request)
+    public function createDirectoryAPI(Request $request)
     {
         $path = $request->get("path");
         try {

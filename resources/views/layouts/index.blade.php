@@ -19,7 +19,8 @@
             recent: "{{ route("index") }}",
             settings: "{{ route("settings")  }}",
             search: "{{ route("search") }}",
-            createDir: "{{route("createDir")}}"
+            createDir: "{{route("createDir")}}",
+            uploadFile: "{{route("upload_file")}}"
         };
 
         const CURRENT_PATH = '{{str_replace("\\", "\\\\", $path ?? "")}}';

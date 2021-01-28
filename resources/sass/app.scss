@@ -34,6 +34,14 @@
     height: 75px !important;
 }
 
+.image_thumnail {
+    max-width: 230px;
+    max-height: 95px;
+    width: auto;
+    height: auto;
+    box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.3), 0 12px 40px 0 rgba(0, 0, 0, 0.29);
+}
+
 .rotate {
     animation: rotation 1s infinite linear;
 }
@@ -155,8 +163,7 @@ div.url {
         button.close_btn {
             background-color: red;
             color: white;
-            position: relative;
-            left: 85%;
+            float: right;
             border-radius: 50%;
             padding: 5px;
             border: 0;

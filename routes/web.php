@@ -28,11 +28,18 @@ Route::middleware('auth')->group(function () {
 
     Route::get("/search", "App\Http\Controllers\SearchController@search")->name("search");
     Route::get("/update", [UpdateController::class, "update"])->name("update");
+    Route::post("/uploadfile", [FileFetcherController::class, 'uploadFile'])->name("upload_file");
     Route::post("/save", [SaveController::class, "save"])->name("save");
     Route::post("/generate", [HomeController::class, "generate"])->name("generate");
     Route::post("/deleteKey", [HomeController::class, "deleteAPIKey"])->name("deleteKey");
 
-    Route::post("/createDir", [FileFetcherController::class, 'createDirectory'])->name("createDir");
+    Route::post("/createDir", [FileFetcherController::class, 'createDirectoryAPI'])->name("createDir");
+
+
+    // TODO: find solution
+    Route::get('/image/{path}', function (string $path) {
+        return \Intervention\Image\Facades\Image::make($path)->response();
+    })->name("get_image");
 });
 
 Route::prefix('api')->group(function () {

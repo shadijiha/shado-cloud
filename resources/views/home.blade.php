@@ -36,6 +36,9 @@
                 @if(File::exists("images/icons/$file->extension.png"))
                     <img src="images/icons/{{$file->extension}}.png" class="file_thumnail"
                          alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
+                @elseif ($file->isImage())
+                    <img src="{{route("get_image", $file->getNative()->getRealPath())}}" class="image_thumnail"
+                         alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
                 @else
                     <img src="images/icons/file.png" class="file_thumnail"/>
                 @endif
@@ -52,6 +55,5 @@
             <li>Properties</li>
         </ul>
     </div>
-
 
 @endsection

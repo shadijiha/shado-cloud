@@ -54,6 +54,26 @@ class NewMenu extends React.Component {
         }
     }
 
+    uploadFileWindow() {
+        new Window("Upload file", [
+            Window.CANCEL_BUTTON,
+            {
+                value: "OK",
+                onclick: function () {
+                    console.log(document.getElementById("uploadFileForm"));
+                    document.getElementById("uploadFileForm").submit();
+                }
+            }], () => {
+            return `
+                <form id="uploadFileForm" action="${Routes.uploadFile}" method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="_token" value="${csrf_token}" />
+                    <input type="hidden" name="path" value="${CURRENT_PATH}">
+                    <input type="file" name="data" />
+                </form>
+            `;
+        });
+    }
+
     hideNewMenu() {
         document.getElementById("context_menu").style.display = "none";
     }
@@ -62,11 +82,15 @@ class NewMenu extends React.Component {
         return (
             <div id="context_menu" onMouseLeave={this.hideNewMenu}>
                 <ul>
+                    <li onClick={this.uploadFileWindow}>
+                        <i className="fas fa-file-upload"></i> Upload file
+                    </li>
+                    <hr/>
                     <li onClick={this.createFolder}>
-                        New folder
+                        <i className="fas fa-folder-plus"></i> New folder
                     </li>
                     <li onClick={this.createFile}>
-                        New file
+                        <i className="fas fa-file-medical"></i> New file
                     </li>
                 </ul>
             </div>

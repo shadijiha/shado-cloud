@@ -48,12 +48,21 @@ class HomeController extends Controller
                 ]);
 
         } else {
-            if (File::exists($path))
+            if (File::exists($path)) {
+                $file_struct = new FileStruct(new \SplFileInfo($path));
+                if ($file_struct->isImage()) {
+                    return view('preview_image')->with([
+                        "file" => $file_struct,
+                        "path" => $path,
+                    ]);
+                    //return Image::make($path)->response();
+                }
+
                 return view('preview')->with([
-                    "file" => new FileStruct(new \SplFileInfo($path)),
+                    "file" => $file_struct,
                     "path" => null
                 ]);
-            else
+            } else
                 return abort(404);
         }
     }

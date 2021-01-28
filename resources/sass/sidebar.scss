@@ -123,8 +123,9 @@ label #sidebar_btn {
     background-color: #fff;
     width: 300px;
     border-radius: 5px;
-    z-index: 10;
+    z-index: 9999;
     border: solid gray 1px;
+    box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.3), 0 12px 40px 0 rgba(0, 0, 0, 0.29);
 
     ul {
         padding: 0;
@@ -140,7 +141,8 @@ label #sidebar_btn {
         font-size: 16px;
 
         &:hover {
-            background: $sidebar_a_hover;
+            background: $sidebar_bg;
+            color: white;
         }
     }
 }
