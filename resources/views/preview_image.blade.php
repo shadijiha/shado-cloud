@@ -8,6 +8,7 @@
 
 @section('content')
     <div id="file_preview_dashboard"></div>
-    <img src="{{route("get_image", $path)}}" style="width: 70%; margin: auto; text-align: center;">
+    <img src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}"
+         style="width: 70%; margin: auto; text-align: center;">
     <br/>
 @endsection

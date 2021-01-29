@@ -16,7 +16,8 @@
         "laravel/tinker": "^2.5",
         "laravel/ui": "^3.2",
         "ext-json": "*",
-        "intervention/image": "dev-master"
+        "intervention/image": "dev-master",
+        "ext-fileinfo": "*"
     },
     "require-dev": {
         "facade/ignition": "^2.5",

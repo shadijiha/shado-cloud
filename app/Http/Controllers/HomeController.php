@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\structs\FileStruct;
 use App\Models\APIToken;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
@@ -49,6 +50,7 @@ class HomeController extends Controller
 
         } else {
             if (File::exists($path)) {
+                //TODO: change this to use --> mime_content_type($path)
                 $file_struct = new FileStruct(new \SplFileInfo($path));
                 if ($file_struct->isImage()) {
                     return view('preview_image')->with([

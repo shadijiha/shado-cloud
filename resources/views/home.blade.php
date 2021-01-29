@@ -17,7 +17,7 @@
 
 @section('content')
     {{-- Display folders --}}
-    @if($files instanceof \App\Http\Controllers\DirectoryStruct)
+    @if($files instanceof \App\Http\structs\DirectoryStruct)
         @foreach($files->children as $child)
             <div class="folder"
                  onclick="window.location.href = '{{url("/") . "?path=" . str_replace("\\", "\\\\", $child->path)}}';"
@@ -37,7 +37,7 @@
                     <img src="images/icons/{{$file->extension}}.png" class="file_thumnail"
                          alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
                 @elseif ($file->isImage())
-                    <img src="{{route("get_image", $file->getNative()->getRealPath())}}" class="image_thumnail"
+                    <img src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}" class="image_thumnail"
                          alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
                 @else
                     <img src="images/icons/file.png" class="file_thumnail"/>

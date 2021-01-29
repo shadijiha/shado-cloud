@@ -34,12 +34,6 @@ Route::middleware('auth')->group(function () {
     Route::post("/deleteKey", [HomeController::class, "deleteAPIKey"])->name("deleteKey");
 
     Route::post("/createDir", [FileFetcherController::class, 'createDirectoryAPI'])->name("createDir");
-
-
-    // TODO: find solution
-    Route::get('/image/{path}', function (string $path) {
-        return \Intervention\Image\Facades\Image::make($path)->response();
-    })->name("get_image");
 });
 
 Route::prefix('api')->group(function () {

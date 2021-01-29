@@ -14,117 +14,6 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
 
-class DirectoryStruct
-{
-    public $parent;
-    public $files;
-    public $path;
-    public $children;
-    public $name;
-
-    public function __construct(string $path)
-    {
-        $this->path = $this->removeSlashes($path);
-
-        // Get parent dir
-        $delimiter = "\\";
-        if (Str::contains($path, "/"))
-            $delimiter = "/";
-
-        $tokens                     = explode($delimiter, $path);
-        $tokens[count($tokens) - 1] = "";
-        $this->parent               = $this->removeSlashes(implode($delimiter, $tokens));
-
-        // Get all files
-        $this->files = array();
-        foreach (File::files($this->path) as $file) {
-            array_push($this->files, new FileStruct($file));
-        }
-
-        // Get all children
-        $this->children = array();
-        foreach (File::directories($this->path) as $dir) {
-            array_push($this->children, new DirectoryStruct($dir));
-        }
-
-        // Compute name
-        $tokens     = explode($delimiter, $this->path);
-        $this->name = $tokens[count($tokens) - 1];
-    }
-
-    public function toString()
-    {
-        return $this;
-    }
-
-    private function removeSlashes(string $str): string
-    {
-        return preg_replace("/\\\+/", '\\', $str);
-    }
-
-    /**
-     * @return string
-     */
-    public function getRelativePath(): string
-    {
-        $temp = str_replace("\\", "/", str_replace(FileFetcherController::getCloudPath()."\\", "", $this->path));
-        return $temp;
-    }
-}
-
-class FileStruct
-{
-    public $name;
-    public $extension;
-    public $path;
-    public $native;
-    public $url;
-
-    const IMAGE_EXT = ["jpg", "png", "gif", "jpeg"];
-
-    public function __construct(\SplFileInfo $file)
-    {
-        $this->name      = $file->getFilename();
-        $this->extension = $file->getExtension();
-        $this->path      = $file->getRealPath();
-        $this->native    = $file;
-
-        $token     = Auth::user()->validAPITokens()->first();
-        $token     = $token == null ? "{YOUR_API_KEY}" : $token->key;
-        $this->url = url("/")."/api?key=$token&path=$this->path";
-    }
-
-    /**
-     * @return string
-     */
-    public function getRelativePath(): string
-    {
-        return str_replace("\\", "/", str_replace(FileFetcherController::getCloudPath()."\\", "", $this->path));
-    }
-
-    /**
-     * @return \SplFileInfo
-     */
-    public function getNative()
-    {
-        return $this->native;
-    }
-
-    /**
-     * Determins if the file is an image based on its extension
-     * @return bool
-     */
-    public function isImage(): bool
-    {
-        foreach (self::IMAGE_EXT as $ext) {
-            if ($this->native->getExtension() == $ext) {
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
 class FileFetcherController extends Controller
 {
     private $CLOUD_PATH;
@@ -146,24 +35,24 @@ class FileFetcherController extends Controller
         if ($result != null)
             return response($result);
 
-        return response(["data" => new DirectoryStruct($this->CLOUD_PATH)]);
+        return response(["data" => new \App\Http\structs\DirectoryStruct($this->CLOUD_PATH)]);
     }
 
     /**
      * @param string|null $path
      *
-     * @return FileStruct|DirectoryStruct|void
+     * @return \App\Http\structs\FileStruct|\App\Http\structs\DirectoryStruct|void
      */
     public function indexDirectories(string $path = null)
     {
         $path = $path == null ? $this->CLOUD_PATH : $path;
 
         try {
-            return new DirectoryStruct($path);
+            return new \App\Http\structs\DirectoryStruct($path);
         } catch (DirectoryNotFoundException $e) {
             // Either the path given is a file or it doesn't exist
             if (File::exists($path)) {
-                return new FileStruct(new \SplFileInfo($path));
+                return new \App\Http\structs\FileStruct(new \SplFileInfo($path));
             } else {
                 return abort(404, "File not found");
             }
@@ -182,7 +71,7 @@ class FileFetcherController extends Controller
         if ($result != null)
             return response($result);
 
-        return response(["data" => new DirectoryStruct($request->get("path"))]);
+        return response(["data" => new \App\Http\structs\DirectoryStruct($request->get("path"))]);
     }
 
     /**
@@ -205,11 +94,27 @@ class FileFetcherController extends Controller
         // API is ok, get the file content
         try {
             $buffer = file_get_contents($path);
+
+            // See if the file is a image or not
+            $file_struct = new \App\Http\structs\FileStruct(new \SplFileInfo($path));
+
+//            if ($file_struct->isImage()) {
+//                return Image::make($path)->response();
+//            } else {
+//                return $buffer;
+//            }
+
+            return \response()->file($path, [
+                "Content-Type"        => mime_content_type($path),
+                'Content-Disposition' => 'inline; filename="'.$path.'"'
+            ]);
+
+
         } catch (\Exception $e) {
             $buffer = "[500] ".$e->getMessage();
         }
 
-        return $buffer;
+        return abort(500, "An internal error has occurred");
     }
 
     public function saveFileAPI(Request $request)
