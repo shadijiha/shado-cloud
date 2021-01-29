@@ -224,6 +224,30 @@ class FileFetcherController extends Controller
         ]);
     }
 
+    public function infoFileAPI(Request $request)
+    {
+        $path  = $request->get('path');
+        $token = $request->get('key');
+
+        // Verify token
+        $result = $this->verifyAPIToken($request);
+        if ($result != null)
+            return response($result);
+
+        // See if file exists
+        if (!File::exists($path)) {
+            return [
+                "code"    => 401,
+                "message" => "File or Dir does not exists"
+            ];
+        }
+
+        return [
+            "code" => 200,
+            "data" => new FileStruct(new \SplFileInfo($path))
+        ];
+    }
+
     /**
      * @param Request        $request
      * @param HomeController $controller

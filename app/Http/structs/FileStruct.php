@@ -14,6 +14,8 @@ class FileStruct
     public $native;
     public $url;
 
+    public $size;
+
     const IMAGE_EXT = ["jpg", "png", "gif", "jpeg", "apng", "svg", "tiff", ".bmp", "eps"];
 
     public function __construct(\SplFileInfo $file)
@@ -29,6 +31,9 @@ class FileStruct
         }
         $token     = $token == null ? "{YOUR_API_KEY}" : $token->key;
         $this->url = url("/")."/api?key=$token&path=$this->path";
+
+        // Properties
+        $this->size = $file->getSize();
     }
 
     /**
