@@ -6,14 +6,14 @@ class Window {
 
     static OK_BUTTON = {
         value: "OK",
-        onclick: () => {
-            document.body.removeChild(this._dom)
+        onclick: (self) => {
+            document.body.removeChild(self._dom)
         },
     };
     static CANCEL_BUTTON = {
         value: "Cancel",
-        onclick: () => {
-            document.body.removeChild(this._dom)
+        onclick: (self) => {
+            document.body.removeChild(self._dom)
         },
     }
 
@@ -67,7 +67,13 @@ class Window {
             const temp = document.createElement("button");
             temp.classList.add("action_btn");
             temp.innerText = action.value;
-            temp.addEventListener("click", action.onclick);
+
+
+            const self = this;
+            temp.addEventListener("click", function () {
+                action.onclick(self);
+            });
+
             action_container.appendChild(temp);
         }
 

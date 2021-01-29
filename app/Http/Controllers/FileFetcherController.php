@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\structs\FileStruct;
 use App\Models\APIToken;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
+use Symfony\Component\Mime\MimeTypes;
 
 class FileFetcherController extends Controller
 {
@@ -41,7 +43,7 @@ class FileFetcherController extends Controller
     /**
      * @param string|null $path
      *
-     * @return \App\Http\structs\FileStruct|\App\Http\structs\DirectoryStruct|void
+     * @return FileStruct|\App\Http\structs\DirectoryStruct|void
      */
     public function indexDirectories(string $path = null)
     {
@@ -52,7 +54,7 @@ class FileFetcherController extends Controller
         } catch (DirectoryNotFoundException $e) {
             // Either the path given is a file or it doesn't exist
             if (File::exists($path)) {
-                return new \App\Http\structs\FileStruct(new \SplFileInfo($path));
+                return new FileStruct(new \SplFileInfo($path));
             } else {
                 return abort(404, "File not found");
             }
@@ -96,7 +98,7 @@ class FileFetcherController extends Controller
             $buffer = file_get_contents($path);
 
             // See if the file is a image or not
-            $file_struct = new \App\Http\structs\FileStruct(new \SplFileInfo($path));
+            $file_struct = new FileStruct(new \SplFileInfo($path));
 
 //            if ($file_struct->isImage()) {
 //                return Image::make($path)->response();
@@ -105,8 +107,8 @@ class FileFetcherController extends Controller
 //            }
 
             return \response()->file($path, [
-                "Content-Type"        => mime_content_type($path),
-                'Content-Disposition' => 'inline; filename="'.$path.'"'
+                "Content-Type"        => MimeTypes::getDefault()->guessMimeType($path),
+                'Content-Disposition' => 'inline; filename="'.(new \SplFileInfo($path))->getFilename().'"'
             ]);
 
 
