@@ -302,7 +302,7 @@ class FileFetcherController extends Controller
         // Add to database
         $model             = new UploadedFile();
         $model->user_id    = Auth::user()->id;
-        $model->path       = UploadedFile::cleanPath($destinationPath."\\".$request->data->getClientOriginalName());
+        $model->path       = UploadedFile::cleanPath($destinationPath.$request->data->getClientOriginalName());
         $model->updated_at = Carbon::now();
         $model->created_at = Carbon::now();
         $model->mime_type  = $request->data->getClientMimeType();
