@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\structs\FileStruct;
+use App\Http\structs\VideoStream;
 use App\Models\APIToken;
+use App\Models\UploadedFile;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Routing\ResponseFactory;
@@ -14,7 +16,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
-use Symfony\Component\Mime\MimeTypes;
 
 class FileFetcherController extends Controller
 {
@@ -100,17 +101,11 @@ class FileFetcherController extends Controller
             // See if the file is a image or not
             $file_struct = new FileStruct(new \SplFileInfo($path));
 
-//            if ($file_struct->isImage()) {
-//                return Image::make($path)->response();
-//            } else {
-//                return $buffer;
-//            }
-
+            // Get the originial Mime Type
             return \response()->file($path, [
-                "Content-Type"        => MimeTypes::getDefault()->guessMimeType($path),
+                "Content-Type"        => $file_struct->getMimeType(),
                 'Content-Disposition' => 'inline; filename="'.(new \SplFileInfo($path))->getFilename().'"'
             ]);
-
 
         } catch (\Exception $e) {
             $buffer = "[500] ".$e->getMessage();
@@ -164,6 +159,16 @@ class FileFetcherController extends Controller
                 $stream = fopen($path, "w");
                 fwrite($stream, $data);
                 fclose($stream);
+
+                // Add the created file to the database
+                $model             = new UploadedFile();
+                $model->user_id    = Auth::user()->id;
+                $model->path       = UploadedFile::cleanPath($path);
+                $model->updated_at = Carbon::now();
+                $model->created_at = Carbon::now();
+                $model->mime_type  = "text/plain";
+                $model->save();
+
             } catch (\Exception $e) {
                 return response([
                     "code"    => 401,
@@ -203,6 +208,11 @@ class FileFetcherController extends Controller
                     File::deleteDirectory($path);
                 else
                     File::delete($path);
+
+                // After deletion, delete from the database
+                $temp = UploadedFile::getFromPath($path);
+                if ($temp)
+                    $temp->delete();    // To avoid call on null
 
             } catch (\Exception $e) {
                 return \response([
@@ -257,7 +267,16 @@ class FileFetcherController extends Controller
         $destinationPath = $request->get('path');
         $request->data->move($destinationPath, $request->data->getClientOriginalName());
 
-        return $controller->index($request, new FileFetcherController());
+        // Add to database
+        $model             = new UploadedFile();
+        $model->user_id    = Auth::user()->id;
+        $model->path       = UploadedFile::cleanPath($destinationPath."\\".$request->data->getClientOriginalName());
+        $model->updated_at = Carbon::now();
+        $model->created_at = Carbon::now();
+        $model->mime_type  = $request->data->getClientMimeType();
+        $model->save();
+
+        return redirect()->back();
     }
 
     /**

@@ -18,6 +18,42 @@
         }
 
         // **************************************
+        function deleteFileConfirmation() {
+            new Window("Delete a file", [
+                {
+                    value: "Yes",
+                    onclick: (win) => {
+                        deleteFile();
+                        win.close();
+                    }
+                },
+                {
+                    value: "No",
+                    onclick: (win) => {
+                        win.close();
+                    }
+                }
+            ], function () {
+                return "Are you sure you want to delete " + selected + "?";
+            });
+        }
+
+        async function deleteFile() {
+
+            const response = await fetch(`${Routes.index}/api/delete?path=${selected}`);
+            const json = await response.json();
+
+            // Show result
+            if (json.code != 200) {
+                new Window("Error", null, function () {
+                    return json.message;
+                });
+            } else {
+                // Refresh the page
+                window.location.reload();
+            }
+        }
+
         async function showProperties() {
             const reponse = await fetch('{{url("/api/info?")}}' + "path=" + selected);
             const json = await reponse.json();
@@ -68,7 +104,7 @@
     <div id="folder_context_menu">
         <ul>
             <li>Rename</li>
-            <li>Delete</li>
+            <li onclick="deleteFileConfirmation()">Delete</li>
             <li onclick="showProperties()">Properties</li>
         </ul>
     </div>

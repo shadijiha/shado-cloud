@@ -52,12 +52,12 @@ class HomeController extends Controller
             if (File::exists($path)) {
                 //TODO: change this to use --> mime_content_type($path)
                 $file_struct = new FileStruct(new \SplFileInfo($path));
-                if ($file_struct->isImage()) {
-                    return view('preview_image')->with([
+
+                if ($file_struct->isImage() || $file_struct->isVideo() || $file_struct->isPDF()) {
+                    return view('preview_media')->with([
                         "file" => $file_struct,
                         "path" => $path,
                     ]);
-                    //return Image::make($path)->response();
                 }
 
                 return view('preview')->with([
