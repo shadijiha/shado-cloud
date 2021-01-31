@@ -10103,7 +10103,7 @@ label #sidebar_btn:hover {
 *
  */
 .login_body {
-  background-image: url("../images/background.jpg");
+  background: url("../images/background.jpg") no-repeat center center fixed;
   background-size: cover;
 }
 
