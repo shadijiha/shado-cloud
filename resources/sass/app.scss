@@ -11,11 +11,14 @@
 @import "sidebar";
 @import "auth";
 @import "switchCheckbox";
+@import "window";
+@import "preview";
 
 .folder, .file {
     display: inline-block;
     margin-right: 20px;
     margin-left: 20px;
+    margin-bottom: 30px;
     text-align: center;
     cursor: pointer;
 
@@ -35,11 +38,14 @@
 }
 
 .image_thumnail {
-    max-width: 230px;
-    max-height: 95px;
-    width: auto;
-    height: auto;
+    width: 170px !important;
+    height: auto !important;
     box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.3), 0 12px 40px 0 rgba(0, 0, 0, 0.29);
+}
+
+.video_thumnail {
+    width: 170px !important;
+    height: 170px !important;
 }
 
 .rotate {
@@ -70,8 +76,7 @@
 #file_preview_dashboard {
     width: 50%;
     min-width: 500px;
-    margin: auto;
-    margin-bottom: 30px;
+    margin: auto auto 30px;
 }
 
 #debugDiv {
@@ -107,6 +112,10 @@ div.url {
     width: 75%;
 }
 
+#main_content {
+    height: auto;
+}
+
 #main_content table td, th {
     padding: 10px;
     text-align: center;
@@ -140,53 +149,4 @@ div.url {
     }
 }
 
-.alertContainer {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 400px;
-    min-height: 100px;
-    height: auto;
-    transform: translate(-50%, -50%);
-    background-color: white;
-    z-index: 6;
-    border-bottom-right-radius: 10px;
-    border-bottom-left-radius: 10px;
-    border: solid gray 1px;
-    box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.3), 0 12px 40px 0 rgba(0, 0, 0, 0.29);
 
-    div.title_bar {
-        background-color: $sidebar_bg;
-        color: white;
-        padding: 10px;
-        font-weight: bold;
-
-        button.close_btn {
-            background-color: red;
-            color: white;
-            float: right;
-            border-radius: 50%;
-            padding: 5px;
-            border: 0;
-            font-weight: bold;
-            width: 30px;
-        }
-    }
-
-    div.body_container {
-        padding: 15px;
-    }
-
-    div.action_container {
-        float: right;
-        padding: 10px;
-
-        button {
-            background-color: $sidebar_bg;
-            color: white;
-            border-radius: 5px;
-            padding: 5px;
-            min-width: 50px;
-        }
-    }
-}

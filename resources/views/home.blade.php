@@ -74,7 +74,8 @@
         @foreach($files->children as $child)
             <div class="folder"
                  onclick="window.location.href = '{{url("/") . "?path=" . str_replace("\\", "\\\\", $child->path)}}';"
-                 oncontextmenu="event.preventDefault(); showFolderSettings(this);" data-path="{{$child->path}}">
+                 oncontextmenu="event.preventDefault(); showFolderSettings(this);"
+                 data-path="{{$child->path}}">
                 <img src="images/folder.png" alt="{{$child->getRelativePath()}}" title="{{$child->getRelativePath()}}"/>
                 <br/>
                 <span>{{$child->name}}</span>
@@ -85,16 +86,22 @@
         @foreach($files->files as $file)
             <div class="file"
                  onclick="window.location.href = '{{url("/") . "?path=" . str_replace("\\", "\\\\", $file->path)}}';"
-                 oncontextmenu="event.preventDefault(); showFolderSettings(this);" data-path="{{$file->path}}">
+                 oncontextmenu="event.preventDefault(); showFolderSettings(this);"
+                 data-path="{{$file->path}}">
+
                 @if(File::exists("images/icons/$file->extension.png"))
                     <img src="images/icons/{{$file->extension}}.png" class="file_thumnail"
                          alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
                 @elseif ($file->isImage())
                     <img src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}" class="image_thumnail"
                          alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
+                @elseif($file->isVideo())
+                    <video src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}" class="video_thumnail"
+                    ></video>
                 @else
                     <img src="images/icons/file.png" class="file_thumnail"/>
                 @endif
+
                 <br/>
                 <span>{{$file->name}}</span>
             </div>

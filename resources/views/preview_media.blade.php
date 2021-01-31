@@ -8,15 +8,15 @@
 
 @section('content')
     <h1>{{$file->getNative()->getFilename()}}</h1>
-
-    @if ($file->isImage())
-        <img src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}"
-             style="width: 70%; margin: auto; text-align: center;">
-    @elseif ($file->isVideo())
-        <video controls>
-            <source src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}" type="{{$file->getMimeType()}}">
-        </video>
-    @endif
-
     <br/>
+    @if ($file->isImage())
+        <img class="preview_content" src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}">
+    @elseif ($file->isVideo())
+        <video class="preview_content" preload="auto" src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}"
+               controls>
+        </video>
+    @elseif($file->isPDF())
+        <embed class="preview_content" src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}"
+        />
+    @endif
 @endsection
