@@ -28,7 +28,7 @@ class UploadedFile extends Model
         $temp = preg_replace('/\\\\{2,}/', '\\', $path);
         $temp = preg_replace('/\/+/i', "/", $temp);
         // Remove a / followed by \
-        $temp = str_replace("/\\", "", $temp);
+        $temp = str_replace("/\\", "/", $temp);
         return $temp;
     }
 
