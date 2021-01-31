@@ -59,7 +59,16 @@
             const json = await reponse.json();
 
             new Window("Properties", null, function () {
-                return `Size : ${JSON.stringify(json.data.size)} bytes`;
+
+                let str = "<table>";
+                for (const prop in json.props) {
+                    str += `<tr>
+                               <td><b>${prop}</b></td>
+                               <td>${json.props[prop]}</td>
+                        </tr>`;
+                }
+
+                return str + "</table>";
             });
         }
 

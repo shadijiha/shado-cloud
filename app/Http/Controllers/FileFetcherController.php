@@ -6,6 +6,7 @@ use App\Http\structs\FileStruct;
 use App\Http\structs\VideoStream;
 use App\Models\APIToken;
 use App\Models\UploadedFile;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Routing\ResponseFactory;
@@ -144,6 +145,23 @@ class FileFetcherController extends Controller
                 $stream = fopen($path, "w");
                 fwrite($stream, $data);
                 fclose($stream);
+
+                // After the file has been modified, Updated the updated_at column
+                $db_struct = UploadedFile::getFromPath($path);
+                if ($db_struct) {
+                    $db_struct->updated_at = Carbon::now();
+                    $db_struct->save();
+                } else {
+                    // If it is not there, then attempt to insert it
+                    $db_struct             = new UploadedFile();
+                    $db_struct->path       = UploadedFile::cleanPath($path);
+                    $db_struct->mime_type  = "text/plain";
+                    $db_struct->user_id    = Auth::user() == null ? null : Auth::user()->id;
+                    $db_struct->created_at = Carbon::now();
+                    $db_struct->updated_at = Carbon::now();
+                    $db_struct->save();
+                }
+
             } catch (\Exception $e) {
                 return response([
                     "code"    => 401,
@@ -252,9 +270,23 @@ class FileFetcherController extends Controller
             ];
         }
 
+        // Get database info
+        $struct    = new FileStruct(new \SplFileInfo($path));
+        $struct_db = UploadedFile::where("path", UploadedFile::cleanPath($struct->getNative()->getRealPath()))->first();
+
         return [
-            "code" => 200,
-            "data" => new FileStruct(new \SplFileInfo($path))
+            "code"  => 200,
+            "props" => [
+                "Filename"      => $struct->getNative()->getFilename(),
+                "Extension"     => $struct->getNative()->getExtension(),
+                "Full path"     => $struct->getNative()->getRealPath(),
+                "MIME type"     => $struct->getMimeType(),
+                "size"          => $struct->getNative()->getSize(),
+                "File id"       => $struct_db == null ? "null" : $struct_db->id,
+                "Owned by"      => $struct_db == null ? "null" : User::find($struct_db->user_id)->name,
+                "Last modified" => $struct_db == null ? "null" : $struct_db->updated_at,
+                "Created at"    => $struct_db == null ? "null" : $struct_db->created_at
+            ]
         ];
     }
 

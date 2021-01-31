@@ -12,6 +12,10 @@
     position: relative;
     left: 50%;
     transform: translate(-50%, 0);
+    height: auto;
+}
+
+embed.preview_content {
     min-height: 700px;
 }
 

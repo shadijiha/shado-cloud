@@ -15,7 +15,6 @@ class FileStruct
     public $path;
     public $native;
     public $url;
-    public $size;
 
     const IMAGE_EXT = ["jpg", "png", "gif", "jpeg", "apng", "svg", "tiff", ".bmp", "eps"];
     const VIDEO_EXT = ["mp4", "ogg", "mov", "wmv", "flv", "avi", "WebM"];
@@ -34,9 +33,6 @@ class FileStruct
         }
         $token     = $token == null ? "{YOUR_API_KEY}" : $token->key;
         $this->url = url("/")."/api?key=$token&path=$this->path";
-
-        // Properties
-        $this->size = $file->getSize();
     }
 
     /**
