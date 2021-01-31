@@ -16,8 +16,6 @@
     </div>
     <br/>
     <div id="debugDiv"></div>
-
-
     <script defer>
         const SAVE_INTERVAL = 5;    // Seconds
         let lastSavedContent = "";

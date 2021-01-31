@@ -8,6 +8,10 @@
 
 @section('content')
     <h1>{{$file->getNative()->getFilename()}}</h1>
+
+    <div id="media_preview_dashboard">
+        <div class="url" id="api_file_url">{{$file->url}}</div>
+    </div>
     <br/>
     @if ($file->isImage())
         <img class="preview_content" src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}">

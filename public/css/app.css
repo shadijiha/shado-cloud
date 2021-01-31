@@ -10346,7 +10346,7 @@ video.preview_content {
   font-family: "consolas", serif;
 }
 
-#file_preview_dashboard {
+#file_preview_dashboard, #media_preview_dashboard {
   width: 50%;
   min-width: 500px;
   margin: auto auto 30px;
