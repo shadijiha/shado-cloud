@@ -25,8 +25,7 @@ class UploadedFile extends Model
      */
     public static function cleanPath(string $path): string
     {
-        $temp = preg_replace('/\\\\{2,}/', '\\', $path);
-        return preg_replace('/\/+/i', "/", $temp);
+        return preg_replace('/\\\\{2,}/', '\\', $path);
     }
 
     public function user()

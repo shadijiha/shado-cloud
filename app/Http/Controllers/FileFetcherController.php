@@ -272,7 +272,7 @@ class FileFetcherController extends Controller
 
         // Get database info
         $struct    = new FileStruct(new \SplFileInfo($path));
-        $struct_db = UploadedFile::where("path", UploadedFile::cleanPath($struct->getNative()->getRealPath()))->first();
+        $struct_db = $struct->getUploadedFile();
 
         return [
             "code"  => 200,
