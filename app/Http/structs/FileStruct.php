@@ -54,7 +54,7 @@ class FileStruct
     /**
      * @return UploadedFile
      */
-    public function getUploadedFile(): UploadedFile
+    public function getUploadedFile()
     {
         return UploadedFile::where("path", UploadedFile::cleanPath($this->native->getRealPath()))->first();
     }
