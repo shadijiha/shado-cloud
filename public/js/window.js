@@ -44,7 +44,8 @@ class Window {
         title_bar.innerHTML = this.title;
 
         // Setup body
-        body_container.innerHTML = this.body(this);
+        let __self = this;
+        body_container.innerHTML = this.body(__self);
 
         // Close button action
         close_btn.classList.add("close_btn");
