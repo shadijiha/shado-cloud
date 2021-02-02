@@ -37,7 +37,7 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::prefix('api')->group(function () {
-    // TODO: Move API function outside of middleware, require api key instead
+
     Route::get("/dir", [FileFetcherController::class, 'indexDirectoriesAPI']);
     Route::get("/tree", [FileFetcherController::class, 'getTreeAPI']);
 
@@ -45,6 +45,7 @@ Route::prefix('api')->group(function () {
     Route::post("", [FileFetcherController::class, 'saveFileAPI'])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::get("/info", [FileFetcherController::class, 'infoFileAPI']);
     Route::get("/delete", [FileFetcherController::class, 'deleteFileAPI']);
+    Route::get("/rename", [FileFetcherController::class, 'renameFileAPI']);
 });
 
 

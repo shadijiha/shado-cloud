@@ -290,6 +290,55 @@ class FileFetcherController extends Controller
         ];
     }
 
+    public function renameFileAPI(Request $request)
+    {
+        $path    = $request->get("path");
+        $newname = $request->get("newname");
+
+        if ($path == null || $newname == null)
+            return \response([
+                "code"    => 401,
+                "message" => "Path or newname are null"
+            ]);
+
+        // Get the uploaded file from the database
+        $uploaded_file = UploadedFile::getFromPath(UploadedFile::cleanPath($path));
+        $native        = new \SplFileInfo($path);
+
+        // Get the seperator
+        $seperator = PHP_OS == "Windows" || PHP_OS == "WINNT" ? "\\" : "/";
+
+        // Rename the file
+        try {
+            File::move($path, $native->getPath().$seperator.$newname);
+
+            if ($uploaded_file) {
+                $uploaded_file->path = $native->getPath().$seperator.$newname;
+                $uploaded_file->save();
+            } else {
+                // If it is not in the database then add it
+                $uploaded_file             = new UploadedFile();
+                $uploaded_file->user_id    = Auth::user() ? Auth::user()->id : null;
+                $uploaded_file->path       = $native->getPath().$seperator.$newname;
+                $uploaded_file->mime_type  = (new FileStruct(new \SplFileInfo($native->getPath().$seperator.$newname)))->getMimeType();
+                $uploaded_file->updated_at = Carbon::now();
+                $uploaded_file->created_at = Carbon::now();
+                $uploaded_file->save();
+            }
+
+        } catch (\Exception $e) {
+            return \response([
+                "code"    => 500,
+                "message" => $e->getMessage()
+            ]);
+        }
+
+        return \response([
+            "code"    => 200,
+            "message" => "Filename changed"
+        ]);
+    }
+
     /**
      * @param Request        $request
      * @param HomeController $controller

@@ -72,6 +72,65 @@
             });
         }
 
+        // *********** Rename *******************
+        function showRenameWindow() {
+            new Window("Rename", [
+                Window.CANCEL_BUTTON,
+                {
+                    value: "OK",
+                    onclick: (self) => {
+
+                        let input = document.getElementById("input_" + self.id).value;
+
+                        // If the name is a path, then return error
+                        for (const char of ["\\", "/", "?", ":", ";", ",", "#", "^", "\"", "<", ">", "*", "|"]) {
+                            if (input.includes(char)) {
+                                new Window("Error", null, function () {
+                                    return "The filename cannot contain an invalid character '<b>" + char + "</b>'";
+                                });
+                                return;
+                            }
+                        }
+
+                        // If the filename doesn't contain an extension, Then
+                        // Use the existing extension
+                        let extension = null;
+                        if (!input.includes(".")) {
+                            let temp = selected.split(/\\+|\/+/g);
+                            temp = temp[temp.length - 1].split(".");
+                            extension = temp[temp.length - 1];
+                        }
+
+                        renameFile(input, extension);
+                        self.close();
+                    }
+                }
+            ], function (self) {
+
+                // Computer file name from fullpath
+                let tokens = selected.split(/\\+|\/+/g);
+
+                return `
+                    <p>Rename ${selected}</p>
+                    <input id="input_${self.id}" placeholder="${tokens[tokens.length - 1]}" />
+                `;
+            });
+        }
+
+        async function renameFile(newName, extension) {
+            const suffix = extension == null ? "" : "." + extension;
+            const response = await fetch(`${Routes.index}/api/rename?path=${selected}&newname=${newName}${suffix}`);
+            const json = await response.json();
+
+            if (json.code != 200) {
+                new Window("Error", null, function (self) {
+                    return json.message;
+                });
+            } else {
+                window.location.reload();
+            }
+        }
+
         // **************************************
         window.addEventListener("click", hideFolderSettings);
     </script>
@@ -119,9 +178,9 @@
 
     <div id="folder_context_menu">
         <ul>
-            <li>Rename</li>
-            <li onclick="deleteFileConfirmation()">Delete</li>
-            <li onclick="showProperties()">Properties</li>
+            <li onclick="showRenameWindow();">Rename</li>
+            <li onclick="deleteFileConfirmation();">Delete</li>
+            <li onclick="showProperties();">Properties</li>
         </ul>
     </div>
 

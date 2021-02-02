@@ -22,7 +22,7 @@ class Window {
         this.actions = actions || [Window.OK_BUTTON];
 
         this.id = "window_" + Math.floor(Math.random() * 1e6);
-        this.body = body || function () {
+        this.body = body || function (self) {
             return "This is a simple window";
         };
 
@@ -42,7 +42,9 @@ class Window {
         const close_btn = document.createElement("button");
 
         title_bar.innerHTML = this.title;
-        body_container.innerHTML = this.body();
+
+        // Setup body
+        body_container.innerHTML = this.body(this);
 
         // Close button action
         close_btn.classList.add("close_btn");
@@ -51,13 +53,15 @@ class Window {
             this.close();
         });
 
+        // Setup title bar
         title_bar.classList.add("title_bar");
         title_bar.appendChild(close_btn);
 
-        body_container.classList.add("body_container");
 
+        body_container.classList.add("body_container");
         action_container.classList.add("action_container");
 
+        // Add all to parent
         DIV.appendChild(title_bar);
         DIV.appendChild(body_container);
         DIV.appendChild(action_container);
@@ -68,10 +72,18 @@ class Window {
             temp.classList.add("action_btn");
             temp.innerText = action.value;
 
-
+            // Add event listener
             const self = this;
             temp.addEventListener("click", function () {
                 action.onclick(self);
+            });
+            temp.addEventListener("mouseover", function () {
+                if (action.onmouseover)
+                    action.onmouseover(self);
+            });
+            temp.addEventListener("mouseout", function () {
+                if (action.onmouseout)
+                    action.onmouseout(self);
             });
 
             action_container.appendChild(temp);
@@ -92,4 +104,32 @@ class Window {
         document.body.removeChild(this._dom);
     }
 
+}
+
+Window.ActionButton = class {
+    constructor(value) {
+        this.value = value;
+        this.onclick = function (win) {
+            win.close();
+        }
+        this.onmouseover = function (win) {
+        }
+        this.onmouseout = this.onmouseover;
+    }
+
+    setValue(value) {
+        this.value = value;
+    }
+
+    setOnclick(func) {
+        this.onclick = func;
+    }
+
+    setOnMouseOver(func) {
+        this.onmouseover = func;
+    }
+
+    setOnMouseOut(func) {
+        this.onmouseout = func;
+    }
 }
