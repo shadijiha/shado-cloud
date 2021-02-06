@@ -22,19 +22,14 @@ use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
 
 class FileFetcherController extends Controller
 {
-    private $CLOUD_PATH;
-
-    public function __construct()
-    {
-        $this->CLOUD_PATH = env("CLOUD_FILES_PATH");
-    }
-
     /**
-     * @param Request $request
+     * @param APIRequest          $request
+     *
+     * @param FileServiceProvider $provider
      *
      * @return Application|ResponseFactory|Response
      */
-    public function indexDirectoriesAPI(APIRequest $request)
+    public function indexDirectoriesAPI(APIRequest $request, FileServiceProvider $provider)
     {
         // Verify token
         try {
@@ -43,7 +38,7 @@ class FileFetcherController extends Controller
             return \response(["code" => 400, "message" => $e->getMessage()]);
         }
 
-        return response(["data" => new DirectoryStruct($this->CLOUD_PATH)]);
+        return response(["data" => new DirectoryStruct($provider->getCloudPath())]);
     }
 
     /**
@@ -53,7 +48,7 @@ class FileFetcherController extends Controller
      */
     public function indexDirectories(string $path = null)
     {
-        $path = $path == null ? $this->CLOUD_PATH : $path;
+        $path = $path == null ? (new FileServiceProvider())->getCloudPath() : $path;
 
         try {
             return new DirectoryStruct($path);
@@ -68,11 +63,13 @@ class FileFetcherController extends Controller
     }
 
     /**
-     * @param Request $request
+     * @param APIRequest          $request
+     *
+     * @param FileServiceProvider $provider
      *
      * @return Application|ResponseFactory|Response
      */
-    public function getTreeAPI(APIRequest $request)
+    public function getTreeAPI(APIRequest $request, FileServiceProvider $provider)
     {
         // Verify token
         try {
@@ -81,7 +78,7 @@ class FileFetcherController extends Controller
             return \response(["code" => 400, "message" => $e->getMessage()]);
         }
 
-        return response(["tree" => new DirectoryStruct($request->get("path"))]);
+        return response(["tree" => new DirectoryStruct($request->get("path") ?? $provider->getCloudPath())]);
     }
 
     /**
@@ -240,11 +237,13 @@ class FileFetcherController extends Controller
     }
 
     /**
-     * @param Request $request
+     * @param Request             $request
+     *
+     * @param FileServiceProvider $provider
      *
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function uploadFile(Request $request)
+    public function uploadFile(Request $request, FileServiceProvider $provider)
     {
         $destinationPath = $request->get('path');
         $request->data->move($destinationPath, $request->data->getClientOriginalName());
@@ -252,7 +251,7 @@ class FileFetcherController extends Controller
         // Add to database
         $model             = new UploadedFile();
         $model->user_id    = Auth::user()->id;
-        $model->path       = UploadedFile::cleanPath($destinationPath."\\".$request->data->getClientOriginalName());
+        $model->path       = UploadedFile::cleanPath($destinationPath.$provider->getOSSeperator().$request->data->getClientOriginalName());
         $model->updated_at = Carbon::now();
         $model->created_at = Carbon::now();
         $model->mime_type  = $request->data->getClientMimeType();
@@ -299,6 +298,6 @@ class FileFetcherController extends Controller
      */
     public static function getCloudPath(): string
     {
-        return str_replace("\\\\", "\\", (new FileFetcherController())->CLOUD_PATH);
+        return str_replace("\\\\", "\\", (new FileServiceProvider())->getCloudPath());
     }
 }

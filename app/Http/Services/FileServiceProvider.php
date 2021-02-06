@@ -70,7 +70,7 @@ class FileServiceProvider
     public function deleteFile(string $path)
     {
         // Verify that that path you want to delete is inside the parent cloud directory
-        if (!Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($this->cloud_path))->getRealPath())) {
+        if (!Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($this->getCloudPath()))->getRealPath())) {
             throw new \Exception("You do not have permission to modify this path");
         }
         if (File::isDirectory($path))
@@ -120,5 +120,10 @@ class FileServiceProvider
     public function getOSSeperator(): string
     {
         return PHP_OS == "Windows" || PHP_OS == "WINNT" ? "\\" : "/";
+    }
+
+    public function getCloudPath(): string
+    {
+        return $this->cloud_path;
     }
 }

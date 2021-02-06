@@ -14,7 +14,7 @@ class RenameFileRequest extends APIRequest
         return [
             "key"     => "nullable",
             "path"    => "required",
-            "newname" => "newname",
+            "newname" => "required",
         ];
     }
 }
