@@ -33,7 +33,7 @@
 
             const data = {
                 path: "{{str_replace("\\", "\\\\", $file->getNative()->getRealPath())}}",
-                content: document.getElementById("file_content").innerText
+                data: document.getElementById("file_content").innerText
             };
 
             const response = await fetch('{{route("save")}}', {

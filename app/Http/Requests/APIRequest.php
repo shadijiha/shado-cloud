@@ -17,19 +17,7 @@ class APIRequest extends FormRequest
     public function rules()
     {
         return [
-            "key" => "required"
-        ];
-    }
-
-    /**
-     * Get the error messages for the defined validation rules.
-     *
-     * @return array
-     */
-    public function messages()
-    {
-        return [
-            'key.required' => 'API key is required',
+            "key" => "nullable"
         ];
     }
 

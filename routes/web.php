@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\APITokenController;
 use App\Http\Controllers\FileFetcherController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\SaveController;
@@ -30,8 +31,8 @@ Route::middleware('auth')->group(function () {
     Route::get("/update", [UpdateController::class, "update"])->name("update");
     Route::post("/uploadfile", [FileFetcherController::class, 'uploadFile'])->name("upload_file");
     Route::post("/save", [SaveController::class, "save"])->name("save");
-    Route::post("/generate", [HomeController::class, "generate"])->name("generate");
-    Route::post("/deleteKey", [HomeController::class, "deleteAPIKey"])->name("deleteKey");
+    Route::post("/generate", [APITokenController::class, "generate"])->name("generate");
+    Route::post("/deleteKey", [APITokenController::class, "delete"])->name("deleteKey");
 
     Route::post("/createDir", [FileFetcherController::class, 'createDirectoryAPI'])->name("createDir");
 });
