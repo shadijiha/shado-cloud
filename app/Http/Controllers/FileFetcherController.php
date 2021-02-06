@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\DeleteFileRequest;
+use App\Http\Requests\GetFileRequest;
+use App\Http\Requests\StoreFileRequest;
+use App\Http\Services\FileServiceProvider;
 use App\Http\structs\FileStruct;
 use App\Http\structs\VideoStream;
 use App\Models\APIToken;
@@ -15,7 +19,6 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
 
 class FileFetcherController extends Controller
@@ -81,56 +84,62 @@ class FileFetcherController extends Controller
     /**
      * Gets the content of a file
      *
-     * @param Request $request
+     * @param GetFileRequest      $request
+     *
+     * @param FileServiceProvider $provider
      *
      * @return false|string
      */
-    public function getFileAPI(Request $request)
+    public function getFileAPI(GetFileRequest $request, FileServiceProvider $provider)
     {
-        $path  = $request->get('path');
-        $token = $request->get('key');
-
         // Verify token
-        $result = $this->verifyAPIToken($request);
-        if ($result != null)
-            return response($result);
+        try {
+            $request->verifyToken();
+        } catch (\Exception $e) {
+            return \response([
+                "code"    => 401,
+                "message" => $e->getMessage()
+            ]);
+        }
+
+        $path  = $request->path;
+        $token = $request->key;
 
         // API is ok, get the file content
         try {
-            $buffer = file_get_contents($path);
-
             // See if the file is a image or not
-            $file_struct = new FileStruct(new \SplFileInfo($path));
+            $file_struct = $provider->getFile($path);
 
             // Get the originial Mime Type
-            return \response()->file($path, [
+            return response()->file($path, [
                 "Content-Type"        => $file_struct->getMimeType(),
-                'Content-Disposition' => 'inline; filename="'.(new \SplFileInfo($path))->getFilename().'"'
+                'Content-Disposition' => 'inline; filename="'.$file_struct->getNative()->getFilename().'"'
             ]);
 
         } catch (\Exception $e) {
-            $buffer = "[500] ".$e->getMessage();
+            return \response([
+                "code"    => 400,
+                "message" => $e->getMessage()
+            ]);
         }
-
-        return abort(500, "An internal error has occurred");
     }
 
-    public function saveFileAPI(Request $request)
+    public function saveFileAPI(StoreFileRequest $request, FileServiceProvider $provider)
     {
-        $key  = $request->get("key");
-        $path = $request->get("path");
-        $data = $request->get("data");
-
         // Verify token
-        $result = $this->verifyAPIToken($request);
-        if ($result != null)
-            return response($result);
-
-        if ($path == null)
-            return response([
+        try {
+            $request->verifyToken(true);
+        } catch (\Exception $e) {
+            return \response([
                 "code"    => 401,
-                "message" => "Path cannot be null"
+                "message" => $e->getMessage()
             ]);
+        }
+
+
+        $key  = $request->key;
+        $path = $request->path;
+        $data = $request->data;
 
         // See if the path is a directory
         if (File::isDirectory($path))
@@ -140,60 +149,7 @@ class FileFetcherController extends Controller
             ]);
 
         // See if file exists, then write data directly to the file
-        if (File::exists($path)) {
-            try {
-                $stream = fopen($path, "w");
-                fwrite($stream, $data);
-                fclose($stream);
-
-                // After the file has been modified, Updated the updated_at column
-                $db_struct = UploadedFile::getFromPath($path);
-                if ($db_struct) {
-                    $db_struct->updated_at = Carbon::now();
-                    $db_struct->save();
-                } else {
-                    // If it is not there, then attempt to insert it
-                    $db_struct             = new UploadedFile();
-                    $db_struct->path       = UploadedFile::cleanPath($path);
-                    $db_struct->mime_type  = "text/plain";
-                    $db_struct->user_id    = Auth::user() == null ? null : Auth::user()->id;
-                    $db_struct->created_at = Carbon::now();
-                    $db_struct->updated_at = Carbon::now();
-                    $db_struct->save();
-                }
-
-            } catch (\Exception $e) {
-                return response([
-                    "code"    => 401,
-                    "message" => $e->getMessage()
-                ]);
-            }
-        } else {
-            // Otherwise create that file
-            try {
-                $file = new \SplFileInfo($path);
-                File::makeDirectory($file->getPath(), 0777, true, true);
-
-                $stream = fopen($path, "w");
-                fwrite($stream, $data);
-                fclose($stream);
-
-                // Add the created file to the database
-                $model             = new UploadedFile();
-                $model->user_id    = Auth::user()->id;
-                $model->path       = UploadedFile::cleanPath($path);
-                $model->updated_at = Carbon::now();
-                $model->created_at = Carbon::now();
-                $model->mime_type  = "text/plain";
-                $model->save();
-
-            } catch (\Exception $e) {
-                return response([
-                    "code"    => 401,
-                    "message" => $e->getMessage()
-                ]);
-            }
-        }
+        $provider->updateOrCreateFile($path, $data);
 
         return response([
             "code"    => 200,
@@ -201,49 +157,25 @@ class FileFetcherController extends Controller
         ]);
     }
 
-    public function deleteFileAPI(Request $request)
+    public function deleteFileAPI(DeleteFileRequest $request, FileServiceProvider $provider)
     {
-        $key  = $request->get("key");
-        $path = $request->get("path");
-
         // Verify token
-        $result = $this->verifyAPIToken($request);
-        if ($result != null)
-            return response($result);
-
-        if (File::exists($path)) {
-
-            // Verify that that path you want to delete is inside the parent cloud directory
-            if (!Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo(env("CLOUD_FILES_PATH")))->getRealPath())) {
-                return response([
-                    "code"    => 403,
-                    "message" => "You do not have permission to modify this path",
-                ]);
-            }
-
-            try {
-                if (File::isDirectory($path))
-                    File::deleteDirectory($path);
-                else
-                    File::delete($path);
-
-                // After deletion, delete from the database
-                $temp = UploadedFile::getFromPath($path);
-                if ($temp)
-                    $temp->delete();    // To avoid call on null
-
-            } catch (\Exception $e) {
-                return \response([
-                    "code"    => 401,
-                    "message" => $e->getMessage()
-                ]);
-            }
-
-        } else {
-            return response([
+        try {
+            $request->verifyToken(true);
+        } catch (\Exception $e) {
+            return \response([
                 "code"    => 401,
-                "message" => "Path does not exist"
+                "message" => $e->getMessage()
             ]);
+        }
+
+        $path = $request->path;
+
+        try {
+            $provider->deleteFile($path);
+        } catch (\Exception $e) {
+            return \response(["code"    => 401,
+                              "message" => $e->getMessage()]);
         }
 
         return \response([
@@ -252,7 +184,8 @@ class FileFetcherController extends Controller
         ]);
     }
 
-    public function infoFileAPI(Request $request)
+    public
+    function infoFileAPI(Request $request)
     {
         $path  = $request->get('path');
         $token = $request->get('key');
@@ -290,7 +223,8 @@ class FileFetcherController extends Controller
         ];
     }
 
-    public function renameFileAPI(Request $request)
+    public
+    function renameFileAPI(Request $request)
     {
         $path    = $request->get("path");
         $newname = $request->get("newname");
@@ -310,7 +244,22 @@ class FileFetcherController extends Controller
 
         // Rename the file
         try {
-            File::move($path, $native->getPath().$seperator.$newname);
+            if (File::isDirectory($path)) {
+                $result = rename($path, $native->getPath().$seperator.$newname);
+                if (!$result)
+                    return \response([
+                        "code"    => 500,
+                        "message" => "Could not rename the folder"
+                    ]);
+                else {
+                    return \response([
+                        "code"    => 200,
+                        "message" => "Rename file to ".$native->getPath().$seperator.$newname]);
+                }
+
+            } else {
+                File::move($path, $native->getPath().$seperator.$newname);
+            }
 
             if ($uploaded_file) {
                 $uploaded_file->path = $native->getPath().$seperator.$newname;
@@ -343,7 +292,8 @@ class FileFetcherController extends Controller
      * @param Request        $request
      * @param HomeController $controller
      */
-    public function uploadFile(Request $request, HomeController $controller)
+    public
+    function uploadFile(Request $request, HomeController $controller)
     {
         $destinationPath = $request->get('path');
         $request->data->move($destinationPath, $request->data->getClientOriginalName());
@@ -365,7 +315,8 @@ class FileFetcherController extends Controller
      *
      * @return Application|ResponseFactory|Response
      */
-    public function createDirectoryAPI(Request $request)
+    public
+    function createDirectoryAPI(Request $request)
     {
         $path = $request->get("path");
         try {
@@ -402,7 +353,8 @@ class FileFetcherController extends Controller
      *
      * @return array|Application|ResponseFactory|Response
      */
-    private function verifyAPIToken(Request $request, bool $checkForReadonly = false)
+    private
+    function verifyAPIToken(Request $request, bool $checkForReadonly = false)
     {
         /**
          * IF the user is logged in, no need for the API key
@@ -457,7 +409,8 @@ class FileFetcherController extends Controller
     /**
      * @return string
      */
-    public static function getCloudPath(): string
+    public
+    static function getCloudPath(): string
     {
         return str_replace("\\\\", "\\", (new FileFetcherController())->CLOUD_PATH);
     }

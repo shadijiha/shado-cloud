@@ -2258,16 +2258,6 @@ function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "functi
 
 
 
-function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { Promise.resolve(value).then(_next, _throw); } }
-
-function _asyncToGenerator(fn) { return function () { var self = this, args = arguments; return new Promise(function (resolve, reject) { var gen = fn.apply(self, args); function _next(value) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value); } function _throw(err) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err); } _next(undefined); }); }; }
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
-
-function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
-
 function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function"); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, writable: true, configurable: true } }); if (superClass) _setPrototypeOf(subClass, superClass); }
 
 function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
@@ -2282,33 +2272,37 @@ function _isNativeReflectConstruct() { if (typeof Reflect === "undefined" || !Re
 
 function _getPrototypeOf(o) { _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function _getPrototypeOf(o) { return o.__proto__ || Object.getPrototypeOf(o); }; return _getPrototypeOf(o); }
 
+function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { Promise.resolve(value).then(_next, _throw); } }
+
+function _asyncToGenerator(fn) { return function () { var self = this, args = arguments; return new Promise(function (resolve, reject) { var gen = fn.apply(self, args); function _next(value) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value); } function _throw(err) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err); } _next(undefined); }); }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
+
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
+
 /**
  *
  */
 
 
 
-var NewMenu = /*#__PURE__*/function (_React$Component) {
-  _inherits(NewMenu, _React$Component);
-
-  var _super = _createSuper(NewMenu);
-
-  function NewMenu() {
-    _classCallCheck(this, NewMenu);
-
-    return _super.apply(this, arguments);
+var NewFileManager = /*#__PURE__*/function () {
+  function NewFileManager() {
+    _classCallCheck(this, NewFileManager);
   }
 
-  _createClass(NewMenu, [{
+  _createClass(NewFileManager, null, [{
     key: "createFolder",
     value: function () {
-      var _createFolder = _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().mark(function _callee() {
-        var name, response, json;
+      var _createFolder = _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().mark(function _callee(name) {
+        var response, json;
         return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().wrap(function _callee$(_context) {
           while (1) {
             switch (_context.prev = _context.next) {
               case 0:
-                name = "folder " + new Date().toDateString().replaceAll(/:|\\|\//g, " ");
+                name = name || "folder " + new Date().toDateString().replaceAll(/:|\\|\//g, " ");
 
                 if (!(CURRENT_PATH !== "")) {
                   _context.next = 9;
@@ -2349,7 +2343,7 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
         }, _callee);
       }));
 
-      function createFolder() {
+      function createFolder(_x) {
         return _createFolder.apply(this, arguments);
       }
 
@@ -2412,6 +2406,36 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
 
       return createFile;
     }()
+  }]);
+
+  return NewFileManager;
+}();
+
+var NewMenu = /*#__PURE__*/function (_React$Component) {
+  _inherits(NewMenu, _React$Component);
+
+  var _super = _createSuper(NewMenu);
+
+  function NewMenu(props) {
+    _classCallCheck(this, NewMenu);
+
+    return _super.call(this, props);
+  }
+
+  _createClass(NewMenu, [{
+    key: "createFolderWindow",
+    value: function createFolderWindow() {
+      new Window("Create new folder", [Window.CANCEL_BUTTON, {
+        value: "OK",
+        onclick: function onclick(self) {
+          NewFileManager.createFolder(document.getElementById("input_" + self.id).value);
+          self.close();
+          window.location.reload();
+        }
+      }], function (self) {
+        return "\n                    <p>Chose a name for your folder</p>\n                    <input type=\"type\" id=\"input_".concat(self.id, "\" placeholder=\"").concat("folder " + new Date().toDateString().replaceAll(/:|\\|\//g, " "), "\" />\n                ");
+      });
+    }
   }, {
     key: "uploadFileWindow",
     value: function uploadFileWindow() {
@@ -2443,12 +2467,12 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
               className: "fas fa-file-upload"
             }), " Upload file"]
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("hr", {}), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("li", {
-            onClick: this.createFolder,
+            onClick: this.createFolderWindow,
             children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("i", {
               className: "fas fa-folder-plus"
             }), " New folder"]
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("li", {
-            onClick: this.createFile,
+            onClick: NewFileManager.createFile,
             children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("i", {
               className: "fas fa-file-medical"
             }), " New file"]

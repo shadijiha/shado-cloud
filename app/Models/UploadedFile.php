@@ -13,7 +13,7 @@ class UploadedFile extends Model
 
     public static function getFromPath(string $path)
     {
-        return UploadedFile::where("path", $path)->first();
+        return UploadedFile::where("path", UploadedFile::cleanPath($path))->first();
     }
 
     /**

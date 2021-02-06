@@ -4,10 +4,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 
-class NewMenu extends React.Component {
-
-    async createFolder() {
-        const name = "folder " + new Date().toDateString().replaceAll(/:|\\|\//g, " ");
+class NewFileManager {
+    static async createFolder(name) {
+        name = name || "folder " + new Date().toDateString().replaceAll(/:|\\|\//g, " ");
         if (CURRENT_PATH !== "") {
             // Send request to the API
             const response = await fetch(`${Routes.createDir}`, {
@@ -29,7 +28,7 @@ class NewMenu extends React.Component {
         }
     }
 
-    async createFile() {
+    static async createFile() {
         const name = "file " + new Date().toDateString().replaceAll(/:|\\|\//g, " ");
         if (CURRENT_PATH !== "") {
             // Send request to the API
@@ -52,6 +51,32 @@ class NewMenu extends React.Component {
                 });
             }
         }
+    }
+}
+
+class NewMenu extends React.Component {
+
+    constructor(props) {
+        super(props);
+    }
+
+    createFolderWindow() {
+        new Window("Create new folder", [
+                Window.CANCEL_BUTTON,
+                {
+                    value: "OK",
+                    onclick: (self) => {
+                        NewFileManager.createFolder(document.getElementById("input_" + self.id).value);
+                        self.close();
+                        window.location.reload();
+                    }
+                }],
+            function (self) {
+                return `
+                    <p>Chose a name for your folder</p>
+                    <input type="type" id="input_${self.id}" placeholder="${"folder " + new Date().toDateString().replaceAll(/:|\\|\//g, " ")}" />
+                `;
+            });
     }
 
     uploadFileWindow() {
@@ -86,10 +111,10 @@ class NewMenu extends React.Component {
                         <i className="fas fa-file-upload"></i> Upload file
                     </li>
                     <hr/>
-                    <li onClick={this.createFolder}>
+                    <li onClick={this.createFolderWindow}>
                         <i className="fas fa-folder-plus"></i> New folder
                     </li>
-                    <li onClick={this.createFile}>
+                    <li onClick={NewFileManager.createFile}>
                         <i className="fas fa-file-medical"></i> New file
                     </li>
                 </ul>
