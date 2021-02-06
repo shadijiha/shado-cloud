@@ -59,9 +59,6 @@ class FileServiceProvider
 
     public function getFile(string $path): FileStruct
     {
-        //$buffer = file_get_contents($path);
-
-        // See if the file is a image or not
         return new FileStruct(new \SplFileInfo($path));
     }
 
@@ -85,5 +82,43 @@ class FileServiceProvider
         $temp = UploadedFile::getFromPath($path);
         if ($temp)
             $temp->delete();    // To avoid call on null
+    }
+
+    public function renameFile(string $path, string $newName)
+    {
+        // Get the uploaded file from the database
+        $uploaded_file = UploadedFile::getFromPath($path);
+        $native        = new \SplFileInfo($path);
+
+        // Get the seperator
+        $seperator = $this->getOSSeperator();
+
+        if (File::isDirectory($path)) {
+            $result = rename($path, $native->getPath().$seperator.$newName);
+            if (!$result)
+                throw new \Exception("Could not rename the folder");
+
+        } else {
+            File::move($path, $native->getPath().$seperator.$newName);
+        }
+
+        if ($uploaded_file) {
+            $uploaded_file->path = $native->getPath().$seperator.$newName;
+            $uploaded_file->save();
+        } else {
+            // If it is not in the database then add it
+            $uploaded_file             = new UploadedFile();
+            $uploaded_file->user_id    = Auth::user() ? Auth::user()->id : null;
+            $uploaded_file->path       = $native->getPath().$seperator.$newName;
+            $uploaded_file->mime_type  = (new FileStruct(new \SplFileInfo($native->getPath().$seperator.$newName)))->getMimeType();
+            $uploaded_file->updated_at = Carbon::now();
+            $uploaded_file->created_at = Carbon::now();
+            $uploaded_file->save();
+        }
+    }
+
+    public function getOSSeperator(): string
+    {
+        return PHP_OS == "Windows" || PHP_OS == "WINNT" ? "\\" : "/";
     }
 }

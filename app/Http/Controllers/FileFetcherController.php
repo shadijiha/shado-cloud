@@ -2,22 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\APIRequest;
 use App\Http\Requests\DeleteFileRequest;
 use App\Http\Requests\GetFileRequest;
+use App\Http\Requests\RenameFileRequest;
 use App\Http\Requests\StoreFileRequest;
 use App\Http\Services\FileServiceProvider;
+use App\Http\structs\DirectoryStruct;
 use App\Http\structs\FileStruct;
-use App\Http\structs\VideoStream;
-use App\Models\APIToken;
 use App\Models\UploadedFile;
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
 
@@ -35,27 +34,29 @@ class FileFetcherController extends Controller
      *
      * @return Application|ResponseFactory|Response
      */
-    public function indexDirectoriesAPI(Request $request)
+    public function indexDirectoriesAPI(APIRequest $request)
     {
         // Verify token
-        $result = $this->verifyAPIToken($request);
-        if ($result != null)
-            return response($result);
+        try {
+            $request->verifyToken();
+        } catch (\Exception $e) {
+            return \response(["code" => 400, "message" => $e->getMessage()]);
+        }
 
-        return response(["data" => new \App\Http\structs\DirectoryStruct($this->CLOUD_PATH)]);
+        return response(["data" => new DirectoryStruct($this->CLOUD_PATH)]);
     }
 
     /**
      * @param string|null $path
      *
-     * @return FileStruct|\App\Http\structs\DirectoryStruct|void
+     * @return FileStruct|DirectoryStruct|void
      */
     public function indexDirectories(string $path = null)
     {
         $path = $path == null ? $this->CLOUD_PATH : $path;
 
         try {
-            return new \App\Http\structs\DirectoryStruct($path);
+            return new DirectoryStruct($path);
         } catch (DirectoryNotFoundException $e) {
             // Either the path given is a file or it doesn't exist
             if (File::exists($path)) {
@@ -71,14 +72,16 @@ class FileFetcherController extends Controller
      *
      * @return Application|ResponseFactory|Response
      */
-    public function getTreeAPI(Request $request)
+    public function getTreeAPI(APIRequest $request)
     {
         // Verify token
-        $result = $this->verifyAPIToken($request);
-        if ($result != null)
-            return response($result);
+        try {
+            $request->verifyToken();
+        } catch (\Exception $e) {
+            return \response(["code" => 400, "message" => $e->getMessage()]);
+        }
 
-        return response(["data" => new \App\Http\structs\DirectoryStruct($request->get("path"))]);
+        return response(["tree" => new DirectoryStruct($request->get("path"))]);
     }
 
     /**
@@ -184,97 +187,45 @@ class FileFetcherController extends Controller
         ]);
     }
 
-    public
-    function infoFileAPI(Request $request)
+    public function infoFileAPI(GetFileRequest $request, FileServiceProvider $provider)
     {
-        $path  = $request->get('path');
-        $token = $request->get('key');
+        $path = $request->path;
 
         // Verify token
-        $result = $this->verifyAPIToken($request);
-        if ($result != null)
-            return response($result);
+        try {
+            $request->verifyToken();
 
-        // See if file exists
-        if (!File::exists($path)) {
-            return [
-                "code"    => 401,
-                "message" => "File or Dir does not exists"
-            ];
+            // Get database info
+            $struct = $provider->getFile($path);
+        } catch (\Exception $e) {
+            return \response([
+                "code"    => 400,
+                "message" => $e->getMessage()
+            ]);
         }
-
-        // Get database info
-        $struct    = new FileStruct(new \SplFileInfo($path));
-        $struct_db = $struct->getUploadedFile();
 
         return [
             "code"  => 200,
-            "props" => [
-                "Filename"      => $struct->getNative()->getFilename(),
-                "Extension"     => $struct->getNative()->getExtension(),
-                "Full path"     => $struct->getNative()->getRealPath(),
-                "MIME type"     => $struct->getMimeType(),
-                "size"          => $struct->getNative()->getSize(),
-                "File id"       => $struct_db == null ? "null" : $struct_db->id,
-                "Owned by"      => $struct_db == null ? "null" : User::find($struct_db->user_id)->name,
-                "Last modified" => $struct_db == null ? "null" : $struct_db->updated_at,
-                "Created at"    => $struct_db == null ? "null" : $struct_db->created_at
-            ]
-        ];
+            "props" => $struct->getProps()];
     }
 
-    public
-    function renameFileAPI(Request $request)
+    public function renameFileAPI(RenameFileRequest $request, FileServiceProvider $provider)
     {
-        $path    = $request->get("path");
-        $newname = $request->get("newname");
+        $path    = $request->path;
+        $newname = $request->newname;
 
-        if ($path == null || $newname == null)
+        try {
+            $request->verifyToken(true);
+        } catch (\Exception $e) {
             return \response([
-                "code"    => 401,
-                "message" => "Path or newname are null"
+                "code"    => 400,
+                "message" => $e->getMessage()
             ]);
-
-        // Get the uploaded file from the database
-        $uploaded_file = UploadedFile::getFromPath(UploadedFile::cleanPath($path));
-        $native        = new \SplFileInfo($path);
-
-        // Get the seperator
-        $seperator = PHP_OS == "Windows" || PHP_OS == "WINNT" ? "\\" : "/";
+        }
 
         // Rename the file
         try {
-            if (File::isDirectory($path)) {
-                $result = rename($path, $native->getPath().$seperator.$newname);
-                if (!$result)
-                    return \response([
-                        "code"    => 500,
-                        "message" => "Could not rename the folder"
-                    ]);
-                else {
-                    return \response([
-                        "code"    => 200,
-                        "message" => "Rename file to ".$native->getPath().$seperator.$newname]);
-                }
-
-            } else {
-                File::move($path, $native->getPath().$seperator.$newname);
-            }
-
-            if ($uploaded_file) {
-                $uploaded_file->path = $native->getPath().$seperator.$newname;
-                $uploaded_file->save();
-            } else {
-                // If it is not in the database then add it
-                $uploaded_file             = new UploadedFile();
-                $uploaded_file->user_id    = Auth::user() ? Auth::user()->id : null;
-                $uploaded_file->path       = $native->getPath().$seperator.$newname;
-                $uploaded_file->mime_type  = (new FileStruct(new \SplFileInfo($native->getPath().$seperator.$newname)))->getMimeType();
-                $uploaded_file->updated_at = Carbon::now();
-                $uploaded_file->created_at = Carbon::now();
-                $uploaded_file->save();
-            }
-
+            $provider->renameFile($path, $newname);
         } catch (\Exception $e) {
             return \response([
                 "code"    => 500,
@@ -289,11 +240,11 @@ class FileFetcherController extends Controller
     }
 
     /**
-     * @param Request        $request
-     * @param HomeController $controller
+     * @param Request $request
+     *
+     * @return \Illuminate\Http\RedirectResponse
      */
-    public
-    function uploadFile(Request $request, HomeController $controller)
+    public function uploadFile(Request $request)
     {
         $destinationPath = $request->get('path');
         $request->data->move($destinationPath, $request->data->getClientOriginalName());
@@ -315,8 +266,7 @@ class FileFetcherController extends Controller
      *
      * @return Application|ResponseFactory|Response
      */
-    public
-    function createDirectoryAPI(Request $request)
+    public function createDirectoryAPI(Request $request)
     {
         $path = $request->get("path");
         try {
@@ -345,72 +295,9 @@ class FileFetcherController extends Controller
     }
 
     /**
-     * Verifies if the API token is valid, not expired and under the max requests
-     *
-     * @param Request $request
-     *
-     * @param bool    $checkForReadonly
-     *
-     * @return array|Application|ResponseFactory|Response
-     */
-    private
-    function verifyAPIToken(Request $request, bool $checkForReadonly = false)
-    {
-        /**
-         * IF the user is logged in, no need for the API key
-         */
-        if (Auth::check()) {
-            return null;
-        }
-
-        $token   = $request->get("key");
-        $status  = 200;
-        $message = "";
-
-        try {
-            $token = APIToken::where('key', $token)->firstOrFail();
-
-            // See if the API token has expired
-            if (Carbon::parse($token->expires_at)->lessThan(Carbon::now())) {
-                $message = "Api token expired";
-                $status  = 403;
-            } else if ($token->requests >= $token->max_requests) {
-                // See if the maximum request has been exceeded
-                $message = "Api maximum requests exhausted";
-                $status  = 401;
-            } else {
-                // Update the requests
-                $token->requests += 1;
-                $token->save();
-            }
-
-        } catch (\Exception $e) {
-            $message = "Invalid API token";
-            $status  = 401;
-        }
-
-        // Verify that token is not readonly
-        if ($checkForReadonly) {
-            if (DB::table('APITokens')->where('key', $token)->first()->readonly) {
-                $status  = 401;
-                $message = "Cannot modify a file with a readonly API token";
-            }
-        }
-
-        if ($status != 200)
-            return [
-                "code"    => $status,
-                "message" => $message
-            ];
-        else
-            return null;
-    }
-
-    /**
      * @return string
      */
-    public
-    static function getCloudPath(): string
+    public static function getCloudPath(): string
     {
         return str_replace("\\\\", "\\", (new FileFetcherController())->CLOUD_PATH);
     }

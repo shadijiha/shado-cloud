@@ -4,6 +4,7 @@ namespace App\Http\structs;
 
 use App\Http\Controllers\FileFetcherController;
 use App\Models\UploadedFile;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Symfony\Component\Mime\MimeTypes;
@@ -33,6 +34,23 @@ class FileStruct
         }
         $token     = $token == null ? "{YOUR_API_KEY}" : $token->key;
         $this->url = url("/")."/api?key=$token&path=$this->path";
+    }
+
+    public function getProps()
+    {
+        $struct_db = $this->getUploadedFile();
+
+        return [
+            "Filename"      => $this->getNative()->getFilename(),
+            "Extension"     => $this->getNative()->getExtension(),
+            "Full path"     => $this->getNative()->getRealPath(),
+            "MIME type"     => $this->getMimeType(),
+            "size"          => $this->getNative()->getSize(),
+            "File id"       => $struct_db == null ? "null" : $struct_db->id,
+            "Owned by"      => $struct_db == null ? "null" : User::find($struct_db->user_id)->name,
+            "Last modified" => $struct_db == null ? "null" : $struct_db->updated_at,
+            "Created at"    => $struct_db == null ? "null" : $struct_db->created_at
+        ];
     }
 
     /**
