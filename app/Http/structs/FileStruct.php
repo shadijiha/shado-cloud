@@ -2,7 +2,7 @@
 
 namespace App\Http\structs;
 
-use App\Http\Controllers\FileFetcherController;
+use App\Http\Services\FileServiceProvider;
 use App\Models\UploadedFile;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -58,7 +58,8 @@ class FileStruct
      */
     public function getRelativePath(): string
     {
-        return str_replace("\\", "/", str_replace(FileFetcherController::getCloudPath()."\\", "", $this->path));
+        $provider = new FileServiceProvider();
+        return str_replace("\\", "/", str_replace($provider->getCloudPath()."\\", "", $this->path));
     }
 
     /**

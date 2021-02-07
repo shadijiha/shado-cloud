@@ -20,7 +20,8 @@
             settings: "{{ route("settings")  }}",
             search: "{{ route("search") }}",
             createDir: "{{route("createDir")}}",
-            uploadFile: "{{route("upload_file")}}"
+            uploadFile: "{{route("upload_file")}}",
+            api: "{{route("index")}}/api"
         };
 
         const CURRENT_PATH = '{{str_replace("\\", "\\\\", $path ?? "")}}';

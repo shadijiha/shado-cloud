@@ -4,6 +4,7 @@
     <script>
         let selected = null;
 
+        /************ Folder/File context menu **********/
         function showFolderSettings(e) {
             const menu = document.getElementById("folder_context_menu");
             menu.style.display = "block";
@@ -17,7 +18,33 @@
             document.getElementById("folder_context_menu").style.display = "none";
         }
 
-        // **************************************
+        // ************  Download *****************
+        function downloadFile() {
+            window.open(Routes.api + "/download?path=" + selected);
+        }
+
+        // ************  Unzip *****************
+        async function unzipFile() {
+            const response = await fetch(Routes.index + "/unzip", {
+                method: "POST",
+                headers: {
+                    'Content-Type': "application/json",
+                    "X-CSRF-Token": "{{ csrf_token() }}"
+                },
+                body: JSON.stringify({
+                    path: selected
+                })
+            });
+            const json = await response.json();
+
+            if (json.code != 200) {
+                new Window("Error!", null, function (self) {
+                    return json.message;
+                });
+            }
+        }
+
+        // ************  Delete *****************
         function deleteFileConfirmation() {
             new Window("Delete a file", [
                 {
@@ -52,24 +79,6 @@
                 // Refresh the page
                 window.location.reload();
             }
-        }
-
-        async function showProperties() {
-            const reponse = await fetch('{{url("/api/info?")}}' + "path=" + selected);
-            const json = await reponse.json();
-
-            new Window("Properties", null, function () {
-
-                let str = "<table>";
-                for (const prop in json.props) {
-                    str += `<tr>
-                               <td><b>${prop}</b></td>
-                               <td>${json.props[prop]}</td>
-                        </tr>`;
-                }
-
-                return str + "</table>";
-            });
         }
 
         // *********** Rename *******************
@@ -131,6 +140,25 @@
             }
         }
 
+        /************** Properties **************/
+        async function showProperties() {
+            const reponse = await fetch('{{url("/api/info?")}}' + "path=" + selected);
+            const json = await reponse.json();
+
+            new Window("Properties", null, function () {
+
+                let str = "<table>";
+                for (const prop in json.props) {
+                    str += `<tr>
+                               <td><b>${prop}</b></td>
+                               <td>${json.props[prop]}</td>
+                        </tr>`;
+                }
+
+                return str + "</table>";
+            });
+        }
+
         // **************************************
         window.addEventListener("click", hideFolderSettings);
     </script>
@@ -178,6 +206,9 @@
 
     <div id="folder_context_menu">
         <ul>
+            <li onclick="downloadFile();">Download</li>
+            <li onclick="unzipFile();">Unzip</li>
+            <hr/>
             <li onclick="showRenameWindow();">Rename</li>
             <li onclick="deleteFileConfirmation();">Delete</li>
             <li onclick="showProperties();">Properties</li>

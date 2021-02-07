@@ -17,7 +17,8 @@
         "laravel/ui": "^3.2",
         "ext-json": "*",
         "intervention/image": "dev-master",
-        "ext-fileinfo": "*"
+        "ext-fileinfo": "*",
+        "ext-zip": "*"
     },
     "require-dev": {
         "facade/ignition": "^2.5",

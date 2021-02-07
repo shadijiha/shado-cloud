@@ -26,12 +26,12 @@ class HomeController extends Controller
     /**
      * Show the application dashboard.
      *
-     * @param Request               $request
-     * @param FileFetcherController $controller
+     * @param Request       $request
+     * @param APIController $controller
      *
      * @return Renderable|void
      */
-    public function index(Request $request, FileFetcherController $controller)
+    public function index(Request $request, APIController $controller)
     {
         // See if it is a file or not (to preview)
         $path = $request->get("path");

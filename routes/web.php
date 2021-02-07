@@ -1,7 +1,7 @@
 <?php
 
+use App\Http\Controllers\APIController;
 use App\Http\Controllers\APITokenController;
-use App\Http\Controllers\FileFetcherController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\SaveController;
 use App\Http\Controllers\UpdateController;
@@ -29,24 +29,26 @@ Route::middleware('auth')->group(function () {
 
     Route::get("/search", "App\Http\Controllers\SearchController@search")->name("search");
     Route::get("/update", [UpdateController::class, "update"])->name("update");
-    Route::post("/uploadfile", [FileFetcherController::class, 'uploadFile'])->name("upload_file");
+    Route::post("/uploadfile", [APIController::class, 'uploadFile'])->name("upload_file");
     Route::post("/save", [SaveController::class, "save"])->name("save");
     Route::post("/generate", [APITokenController::class, "generate"])->name("generate");
     Route::post("/deleteKey", [APITokenController::class, "delete"])->name("deleteKey");
 
-    Route::post("/createDir", [FileFetcherController::class, 'createDirectoryAPI'])->name("createDir");
+    Route::post("/createDir", [APIController::class, 'createDirectoryAPI'])->name("createDir");
+    Route::post("/unzip", [SaveController::class, 'unzipFile']);
 });
 
 Route::prefix('api')->group(function () {
 
-    Route::get("/dir", [FileFetcherController::class, 'indexDirectoriesAPI']);
-    Route::get("/tree", [FileFetcherController::class, 'getTreeAPI']);
+    Route::get("/dir", [APIController::class, 'indexDirectoriesAPI']);
+    Route::get("/tree", [APIController::class, 'getTreeAPI']);
 
-    Route::get("", [FileFetcherController::class, 'getFileAPI']);
-    Route::post("", [FileFetcherController::class, 'saveFileAPI'])->withoutMiddleware(VerifyCsrfToken ::class);
-    Route::get("/info", [FileFetcherController::class, 'infoFileAPI']);
-    Route::get("/delete", [FileFetcherController::class, 'deleteFileAPI']);
-    Route::get("/rename", [FileFetcherController::class, 'renameFileAPI']);
+    Route::get("", [APIController::class, 'getFileAPI']);
+    Route::post("", [APIController::class, 'saveFileAPI'])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::get("/info", [APIController::class, 'infoFileAPI']);
+    Route::get("/delete", [APIController::class, 'deleteFileAPI']);
+    Route::get("/rename", [APIController::class, 'renameFileAPI']);
+    Route::get("/download", [APIController::class, 'downloadFileAPI']);
 });
 
 

@@ -2,7 +2,7 @@
 
 namespace App\Http\structs;
 
-use App\Http\Controllers\FileFetcherController;
+use App\Http\Services\FileServiceProvider;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -59,7 +59,8 @@ class DirectoryStruct
      */
     public function getRelativePath(): string
     {
-        $temp = str_replace("\\", "/", str_replace(FileFetcherController::getCloudPath()."\\", "", $this->path));
+        $provider = new FileServiceProvider();
+        $temp     = str_replace("\\", "/", str_replace($provider->getCloudPath()."\\", "", $this->path));
         return $temp;
     }
 }

@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
 
-class FileFetcherController extends Controller
+class APIController extends Controller
 {
     /**
      * @param APIRequest          $request
@@ -261,6 +261,22 @@ class FileFetcherController extends Controller
     }
 
     /**
+     * @param GetFileRequest $request
+     *
+     * @return Application|ResponseFactory|Response|\Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    public function downloadFileAPI(GetFileRequest $request)
+    {
+        try {
+            $request->verifyToken();
+        } catch (\Exception $e) {
+            return response(["code" => 400, "message" => $e->getMessage()]);
+        }
+
+        return \response()->download($request->path);
+    }
+
+    /**
      * @param Request $request
      *
      * @return Application|ResponseFactory|Response
@@ -291,13 +307,5 @@ class FileFetcherController extends Controller
                 "message" => $e->getMessage()
             ]);
         }
-    }
-
-    /**
-     * @return string
-     */
-    public static function getCloudPath(): string
-    {
-        return str_replace("\\\\", "\\", (new FileServiceProvider())->getCloudPath());
     }
 }

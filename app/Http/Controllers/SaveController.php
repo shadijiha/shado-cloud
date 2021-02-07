@@ -16,7 +16,9 @@ class SaveController extends Controller
 
 
     /**
-     * @param Request $request
+     * @param StoreFileRequest    $request
+     *
+     * @param FileServiceProvider $provider
      *
      * @return Application|ResponseFactory|Response
      */
@@ -35,6 +37,25 @@ class SaveController extends Controller
         return response([
             "status"  => $status,
             "message" => $message,
+        ]);
+    }
+
+    public function unzipFile(Request $request, FileServiceProvider $provider)
+    {
+        $path = $request->get("path");
+
+        try {
+            $provider->unzipFile($path);
+        } catch (\Exception $e) {
+            return \response([
+                "code"    => 400,
+                "message" => $e->getMessage()
+            ]);
+        }
+
+        return \response([
+            "code"    => 200,
+            "message" => ""
         ]);
     }
 }

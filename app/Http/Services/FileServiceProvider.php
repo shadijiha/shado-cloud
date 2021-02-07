@@ -117,6 +117,20 @@ class FileServiceProvider
         }
     }
 
+    /**
+     * @param string $path
+     */
+    public function unzipFile(string $path)
+    {
+        $struct  = new \SplFileInfo($path);
+        $newPath = $struct->getPath();
+
+        $zip = new \ZipArchive();
+        $zip->open($path);
+        $zip->extractTo($newPath);
+        $zip->close();
+    }
+
     public function getOSSeperator(): string
     {
         return PHP_OS == "Windows" || PHP_OS == "WINNT" ? "\\" : "/";
