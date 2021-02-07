@@ -66,6 +66,23 @@
             mouse.y = e.y;
         })
     </script>
+    <script>
+        const RELOAD_PAGE = () => window.location.reload();
+
+        const checkForErrors = (json, onSuccessCallback = null, onErrorCallback = null, options = {successCode: 200}) => {
+            if (json.code != options.successCode) {
+                onErrorCallback = onErrorCallback || function () {
+                    new Window("Error!", null, () => json.message);
+                }
+
+                onErrorCallback();
+            } else {
+                if (onSuccessCallback != null) {
+                    onSuccessCallback();
+                }
+            }
+        }
+    </script>
 @yield('scripts')
 
 <!-- Fonts -->

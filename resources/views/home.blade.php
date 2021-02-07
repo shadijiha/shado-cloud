@@ -37,11 +37,7 @@
             });
             const json = await response.json();
 
-            if (json.code != 200) {
-                new Window("Error!", null, function (self) {
-                    return json.message;
-                });
-            }
+            checkForErrors(json, RELOAD_PAGE);
         }
 
         // ************  Delete *****************
@@ -71,14 +67,7 @@
             const json = await response.json();
 
             // Show result
-            if (json.code != 200) {
-                new Window("Error", null, function () {
-                    return json.message;
-                });
-            } else {
-                // Refresh the page
-                window.location.reload();
-            }
+            checkForErrors(json, RELOAD_PAGE);
         }
 
         // *********** Rename *******************
@@ -131,13 +120,7 @@
             const response = await fetch(`${Routes.index}/api/rename?path=${selected}&newname=${newName}${suffix}`);
             const json = await response.json();
 
-            if (json.code != 200) {
-                new Window("Error", null, function (self) {
-                    return json.message;
-                });
-            } else {
-                window.location.reload();
-            }
+            checkForErrors(json, RELOAD_PAGE);
         }
 
         /************** Properties **************/
