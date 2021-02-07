@@ -117,6 +117,12 @@ class FileServiceProvider
         }
     }
 
+    public function copyFile(string $path, string $destination)
+    {
+        $fileName = basename($path);
+        file_put_contents($destination.$this->getOSSeperator().$fileName, file_get_contents($path));
+    }
+
     /**
      * @param string $path
      */

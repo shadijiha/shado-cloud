@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\APIRequest;
 use App\Http\Requests\DeleteFileRequest;
 use App\Http\Requests\GetFileRequest;
+use App\Http\Requests\MoveToDriveRequest;
 use App\Http\Requests\RenameFileRequest;
 use App\Http\Requests\StoreFileRequest;
 use App\Http\Services\FileServiceProvider;
@@ -233,6 +234,25 @@ class APIController extends Controller
         return \response([
             "code"    => 200,
             "message" => "Filename changed"
+        ]);
+    }
+
+    public function copyFileToDriveAPI(MoveToDriveRequest $request, FileServiceProvider $provider)
+    {
+        try {
+            $request->verifyToken(true);
+        } catch (\Exception $e) {
+            return \response([
+                "code"    => 400,
+                "message" => $e->getMessage()
+            ]);
+        }
+
+        $provider->copyFile($request->url, $request->path);
+
+        return \response([
+            "code"    => 200,
+            "message" => ""
         ]);
     }
 

@@ -52,6 +52,19 @@ class NewFileManager {
             }
         }
     }
+
+    static async copyFileFromURL(url) {
+        const response = await fetch(`${Routes.api}/copytodrive?path=${CURRENT_PATH}&url=${url}`);
+        const json = await response.json();
+
+        if (json.code != 200) {
+            new Window("Error!", null, () => {
+                return json.message;
+            });
+            return false;
+        }
+        return true;
+    }
 }
 
 class NewMenu extends React.Component {
@@ -99,6 +112,30 @@ class NewMenu extends React.Component {
         });
     }
 
+    copyFileWindow() {
+        new Window("Copy file from URL", [
+            Window.CANCEL_BUTTON,
+            {
+                value: "OK",
+                onclick: function (self) {
+                    const result = NewFileManager.copyFileFromURL(document.getElementById("input_" + self.id).value);
+
+                    if (result) {
+                        self.close();
+                        window.location.reload();
+                    }
+                }
+            }
+        ], function (self) {
+            return `
+                URL to copy from:
+                <br />
+                <br />
+                <input id="input_${self.id}" placeholder="URL..." type="text" />
+            `;
+        });
+    }
+
     hideNewMenu() {
         document.getElementById("context_menu").style.display = "none";
     }
@@ -109,6 +146,9 @@ class NewMenu extends React.Component {
                 <ul>
                     <li onClick={this.uploadFileWindow}>
                         <i className="fas fa-file-upload"></i> Upload file
+                    </li>
+                    <li onClick={this.copyFileWindow}>
+                        <i className="fas fa-copy"></i> Copy file from URL
                     </li>
                     <hr/>
                     <li onClick={this.createFolderWindow}>

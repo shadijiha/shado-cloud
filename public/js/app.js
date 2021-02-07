@@ -2406,6 +2406,53 @@ var NewFileManager = /*#__PURE__*/function () {
 
       return createFile;
     }()
+  }, {
+    key: "copyFileFromURL",
+    value: function () {
+      var _copyFileFromURL = _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().mark(function _callee3(url) {
+        var response, json;
+        return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_1___default().wrap(function _callee3$(_context3) {
+          while (1) {
+            switch (_context3.prev = _context3.next) {
+              case 0:
+                _context3.next = 2;
+                return fetch("".concat(Routes.api, "/copytodrive?path=").concat(CURRENT_PATH, "&url=").concat(url));
+
+              case 2:
+                response = _context3.sent;
+                _context3.next = 5;
+                return response.json();
+
+              case 5:
+                json = _context3.sent;
+
+                if (!(json.code != 200)) {
+                  _context3.next = 9;
+                  break;
+                }
+
+                new Window("Error!", null, function () {
+                  return json.message;
+                });
+                return _context3.abrupt("return", false);
+
+              case 9:
+                return _context3.abrupt("return", true);
+
+              case 10:
+              case "end":
+                return _context3.stop();
+            }
+          }
+        }, _callee3);
+      }));
+
+      function copyFileFromURL(_x2) {
+        return _copyFileFromURL.apply(this, arguments);
+      }
+
+      return copyFileFromURL;
+    }()
   }]);
 
   return NewFileManager;
@@ -2450,6 +2497,23 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
       });
     }
   }, {
+    key: "copyFileWindow",
+    value: function copyFileWindow() {
+      new Window("Copy file from URL", [Window.CANCEL_BUTTON, {
+        value: "OK",
+        onclick: function onclick(self) {
+          var result = NewFileManager.copyFileFromURL(document.getElementById("input_" + self.id).value);
+
+          if (result) {
+            self.close();
+            window.location.reload();
+          }
+        }
+      }], function (self) {
+        return "\n                URL to copy from:\n                <br />\n                <br />\n                <input id=\"input_".concat(self.id, "\" placeholder=\"URL...\" type=\"text\" />\n            ");
+      });
+    }
+  }, {
     key: "hideNewMenu",
     value: function hideNewMenu() {
       document.getElementById("context_menu").style.display = "none";
@@ -2466,6 +2530,11 @@ var NewMenu = /*#__PURE__*/function (_React$Component) {
             children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("i", {
               className: "fas fa-file-upload"
             }), " Upload file"]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("li", {
+            onClick: this.copyFileWindow,
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("i", {
+              className: "fas fa-copy"
+            }), " Copy file from URL"]
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("hr", {}), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("li", {
             onClick: this.createFolderWindow,
             children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("i", {

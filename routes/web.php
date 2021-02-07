@@ -49,6 +49,7 @@ Route::prefix('api')->group(function () {
     Route::get("/delete", [APIController::class, 'deleteFileAPI']);
     Route::get("/rename", [APIController::class, 'renameFileAPI']);
     Route::get("/download", [APIController::class, 'downloadFileAPI']);
+    Route::get("/copytodrive", [APIController::class, 'copyFileToDriveAPI']);
 });
 
 
