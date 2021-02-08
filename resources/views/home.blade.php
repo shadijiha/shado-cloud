@@ -40,6 +40,14 @@
             checkForErrors(json, RELOAD_PAGE);
         }
 
+        // ************ Share link *************
+        function getShareLinkWindow() {
+            const key = '{{ \App\Http\Controllers\APITokenController::getValideKey() }}'
+            new Window("Share with the world", null, (self) => {
+                return `<input type="text" value="${Routes.api}?path=${selected}&key=${key}">`;
+            });
+        }
+
         // ************  Delete *****************
         function deleteFileConfirmation() {
             new Window("Delete a file", [
@@ -203,6 +211,8 @@
         <ul>
             <li onclick="downloadFile();">Download</li>
             <li onclick="unzipFile();">Unzip</li>
+            <hr/>
+            <li onclick="getShareLinkWindow()">Get link</li>
             <hr/>
             <li onclick="showRenameWindow();">Rename</li>
             <li onclick="deleteFileConfirmation();">Delete</li>

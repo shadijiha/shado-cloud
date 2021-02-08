@@ -46,4 +46,12 @@ class APITokenController extends Controller
         APIToken::find($id)->delete();
         return redirect()->back()->with(['tokens' => Auth::user()->apiTokens]);
     }
+
+    public static function getValideKey()
+    {
+        if (Auth::user()) {
+            return Auth::user()->validAPITokens()->first()->key;
+        }
+        return null;
+    }
 }
