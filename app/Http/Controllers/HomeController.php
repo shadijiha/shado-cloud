@@ -41,8 +41,8 @@ class HomeController extends Controller
             return view('home')->with(
                 [
                     "files" => $data,
-                    "path"  => $path ?? env("CLOUD_FILES_PATH")
-                ]);
+                    "path"  => $path ?? env("CLOUD_FILES_PATH"),
+                    "key"   => $request->get("key")]);
 
         } else {
             if (File::exists($path)) {

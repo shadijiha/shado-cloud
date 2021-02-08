@@ -91,7 +91,7 @@ class APIController extends Controller
      *
      * @return false|string
      */
-    public function getFileAPI(GetFileRequest $request, FileServiceProvider $provider)
+    public function getFileAPI(GetFileRequest $request, FileServiceProvider $provider, HomeController $homeController)
     {
         // Verify token
         try {
@@ -108,7 +108,11 @@ class APIController extends Controller
 
         // API is ok, get the file content
         try {
-            // See if the file is a image or not
+            // If file is a directory
+            if (File::isDirectory($path)) {
+                return $homeController->index($request, $this);
+            }
+
             $file_struct = $provider->getFile($path);
 
             // Get the originial Mime Type

@@ -145,6 +145,18 @@
         // **************************************
         window.addEventListener("click", hideFolderSettings);
     </script>
+
+    <!-- To Nagivate -->
+    <script>
+        function gotoPath(path) {
+            const api_key = '{{$key}}';
+            @auth
+                window.location.href = `${Routes.index}?path=${path}`;
+            @else
+                window.location.href = `${Routes.api}?path=${path}&key=${api_key}`;
+            @endauth
+        }
+    </script>
 @endsection
 
 @section('content')
@@ -152,9 +164,9 @@
     @if($files instanceof \App\Http\structs\DirectoryStruct)
         @foreach($files->children as $child)
             <div class="folder"
-                 onclick="window.location.href = '{{url("/") . "?path=" . str_replace("\\", "\\\\", $child->path)}}';"
+                 onclick="gotoPath('{{ str_replace("\\", "\\\\", $child->path) }}')"
                  oncontextmenu="event.preventDefault(); showFolderSettings(this);"
-                 data-path="{{$child->path}}">
+                 data-path="{{ str_replace("\\", "\\\\", $child->path) }}">
                 <img src="images/folder.png" alt="{{$child->getRelativePath()}}" title="{{$child->getRelativePath()}}"/>
                 <br/>
                 <span>{{$child->name}}</span>
@@ -164,7 +176,7 @@
         {{-- Display files --}}
         @foreach($files->files as $file)
             <div class="file"
-                 onclick="window.location.href = '{{url("/") . "?path=" . str_replace("\\", "\\\\", $file->path)}}';"
+                 onclick="gotoPath('{{ str_replace("\\", "\\\\", $file->path) }}')"
                  oncontextmenu="event.preventDefault(); showFolderSettings(this);"
                  data-path="{{$file->path}}">
 

@@ -172,9 +172,11 @@
 
 
     {{-- @ReactComponent Side bar begin --}}
-    <div id="sidebar" class="sidebar">
-        {{-- React component --}}
-    </div>
+    @auth
+        <div id="sidebar" class="sidebar">
+            {{-- React component --}}
+        </div>
+    @endauth
     {{-- Side bar end --}}
 
     <main class="py-4" id="main_content">

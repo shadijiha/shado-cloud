@@ -4,19 +4,45 @@
     <script>
         const file = {!! json_encode($file) !!};
     </script>
+    <script>
+        String.prototype.replaceSyntax = function (arr, color) {
+            const regex = regexFromArray(arr);
+            return this.replaceAll(regex, `<span style="color: ${color};">$&</span>`);
+        }
+
+        function syntaxHighligh() {
+            let text = document.querySelector("#file_content pre").innerText;
+
+            let keywords = ["import", "for", "var", "let", "const", "while", "function", "def", "with", "if", "else", "elif",
+                "in", "of", "return", "class"];
+            text = text.replaceSyntax(keywords, "purple");
+
+            document.querySelector("#file_content pre").innerHTML = text;
+        }
+
+        function regexFromArray(arr) {
+            let str = "";
+            for (const temp of arr)
+                str += temp + "|";
+
+            return new RegExp("\\b(" + str + ")\\b", "gi");
+        }
+
+
+        // setInterval(function () {
+        //     syntaxHighligh();
+        // }, 1000);
+    </script>
 @endsection
 
 @section('content')
     <div id="file_preview_dashboard"></div>
     <div id="file_content" contenteditable="true">
-        @foreach(file($file->getNative()->getPathname()) as $line)
-            {{$line}}
-            <br/>
-        @endforeach
+        <pre>{{ file_get_contents($file->getNative()->getPathname())  }}</pre>
     </div>
     <br/>
     <div id="debugDiv"></div>
-    <script defer>
+    <script>
         const SAVE_INTERVAL = 5;    // Seconds
         let lastSavedContent = "";
         let autoSaver = setInterval(function () {
