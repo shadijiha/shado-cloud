@@ -10,11 +10,10 @@
     <title>{{ config('app.name', 'Laravel') }}</title>
 
     <!-- Scripts -->
-
-    <!-- Font Awesome JS -->
     <script src="{{ asset('js/app.js') }}" defer></script>
+@yield("scripts")
 
-    <!-- Fonts -->
+<!-- Fonts -->
     <link rel="dns-prefetch" href="//fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet">
 
@@ -27,7 +26,7 @@
     <link href="{{ asset('css/app.css') }}" rel="stylesheet">
 
 </head>
-<body class="login_body">
+<body class="@yield('body_class')">
 <div id="app">
 
     <main class="py-4">

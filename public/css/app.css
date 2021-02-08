@@ -1,4 +1,6 @@
 @import url(https://fonts.googleapis.com/css?family=Nunito);
+@import url(https://fonts.googleapis.com/css2?family=Poppins&display=swap);
+@import url(https://fonts.googleapis.com/css2?family=Courgette&family=Poppins&display=swap);
 @charset "UTF-8";
 /*!
  * Bootstrap v4.5.3 (https://getbootstrap.com/)
@@ -10103,55 +10105,132 @@ label #sidebar_btn:hover {
 *
  */
 .login_body {
-  background: url("../images/background.jpg") no-repeat center center fixed;
+  margin: 0;
+  padding: 0;
+  background: url("../images/backgrounds/5D4_5485seeley.jpg") no-repeat center center fixed;
   background-size: cover;
+  font-family: Poppins;
+  transition: all 0.5s;
 }
 
-.login_panel {
+.wrapper {
+  width: 400px;
+  min-height: 400px;
+  height: auto;
+  color: #000;
+  top: 50%;
+  left: 50%;
+  padding: 60px 30px;
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 25%;
-  min-width: 500px;
-  background-color: rgba(0, 0, 0, 0.4);
-  padding: 50px;
-  height: 100%;
-  text-align: left;
-  color: white;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  box-shadow: 8px 8px 50px #000;
 }
-.login_panel div {
-  padding: 10px;
-}
-.login_panel .header {
-  font-size: 40pt;
-  padding-bottom: 30px;
-}
-.login_panel input {
-  padding: 30px;
-  font-size: 20px;
-  border-radius: 0;
-  background: transparent;
-  color: white;
-  transition: 1s all;
-}
-.login_panel input:focus, .login_panel input:hover {
-  background: #fff;
-  color: black;
-}
-.login_panel button {
+.wrapper input {
   width: 100%;
-  border-radius: 0;
-  padding: 25px;
-  font-size: 20px;
+  margin-bottom: 20px;
+}
+.wrapper input[type=text], .wrapper input[type=password], .wrapper input[type=email] {
+  border: none;
+  border-bottom: solid #ddd 1px;
+  background: transparent;
+  outline: none;
+  height: 30px;
+  font-size: 16px;
+  opacity: 1;
+  color: #ccc;
+}
+.wrapper input[type=submit] {
+  border: none;
+  outline: none;
+  height: 40px;
+  background: #f6648b;
+  color: #fff;
+  font-size: 14px;
+  font-weight: bold;
+}
+.wrapper input[type=submit]:hover {
+  cursor: pointer;
+}
+.wrapper a {
+  font-size: 14px;
+  text-decoration: none;
+  color: #fff;
+  opacity: 0.8;
+}
+.wrapper a:hover {
+  color: #fff;
+  opacity: 1;
 }
 
-.transparent_card {
+.bottom-text {
+  color: #fff;
+}
+.bottom-text input {
+  width: 10%;
+  float: left;
+}
+.bottom-text a {
+  float: right;
+}
+
+.socials {
+  margin-top: 12%;
+  text-align: center;
+}
+.socials a {
+  width: 30px;
+  height: 30px;
+  display: inline-block;
+  border: solid #fff 1px;
+  border-radius: 50%;
+  margin: 0 5px;
+}
+.socials a:nth-child(1) {
+  background: #3b5998;
+}
+.socials a:nth-child(2) {
+  background: #55acee;
+}
+.socials a:nth-child(3) {
+  background: #bd081c;
+}
+.socials a:nth-child(4) {
+  background: #0077b5;
+}
+.socials a i {
+  padding: 8px 0;
+}
+
+h1 {
+  margin: 0;
+  padding: 0;
+  font-weight: bold;
+  font-size: 26px;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 8%;
+  font-family: Courgette;
+}
+
+#overlay-area {
+  position: absolute;
   background-color: rgba(0, 0, 0, 0.4);
-  color: white;
+  z-index: -5;
+  height: 100%;
+  width: 100%;
+  top: 0;
+  bottom: 0;
 }
 
-.white_link {
-  color: white !important;
+.is_invalid {
+  color: #dc3545 !important;
+  border-bottom-color: #dc3545 !important;
+}
+
+.error_message {
+  color: #dc3545;
+  margin-bottom: 10px;
 }
 
 /**

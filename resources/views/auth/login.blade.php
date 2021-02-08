@@ -1,64 +1,68 @@
 @extends('layouts.app')
 
+@section('body_class') login_body @endsection
+
+@section('scripts')
+    <!-- Background changing script -->
+    <script>
+        @php
+            // Get all backgrounds with php
+            $files = \Illuminate\Support\Facades\File::allFiles(public_path("/images/backgrounds/"));
+            $file_src = array();
+
+            foreach($files as $file)
+            {
+                array_push($file_src, url("/images/backgrounds/") . "/" . $file->getFilename());
+            }
+        @endphp
+
+        const change_bg_every = 12; // Seconds
+        setInterval(randomBg, change_bg_every * 1000);
+
+        function randomBg() {
+            const backgrounds = {!! json_encode($file_src) !!};
+
+            let bg_name = backgrounds[Math.floor(Math.random() * backgrounds.length)].replaceAll("\\", "\\\\");
+            document.body.style.backgroundImage = `url('${bg_name}')`;
+        }
+
+        window.addEventListener("load", randomBg);
+    </script>
+@endsection
+
 @section('content')
-    <div class="login_panel">
-        <div class="header">{{ __('Login') }}</div>
-        <div class="body">
-            <form method="POST" action="{{ route('login') }}">
-                @csrf
-                <div>
-                    <div>
-                        <input id="email" type="email" placeholder="Email"
-                               class="form-control @error('email') is-invalid @enderror" name="email"
-                               value="{{ old('email') }}" required autocomplete="email" autofocus>
+    <div class="wrapper">
+        <h1>Sign in</h1>
+        @if($errors->any())
+            {!! implode('', $errors->all('<div class="error_message">:message</div>')) !!}
+        @endif
+        <form method="POST" action="{{ route('login') }}">
+            @csrf
+            <input type="email" placeholder="Email" id="email" name="email"
+                   class="@error('email') is_invalid @enderror" value="{{ old('email') }}" required
+                   autocomplete="email"/>
 
-                        @error('email')
-                        <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                        @enderror
-                    </div>
-                </div>
-                <div>
-                    <div>
-                        <input id="password" type="password" placeholder="Password"
-                               class="form-control @error('password') is-invalid @enderror" name="password"
-                               required autocomplete="current-password">
+            <input type="password" placeholder="Password" class="@error('password') is_invalid @enderror"
+                   name="password"
+                   required autocomplete="current-password"/>
+            <input type="submit" value="LOGIN"/>
+        </form>
+        <div class="bottom-text">
+            <input type="checkbox" name="remember" id="remember" {{ old('remember') ? 'checked' : '' }} />
+            <label for="remember">Remember me</label>
 
-                        @error('password')
-                        <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                        @enderror
-                    </div>
-                </div>
-
-                <div>
-                    <div>
-                        <div>
-                            <input type="checkbox" name="remember"
-                                   id="remember" {{ old('remember') ? 'checked' : '' }}>
-
-                            <label for="remember">
-                                {{ __('Remember Me') }}
-                            </label>
-
-                            @if (Route::has('password.request'))
-                                <a class="btn btn-link white_link" href="{{ route('password.request') }}">
-                                    {{ __('Forgot Your Password?') }}
-                                </a>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <div>
-                        <button type="submit" class="btn btn-primary">
-                            {{ __('Login') }}
-                        </button>
-                    </div>
-                </div>
-            </form>
+            @if (Route::has('password.request'))
+                <a href="{{ route('password.request') }}">Forgot password?</a>
+            @endif
         </div>
+        <div class="socials">
+            <a href="#"><i class="fab fa-facebook-f"></i></a>
+            <a href="#"><i class="fab fa-twitter"></i></a>
+            <a href="#"><i class="fab fa-pinterest"></i></a>
+            <a href="#"><i class="fab fa-linkedin-in"></i></a>
+        </div>
+    </div>
+    <div id="overlay-area">
+
     </div>
 @endsection

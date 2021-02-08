@@ -49,9 +49,6 @@ class APITokenController extends Controller
 
     public static function getValideKey()
     {
-        if (Auth::user()) {
-            return Auth::user()->validAPITokens()->first()->key;
-        }
-        return null;
+        return Auth::user()->validAPITokens()->first()->key ?? null;
     }
 }
