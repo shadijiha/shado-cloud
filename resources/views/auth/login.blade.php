@@ -16,7 +16,7 @@
             }
         @endphp
 
-        const change_bg_every = 12; // Seconds
+        const change_bg_every = 20; // Seconds
         setInterval(randomBg, change_bg_every * 1000);
 
         function randomBg() {
@@ -54,6 +54,11 @@
             @if (Route::has('password.request'))
                 <a href="{{ route('password.request') }}">Forgot password?</a>
             @endif
+            <br/>
+            @if (Route::has('register'))
+                <a href="{{route('register')}}">Don't have an account?</a>
+            @endif
+
         </div>
         <div class="socials">
             <a href="#"><i class="fab fa-facebook-f"></i></a>
