@@ -32,7 +32,7 @@
 
 @section('content')
     <div class="wrapper">
-        <h1>Sign in</h1>
+        <h1>Register</h1>
         @if($errors->any())
             {!! implode('', $errors->all('<div class="error_message">:message</div>')) !!}
         @endif
