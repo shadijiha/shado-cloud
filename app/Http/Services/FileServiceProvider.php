@@ -14,7 +14,10 @@ class FileServiceProvider
 
     public function __construct()
     {
-        $this->cloud_path = env("CLOUD_FILES_PATH");
+        if (Auth::user())
+            $this->cloud_path = env("CLOUD_FILES_PATH").$this->getOSSeperator().Auth::user()->email ?? env("CLOUD_FILES_PATH");
+        else
+            $this->cloud_path = env("CLOUD_FILES_PATH");
     }
 
     /**
@@ -69,10 +72,9 @@ class FileServiceProvider
      */
     public function deleteFile(string $path)
     {
-        // Verify that that path you want to delete is inside the parent cloud directory
-        if (!Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($this->getCloudPath()))->getRealPath())) {
-            throw new \Exception("You do not have permission to modify this path");
-        }
+        // Verify that that path you want to modify is inside the parent cloud directory
+        $this->verifyIfPermissionToModify($path);
+
         if (File::isDirectory($path))
             File::deleteDirectory($path);
         else
@@ -86,6 +88,9 @@ class FileServiceProvider
 
     public function renameFile(string $path, string $newName)
     {
+        // Verify that that path you want to modify is inside the parent cloud directory
+        $this->verifyIfPermissionToModify($path);
+
         // Get the uploaded file from the database
         $uploaded_file = UploadedFile::getFromPath($path);
         $native        = new \SplFileInfo($path);
@@ -145,5 +150,42 @@ class FileServiceProvider
     public function getCloudPath(): string
     {
         return $this->cloud_path;
+    }
+
+    /**
+     * @param string $path
+     *
+     * @throws \Exception
+     */
+    public function verifyIfPermissionToModify(string $path)
+    {
+        if (!Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($this->getCloudPath()))->getRealPath())) {
+            abort(401, "You do not have permission to modify this path");
+            //throw new \Exception("You do not have permission to modify this path");
+        }
+    }
+
+    public function ownsDirectory(User $user, string $path): bool
+    {
+        $users_cloud_path = env("CLOUD_FILES_PATH").$this->getOSSeperator().$user->email ?? env("CLOUD_FILES_PATH");
+        return Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($users_cloud_path))->getRealPath());
+    }
+
+    public static function getOwnerOfDirectory(string $path): ?User
+    {
+        if ($path == null)
+            return null;
+
+        $seperator = new FileServiceProvider();
+        $tokens    = explode($seperator->getOSSeperator(), UploadedFile::cleanPath($path));
+
+        // Get the email from the tokens
+        foreach ($tokens as $token)
+            if (Str::contains($token, "@")) {
+                $email = $token;
+                break;
+            }
+
+        return User::where("email", $email)->first();
     }
 }

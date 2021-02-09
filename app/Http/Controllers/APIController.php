@@ -89,6 +89,8 @@ class APIController extends Controller
      *
      * @param FileServiceProvider $provider
      *
+     * @param HomeController      $homeController
+     *
      * @return false|string
      */
     public function getFileAPI(GetFileRequest $request, FileServiceProvider $provider, HomeController $homeController)
@@ -110,7 +112,7 @@ class APIController extends Controller
         try {
             // If file is a directory
             if (File::isDirectory($path)) {
-                return $homeController->index($request, $this);
+                return $homeController->index($request, $this, new FileServiceProvider());
             }
 
             $file_struct = $provider->getFile($path);

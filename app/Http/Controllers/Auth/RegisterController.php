@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Foundation\Auth\RegistersUsers;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
@@ -66,6 +67,9 @@ class RegisterController extends Controller
      */
     protected function create(array $data)
     {
+        // Create directory based on user email
+        File::makeDirectory(env('CLOUD_FILES_PATH')."/".$data['email'], 0777, true, true);
+
         return User::create([
             'name'     => $data['name'],
             'email'    => $data['email'],
