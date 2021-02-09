@@ -25,6 +25,7 @@ class NewFileManager {
                     return json.message;
                 });
             }
+            console.log(json);
         }
     }
 

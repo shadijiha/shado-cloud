@@ -159,7 +159,7 @@ class FileServiceProvider
      */
     public function verifyIfPermissionToModify(string $path)
     {
-        if (!Str::contains($path, $this->getCloudPath())) {
+        if (!Str::contains(UploadedFile::cleanPath($path), UploadedFile::cleanPath($this->getCloudPath()))) {
             abort(401, "You do not have permission to modify this path");
             //throw new \Exception("You do not have permission to modify this path");
         }
