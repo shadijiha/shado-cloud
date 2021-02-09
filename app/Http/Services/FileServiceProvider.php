@@ -159,7 +159,7 @@ class FileServiceProvider
      */
     public function verifyIfPermissionToModify(string $path)
     {
-        if (!Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($this->getCloudPath()))->getRealPath())) {
+        if (!Str::contains($path, $this->getCloudPath())) {
             abort(401, "You do not have permission to modify this path");
             //throw new \Exception("You do not have permission to modify this path");
         }
@@ -168,7 +168,8 @@ class FileServiceProvider
     public function ownsDirectory(User $user, string $path): bool
     {
         $users_cloud_path = env("CLOUD_FILES_PATH").$this->getOSSeperator().$user->email ?? env("CLOUD_FILES_PATH");
-        return Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($users_cloud_path))->getRealPath());
+        $users_cloud_path = UploadedFile::cleanPath($users_cloud_path);
+        return Str::contains($path, $users_cloud_path);
     }
 
     public static function getOwnerOfDirectory(string $path): ?User
