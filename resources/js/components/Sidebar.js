@@ -25,7 +25,7 @@ class NewFileManager {
                     return json.message;
                 });
             }
-            console.log(json);
+            window.location.reload();
         }
     }
 
@@ -82,7 +82,6 @@ class NewMenu extends React.Component {
                     onclick: (self) => {
                         NewFileManager.createFolder(document.getElementById("input_" + self.id).value);
                         self.close();
-                        window.location.reload();
                     }
                 }],
             function (self) {
