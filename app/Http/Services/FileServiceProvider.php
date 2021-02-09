@@ -169,7 +169,7 @@ class FileServiceProvider
     {
         $users_cloud_path = env("CLOUD_FILES_PATH").$this->getOSSeperator().$user->email ?? env("CLOUD_FILES_PATH");
         $users_cloud_path = UploadedFile::cleanPath($users_cloud_path);
-        return Str::contains($path, $users_cloud_path);
+        return Str::contains(UploadedFile::cleanPath($path), $users_cloud_path);
     }
 
     public static function getOwnerOfDirectory(string $path): ?User

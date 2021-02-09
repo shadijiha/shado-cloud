@@ -44,8 +44,7 @@ class APIRequest extends FormRequest
             // Check if the file is owned by the login user
             if ($uploaded_file && $uploaded_file->user_id == Auth::user()->id) {
                 return null;
-            } else  if ( (new FileServiceProvider)->ownsDirectory(Auth::user(), $this->get("path")) )
-            {
+            } else if ((new FileServiceProvider)->ownsDirectory(Auth::user(), $this->get("path"))) {
                 return null;
             }
         }
