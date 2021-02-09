@@ -51,7 +51,7 @@ class APITokenController extends Controller
     {
         try {
             return Auth::user()->validAPITokens()->first()->key;
-        } catch (\Error $e) {
+        } catch (\Throwable $e) {
             return null;
         }
     }

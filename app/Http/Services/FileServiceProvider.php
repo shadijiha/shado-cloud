@@ -170,4 +170,22 @@ class FileServiceProvider
         $users_cloud_path = env("CLOUD_FILES_PATH").$this->getOSSeperator().$user->email ?? env("CLOUD_FILES_PATH");
         return Str::contains((new \SplFileInfo($path))->getRealPath(), (new \SplFileInfo($users_cloud_path))->getRealPath());
     }
+
+    public static function getOwnerOfDirectory(string $path): ?User
+    {
+        if ($path == null)
+            return null;
+
+        $seperator = new FileServiceProvider();
+        $tokens    = explode($seperator->getOSSeperator(), UploadedFile::cleanPath($path));
+
+        // Get the email from the tokens
+        foreach ($tokens as $token)
+            if (Str::contains($token, "@")) {
+                $email = $token;
+                break;
+            }
+
+        return User::where("email", $email)->first();
+    }
 }

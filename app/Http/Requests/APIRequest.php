@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Services\FileServiceProvider;
 use App\Models\APIToken;
 use App\Models\UploadedFile;
 use Carbon\Carbon;
@@ -52,7 +53,14 @@ class APIRequest extends FormRequest
         // Check if the the key issuer is the same as the document owner
         // If the file is in database (meaning we have his owner)
         if ($uploaded_file && $uploaded_file->user_id != $token->user_id) {
-            throw new \Exception("The API key must be issued by the owner of the file/directory");
+            throw new \Exception("The API key must be issued by the owner of the file");
+        }
+
+        // See if the directory is owned by the same user as the key issuer
+        $folder_owner = FileServiceProvider::getOwnerOfDirectory($this->get("path"));
+        if ($folder_owner) {
+            if ($folder_owner->id != $token->user_id)
+                throw new \Exception("The API key must be issued by the owner of the directory");
         }
 
         // See if the API token has expired

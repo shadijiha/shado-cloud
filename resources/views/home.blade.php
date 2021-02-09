@@ -192,7 +192,8 @@
                     <img src="images/icons/{{$file->extension}}.png" class="file_thumnail"
                          alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
                 @elseif ($file->isImage())
-                    <img src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}" class="image_thumnail"
+                    <img src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}&key={{$key}}"
+                         class="image_thumnail"
                          alt="{{$file->getRelativePath()}}" title="{{$file->getRelativePath()}}"/>
                 @elseif($file->isVideo())
                     <video src="{{url("/api")}}?path={{$file->getNative()->getRealPath()}}" class="video_thumnail"
