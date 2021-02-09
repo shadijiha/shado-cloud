@@ -49,6 +49,10 @@ class APITokenController extends Controller
 
     public static function getValideKey()
     {
-        return Auth::user()->validAPITokens()->first()->key ?? null;
+        try {
+            return Auth::user()->validAPITokens()->first()->key;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 }

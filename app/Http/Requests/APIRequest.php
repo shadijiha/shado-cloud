@@ -40,24 +40,18 @@ class APIRequest extends FormRequest
 
         $token = $this->get("key");
 
-        try {
-            $token = APIToken::where('key', $token)->firstOrFail();
+        $token = APIToken::where('key', $token)->firstOrFail();
 
-            // See if the API token has expired
-            if (Carbon::parse($token->expires_at)->lessThan(Carbon::now())) {
-                throw new \Exception("Api token expired");
-            } else if ($token->requests >= $token->max_requests) {
-                // See if the maximum request has been exceeded
-                throw new \Exception("Api maximum requests exhausted");
-            } else {
-                // Update the requests
-                $token->requests += 1;
-                $token->save();
-            }
-
-        } catch (\Exception $e) {
-            $message = "Invalid API token";
-            $status  = 401;
+        // See if the API token has expired
+        if (Carbon::parse($token->expires_at)->lessThan(Carbon::now())) {
+            throw new \Exception("Api token expired");
+        } else if ($token->requests >= $token->max_requests) {
+            // See if the maximum request has been exceeded
+            throw new \Exception("Api maximum requests exhausted");
+        } else {
+            // Update the requests
+            $token->requests += 1;
+            $token->save();
         }
 
         // Verify that token is not readonly
