@@ -27,11 +27,13 @@ class FileServiceProvider
      *
      * @param string $path
      * @param string $content
+     * @param bool   $append
      */
-    public function updateOrCreateFile(string $path, string $content): void
+    public function updateOrCreateFile(string $path, string $content, bool $append = false): void
     {
         if (File::exists($path)) {
-            $stream = fopen($path, "w");
+            $mode   = $append ? "a" : "w";
+            $stream = fopen($path, $mode);
             fwrite($stream, $content);
             fclose($stream);
         } else {

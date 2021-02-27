@@ -13,9 +13,10 @@ class StoreFileRequest extends APIRequest
     public function rules()
     {
         return [
-            "key"  => "nullable",
-            "path" => "required",
-            "data" => "nullable"
+            "key"    => "nullable",
+            "path"   => "required",
+            "data"   => "nullable",
+            "append" => "nullable"
         ];
     }
 

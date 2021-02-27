@@ -144,9 +144,10 @@ class APIController extends Controller
         }
 
 
-        $key  = $request->key;
-        $path = $request->path;
-        $data = $request->data;
+        $key    = $request->key;
+        $path   = $request->path;
+        $data   = $request->data;
+        $append = strcmp($request->append, "true") === 0;
 
         // See if the path is a directory
         if (File::isDirectory($path))
@@ -156,7 +157,7 @@ class APIController extends Controller
             ]);
 
         // See if file exists, then write data directly to the file
-        $provider->updateOrCreateFile($path, $data);
+        $provider->updateOrCreateFile($path, $data, $append);
 
         return response([
             "code"    => 200,
