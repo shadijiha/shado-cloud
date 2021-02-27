@@ -36,7 +36,7 @@ class APIController extends Controller
         try {
             $request->verifyToken();
         } catch (\Exception $e) {
-            return \response(["code" => 400, "message" => $e->getMessage()]);
+            return \response($e->getMessage(), 400);
         }
 
         return response(["data" => new DirectoryStruct($provider->getCloudPath())]);
@@ -76,7 +76,7 @@ class APIController extends Controller
         try {
             $request->verifyToken();
         } catch (\Exception $e) {
-            return \response(["code" => 400, "message" => $e->getMessage()]);
+            return \response($e->getMessage(), 400);
         }
 
         return response(["tree" => new DirectoryStruct($request->get("path") ?? $provider->getCloudPath())]);
@@ -99,10 +99,7 @@ class APIController extends Controller
         try {
             $request->verifyToken();
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 401,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 401);
         }
 
         $path  = $request->path;
@@ -124,10 +121,7 @@ class APIController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 400,
-                "message" => $e->getMessage()
-            ]);
+            return \response($e->getMessage(), 400);
         }
     }
 
@@ -137,10 +131,7 @@ class APIController extends Controller
         try {
             $request->verifyToken(true);
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 401,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 400);
         }
 
 
@@ -151,18 +142,12 @@ class APIController extends Controller
 
         // See if the path is a directory
         if (File::isDirectory($path))
-            return response([
-                "code"    => 401,
-                "message" => "Path cannot be a directory"
-            ]);
+            return response("Path cannot be a directory", 401);
 
         // See if file exists, then write data directly to the file
         $provider->updateOrCreateFile($path, $data, $append);
 
-        return response([
-            "code"    => 200,
-            "message" => ""
-        ]);
+        return response($append, 200);
     }
 
     public function deleteFileAPI(DeleteFileRequest $request, FileServiceProvider $provider)
@@ -171,10 +156,7 @@ class APIController extends Controller
         try {
             $request->verifyToken(true);
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 401,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 400);
         }
 
         $path = $request->path;
@@ -186,10 +168,7 @@ class APIController extends Controller
                               "message" => $e->getMessage()]);
         }
 
-        return \response([
-            "code"    => 200,
-            "message" => "deleted $path with success"
-        ]);
+        return \response("deleted $path with success", 200);
     }
 
     public function infoFileAPI(GetFileRequest $request, FileServiceProvider $provider)
@@ -203,10 +182,7 @@ class APIController extends Controller
             // Get database info
             $struct = $provider->getFile($path);
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 400,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 400);
         }
 
         return [
@@ -222,26 +198,17 @@ class APIController extends Controller
         try {
             $request->verifyToken(true);
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 400,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 400);
         }
 
         // Rename the file
         try {
             $provider->renameFile($path, $newname);
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 500,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 500);
         }
 
-        return \response([
-            "code"    => 200,
-            "message" => "Filename changed"
-        ]);
+        return \response("Filename changed", 200);
     }
 
     public function copyFileToDriveAPI(MoveToDriveRequest $request, FileServiceProvider $provider)
@@ -249,18 +216,12 @@ class APIController extends Controller
         try {
             $request->verifyToken(true);
         } catch (\Exception $e) {
-            return \response([
-                "code"    => 400,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 400);
         }
 
         $provider->copyFile($request->url, $request->path);
 
-        return \response([
-            "code"    => 200,
-            "message" => ""
-        ]);
+        return \response("", 200);
     }
 
     /**
@@ -297,7 +258,7 @@ class APIController extends Controller
         try {
             $request->verifyToken();
         } catch (\Exception $e) {
-            return response(["code" => 400, "message" => $e->getMessage()]);
+            return response($e->getMessage(), 400);
         }
 
         return \response()->download($request->path);
@@ -323,16 +284,10 @@ class APIController extends Controller
             $file = new \SplFileInfo($path."/none.temp");
             File::makeDirectory($file->getPath(), 0777, true, true);
 
-            return response([
-                "code"    => 200,
-                "message" => "successfully created directory ".$file->getPath()
-            ]);
+            return response("successfully created directory ".$file->getPath(), 200);
 
         } catch (\Exception $e) {
-            return response([
-                "code"    => 401,
-                "message" => $e->getMessage()
-            ]);
+            return response($e->getMessage(), 400);
         }
     }
 }
