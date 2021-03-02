@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
 
 class APIController extends Controller
@@ -137,8 +138,8 @@ class APIController extends Controller
 
         $key    = $request->key;
         $path   = $request->path;
-        $data   = $request->data;
-        $append = strcmp($request->append, "true") === 0;
+        $data   = $request->data ?? "";
+        $append = strcmp(Str::lower($request->append), "true") === 0;
 
         // See if the path is a directory
         if (File::isDirectory($path))
@@ -147,7 +148,7 @@ class APIController extends Controller
         // See if file exists, then write data directly to the file
         $provider->updateOrCreateFile($path, $data, $append);
 
-        return response($append, 200);
+        return response($data, 200);
     }
 
     public function deleteFileAPI(DeleteFileRequest $request, FileServiceProvider $provider)

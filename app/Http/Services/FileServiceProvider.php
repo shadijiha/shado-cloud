@@ -31,6 +31,9 @@ class FileServiceProvider
      */
     public function updateOrCreateFile(string $path, string $content, bool $append = false): void
     {
+        // Replace the word '{NEW_LINE}' by a \n because for some reason \n isn't working from C#
+        $content = str_replace("!CMD_NEW_LINE!", "\n", $content);
+
         if (File::exists($path)) {
             $mode   = $append ? "a" : "w";
             $stream = fopen($path, $mode);
