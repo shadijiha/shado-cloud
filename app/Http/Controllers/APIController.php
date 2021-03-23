@@ -40,6 +40,10 @@ class APIController extends Controller
             return \response($e->getMessage(), 400);
         }
 
+        $path = $request->get("path");
+        if (!$request->get("path"))
+            $path = $provider->getCloudPath().$provider->getOSSeperator().$request->get("key")->user->email;
+
         return response(["data" => new DirectoryStruct($provider->getCloudPath())]);
     }
 
