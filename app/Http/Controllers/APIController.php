@@ -48,7 +48,7 @@ class APIController extends Controller
         }
 
 
-        return response(["data" => new DirectoryStruct($provider->getCloudPath())]);
+        return response(["data" => new DirectoryStruct($path)]);
     }
 
     /**
