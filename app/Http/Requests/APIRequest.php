@@ -39,7 +39,7 @@ class APIRequest extends FormRequest
          */
         // TODO: There is a bug here, Must check if the auth is the directory/File owner
 
-        $uploaded_file = UploadedFile::getFromPath($this->get("path")) ?? null;
+        $uploaded_file = $this->get("path") != null ? UploadedFile::getFromPath($this->get("path")) : null;
         if (Auth::check() && $allowAuth) {
             // Check if the file is owned by the login user
             if ($uploaded_file && $uploaded_file->user_id == Auth::user()->id) {
