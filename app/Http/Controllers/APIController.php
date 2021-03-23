@@ -186,7 +186,7 @@ class APIController extends Controller
             return response($e->getMessage(), 400);
         }
 
-        return response(["props" => $struct->getProps()], 200);
+        return response($struct->getProps(), 200);
     }
 
     public function renameFileAPI(RenameFileRequest $request, FileServiceProvider $provider)
