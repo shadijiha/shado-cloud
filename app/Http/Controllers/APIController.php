@@ -11,6 +11,7 @@ use App\Http\Requests\StoreFileRequest;
 use App\Http\Services\FileServiceProvider;
 use App\Http\structs\DirectoryStruct;
 use App\Http\structs\FileStruct;
+use App\Models\APIToken;
 use App\Models\UploadedFile;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
@@ -36,13 +37,16 @@ class APIController extends Controller
         // Verify token
         try {
             $request->verifyToken();
+
+            $path  = $request->get("path");
+            $token = APIToken::where("key", $request->get("key"))->firstOrFail();
+            if (!$request->get("path"))
+                $path = $provider->getCloudPath().$provider->getOSSeperator().$token->user->email;
+
         } catch (\Exception $e) {
             return \response($e->getMessage(), 400);
         }
 
-        $path = $request->get("path");
-        if (!$request->get("path"))
-            $path = $provider->getCloudPath().$provider->getOSSeperator().$request->get("key")->user->email;
 
         return response(["data" => new DirectoryStruct($provider->getCloudPath())]);
     }
