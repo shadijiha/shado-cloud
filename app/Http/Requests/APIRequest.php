@@ -59,7 +59,11 @@ class APIRequest extends FormRequest
         }
 
         // See if the directory is owned by the same user as the key issuer
-        $folder_owner = FileServiceProvider::getOwnerOfDirectory($this->get("path"));
+        if ($this->get("path"))
+            $folder_owner = FileServiceProvider::getOwnerOfDirectory($this->get("path"));
+        else
+            $folder_owner = $token->user;
+
         if ($folder_owner && $folder_owner->id != $token->user_id) {
             throw new \Exception("The API key must be issued by the owner of the directory");
         }
