@@ -157,6 +157,11 @@ class FileServiceProvider
         return $this->cloud_path;
     }
 
+    public function getCloudPathForUser(User $user): string
+    {
+        return env("CLOUD_FILES_PATH").$this->getOSSeperator().$user->email;
+    }
+
     /**
      * @param string $path
      *

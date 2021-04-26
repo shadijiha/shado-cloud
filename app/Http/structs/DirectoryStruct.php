@@ -63,4 +63,9 @@ class DirectoryStruct
         $temp     = str_replace("\\", "/", str_replace($provider->getCloudPath()."\\", "", $this->path));
         return $temp;
     }
+
+    public function toArrayWithoutFiles()
+    {
+        return ["parent" => $this->parent, "name" => $this->name, "path" => $this->path];
+    }
 }

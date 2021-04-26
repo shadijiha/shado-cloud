@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\api\v2\AuthAPIController;
 use App\Http\Controllers\APIController;
 use App\Http\Controllers\APITokenController;
 use App\Http\Controllers\HomeController;
@@ -52,4 +53,9 @@ Route::prefix('api')->group(function () {
     Route::get("/copytodrive", [APIController::class, 'copyFileToDriveAPI']);
 });
 
-
+Route::prefix("api/v2")->group(function () {
+    Route::post("/login", [AuthAPIController::class, "login"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::get("/rootdirectory", [App\Http\Controllers\api\v2\APIController::class, "getRootDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::get("/files", [App\Http\Controllers\api\v2\APIController::class, "getFilesInDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::get("/ping", [AuthAPIController::class, "ping"])->withoutMiddleware(VerifyCsrfToken ::class);
+});
