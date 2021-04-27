@@ -58,4 +58,8 @@ Route::prefix("api/v2")->group(function () {
     Route::get("/rootdirectory", [App\Http\Controllers\api\v2\APIController::class, "getRootDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::get("/files", [App\Http\Controllers\api\v2\APIController::class, "getFilesInDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::get("/ping", [AuthAPIController::class, "ping"])->withoutMiddleware(VerifyCsrfToken ::class);
+
+    Route::get("/apikeys", [App\Http\Controllers\api\v2\APIController::class, "getAPIKeys"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::post("/deletekey", [App\Http\Controllers\api\v2\APIController::class, "deleteAPIKey"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::post("/generatekey", [App\Http\Controllers\api\v2\APIController::class, "generateAPIKey"])->withoutMiddleware(VerifyCsrfToken ::class);
 });

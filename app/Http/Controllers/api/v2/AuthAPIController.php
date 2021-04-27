@@ -18,7 +18,9 @@ class AuthAPIController
             return response(["errors" => ["User does not exist"]], 400);
 
         if (Hash::check($password, $user->password)) {
-            $token = AuthToken::generate($user);
+            $token     = AuthToken::generate($user);
+            $token->ip = $request->getClientIp();
+            $token->save();
             return response([
                 "user"  => $user,
                 "token" => $token

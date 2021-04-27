@@ -4,8 +4,11 @@ use App\Http\Services\AuthAPITokenCheckServiceProvider;
 use App\Http\Services\FileServiceProvider;
 use App\Http\structs\DirectoryStruct;
 use App\Http\structs\FileStruct;
+use App\Models\APIToken;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 class APIController
 {
@@ -43,5 +46,44 @@ class APIController
 
     }
 
+    public function getAPIKeys(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification["message"], $verification["code"]);
 
+        return response(APIToken::where("user_id", $verification["user"]->id)->get());
+    }
+
+    public function deleteAPIKey(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification["message"], $verification["code"]);
+
+        $id = $request->get("id");
+        APIToken::find($id)->delete();
+        return response(["message" => "Success deleted API key"], 200);
+    }
+
+    public function generateAPIKey(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification["message"], $verification["code"]);
+
+        $token           = new APIToken();
+        $token->user_id  = $verification["user"]->id;
+        $token->readonly = $request->get("readonly") ?? true;
+
+        $token->expires_at = $request->get("expiration") == null ?
+            Carbon::now()->addHours(24) : Carbon::parse($request->get("expiration"));
+
+        $token->requests     = 0;
+        $token->max_requests = $request->get("max_requests") ?? 100;
+        $token->key          = Str::random(32);
+        $token->save();
+
+        return response($token, 200);
+    }
 }
