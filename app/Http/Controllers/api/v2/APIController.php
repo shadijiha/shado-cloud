@@ -37,7 +37,8 @@ class APIController
             }
 
             foreach (File::files($path) as $fileInfo) {
-                array_push($array, ["type" => "file", "data" => new FileStruct($fileInfo)]);
+                $struct = new FileStruct($fileInfo);
+                array_push($array, ["type" => "file", "data" => $struct->toArray()]);
             }
             return response($array, 200);
         } catch (\Exception $e) {
