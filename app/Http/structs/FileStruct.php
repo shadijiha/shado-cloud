@@ -121,6 +121,7 @@ class FileStruct
         $collection->put("is_image", $this->isImage());
         $collection->put("is_video", $this->isVideo());
         $collection->put("is_pdf", $this->isPDF());
+        $collection->put("registered", $this->getUploadedFile());
         return $collection->all();
     }
 
