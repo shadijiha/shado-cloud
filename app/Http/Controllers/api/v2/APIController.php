@@ -21,14 +21,18 @@ class APIController
         return response($provider->getCloudPathForUser($verification["user"]), 200);
     }
 
-    public function getFilesInDirectory(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
+    public function getFilesInDirectory(Request $request, FileServiceProvider $provider, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
     {
 
         $verification = $tokenServiceProvider->verifyToken($request);
         if ($verification["code"] != 200)
             return response($verification["message"], $verification["code"]);
 
-        $path = $request->get("path");
+        $path       = $request->get("path");
+        $lockedPath = DirectoryStruct::removeSlashes($provider->getCloudPathForUser($verification["user"]));
+        $parent     = $path ? (new DirectoryStruct($path))->parent : null;
+        error_log(sprintf("%s == %s", $lockedPath, $path));
+
         try {
             $array = array();
             foreach (File::directories($path) as $fileInfo) {
@@ -40,7 +44,10 @@ class APIController
                 $struct = new FileStruct($fileInfo);
                 array_push($array, ["type" => "file", "data" => $struct->toArray()]);
             }
-            return response($array, 200);
+            return response([
+                "superparent" => $path == $lockedPath ? null : $parent,
+                "files"       => $array
+            ], 200);
         } catch (\Exception $e) {
             return response($e->getMessage(), 401);
         }

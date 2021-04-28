@@ -25,7 +25,7 @@ class DirectoryStruct
 
         $tokens                     = explode($delimiter, $path);
         $tokens[count($tokens) - 1] = "";
-        $this->parent               = $this->removeSlashes(implode($delimiter, $tokens));
+        $this->parent               = (new \SplFileInfo($path))->getPath(); //$this->removeSlashes(implode($delimiter, $tokens));
 
         // Get all files
         $this->files = array();
@@ -49,7 +49,7 @@ class DirectoryStruct
         return $this;
     }
 
-    private function removeSlashes(string $str): string
+    public static function removeSlashes(string $str): string
     {
         return preg_replace("/\\\+/", '\\', $str);
     }
