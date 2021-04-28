@@ -3,11 +3,17 @@
 namespace App\Models;
 
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
+/**
+ * Class APIToken
+ * @package App\Models
+ * @mixin Builder
+ */
 class APIToken extends Model
 {
     use HasFactory;

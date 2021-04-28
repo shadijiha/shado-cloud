@@ -47,13 +47,28 @@ class APIController
 
     }
 
+    public function getFilesInfo(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification["message"], $verification["code"]);
+
+        $path   = $request->get("path");
+        $struct = new FileStruct(new \SplFileInfo($path));
+        return response($struct->toArray(), 200);
+    }
+
     public function getAPIKeys(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
     {
         $verification = $tokenServiceProvider->verifyToken($request);
         if ($verification["code"] != 200)
             return response($verification["message"], $verification["code"]);
 
-        return response(APIToken::where("user_id", $verification["user"]->id)->get());
+        return response(
+            APIToken::where("user_id", $verification["user"]->id)
+                ->orderBy("expires_at", 'desc')
+                ->get()
+        );
     }
 
     public function deleteAPIKey(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
