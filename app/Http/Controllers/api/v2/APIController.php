@@ -5,6 +5,7 @@ use App\Http\Services\FileServiceProvider;
 use App\Http\structs\DirectoryStruct;
 use App\Http\structs\FileStruct;
 use App\Models\APIToken;
+use App\Models\UploadedFile;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -28,10 +29,15 @@ class APIController
         if ($verification["code"] != 200)
             return response($verification["message"], $verification["code"]);
 
-        $path       = $request->get("path");
+        $path = $request->get("path");
+
+        if (!$path || !$provider->ownsDirectory($verification["user"], $path)) {
+            return response("User is null or does not own directory", 401);
+        }
+
         $lockedPath = DirectoryStruct::removeSlashes($provider->getCloudPathForUser($verification["user"]));
-        $parent     = $path ? (new DirectoryStruct($path))->parent : null;
-        error_log(sprintf("%s == %s", $lockedPath, $path));
+        $path       = DirectoryStruct::removeSlashes($path);
+        $parent     = (new DirectoryStruct($path))->parent;
 
         try {
             $array = array();
@@ -63,6 +69,35 @@ class APIController
         $path   = $request->get("path");
         $struct = new FileStruct(new \SplFileInfo($path));
         return response($struct->toArray(), 200);
+    }
+
+    public function uploadFile(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider, FileServiceProvider $provider)
+    {
+
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification["message"], $verification["code"]);
+
+        $destinationPath = $request->get('path');
+
+        if (!$provider->ownsDirectory($verification["user"], $destinationPath)) {
+            return response("User does not own directory", 401);
+        }
+
+        $request->data->move($destinationPath, $request->data->getClientOriginalName());
+
+        // Add to database
+        $model             = new UploadedFile();
+        $model->user_id    = $verification["user"]->id;
+        $model->path       = UploadedFile::cleanPath($destinationPath.$provider->getOSSeperator().$request->data->getClientOriginalName());
+        $model->updated_at = Carbon::now();
+        $model->created_at = Carbon::now();
+        $model->mime_type  = $request->data->getClientMimeType();
+        $model->save();
+
+        return response([
+            "message" => "success"
+        ], 200);
     }
 
     public function getAPIKeys(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
