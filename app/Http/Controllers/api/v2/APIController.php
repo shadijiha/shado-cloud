@@ -1,5 +1,6 @@
 <?php namespace App\Http\Controllers\api\v2;
 
+use App\Http\Requests\StoreFileRequest;
 use App\Http\Services\AuthAPITokenCheckServiceProvider;
 use App\Http\Services\FileServiceProvider;
 use App\Http\structs\DirectoryStruct;
@@ -98,6 +99,49 @@ class APIController
         return response([
             "message" => "success"
         ], 200);
+    }
+
+    public function createDirectory(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider, FileServiceProvider $provider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification["message"], $verification["code"]);
+
+        $path = $request->get("path");
+        $name = $request->get("name");
+
+        try {
+            if ($path == null || $name == null) {
+                throw new \Exception('The path or name is null');
+            }
+
+            $fullepath = $path.$provider->getOSSeperator().$name;
+            if (File::exists($fullepath)) {
+                throw new \Exception("The path already exists (Path: $path)");
+            }
+
+            File::makeDirectory($fullepath, 0777, true, true);
+
+            return response(["message" => "successfully created directory ".$fullepath], 200);
+
+        } catch (\Exception $e) {
+            return response([
+                "message" => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    public function createFile(Request $request, \App\Http\Controllers\APIController $provider)
+    {
+        $temp = new StoreFileRequest([
+            "key"    => $request->get("key"),
+            "path"   => $request->get("path"),
+            "data"   => $request->get("data"),
+            "append" => $request->get("append")
+
+        ]);
+        $temp->setMethod("POST");
+        return $provider->saveFileAPI($temp, new FileServiceProvider());
     }
 
     public function getAPIKeys(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)

@@ -136,27 +136,29 @@ class APIController extends Controller
 
     public function saveFileAPI(StoreFileRequest $request, FileServiceProvider $provider)
     {
+        //error_log($request->get("key"));
         // Verify token
         try {
             $request->verifyToken(true);
         } catch (\Exception $e) {
-            return response($e->getMessage(), 400);
+            return response(["message" => $e->getMessage()], 400);
         }
 
 
-        $key    = $request->key;
+        $key = $request->key;
+
         $path   = $request->path;
         $data   = $request->data ?? "";
         $append = strcmp(Str::lower($request->append), "true") === 0;
 
         // See if the path is a directory
         if (File::isDirectory($path))
-            return response("Path cannot be a directory", 401);
+            return response(["message" => "Path cannot be a directory"], 401);
 
         // See if file exists, then write data directly to the file
         $provider->updateOrCreateFile($path, $data, $append);
 
-        return response($data, 200);
+        return response(["data" => $data], 200);
     }
 
     public function deleteFileAPI(DeleteFileRequest $request, FileServiceProvider $provider)
@@ -225,6 +227,8 @@ class APIController extends Controller
         } catch (\Exception $e) {
             return response($e->getMessage(), 400);
         }
+
+        // TODO: Needs security. E.g. verify if this user can change the requested dir
 
         $provider->copyFile($request->url, $request->path);
 

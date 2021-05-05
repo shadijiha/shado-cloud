@@ -44,7 +44,7 @@ Route::prefix('api')->group(function () {
     Route::get("/dir", [APIController::class, 'indexDirectoriesAPI']);
     Route::get("/tree", [APIController::class, 'getTreeAPI']);
 
-    Route::get("", [APIController::class, 'getFileAPI']);
+    Route::get("", [APIController::class, 'getFileAPI'])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("", [APIController::class, 'saveFileAPI'])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::get("/info", [APIController::class, 'infoFileAPI']);
     Route::get("/delete", [APIController::class, 'deleteFileAPI']);
@@ -59,12 +59,13 @@ Route::prefix("api/v2")->group(function () {
     Route::get("/files", [App\Http\Controllers\api\v2\APIController::class, "getFilesInDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::get("/info", [App\Http\Controllers\api\v2\APIController::class, "getFilesInfo"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("/upload", [App\Http\Controllers\api\v2\APIController::class, "uploadFile"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::post("/createDir", [App\Http\Controllers\api\v2\APIController::class, "createDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::post("/createFile", [App\Http\Controllers\api\v2\APIController::class, "createFile"])->withoutMiddleware(VerifyCsrfToken ::class);
+
 
     Route::get("/ping", [AuthAPIController::class, "ping"])->withoutMiddleware(VerifyCsrfToken ::class);
 
     Route::get("/apikeys", [App\Http\Controllers\api\v2\APIController::class, "getAPIKeys"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("/deletekey", [App\Http\Controllers\api\v2\APIController::class, "deleteAPIKey"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("/generatekey", [App\Http\Controllers\api\v2\APIController::class, "generateAPIKey"])->withoutMiddleware(VerifyCsrfToken ::class);
-
-
 });
