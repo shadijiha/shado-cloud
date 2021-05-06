@@ -141,7 +141,7 @@ class FileServiceProvider
     {
         $struct  = new \SplFileInfo($path);
         $newPath = $struct->getPath().$this->getOSSeperator().$struct->getFilename()." ".str_replace(":", "", Carbon::now());
-        
+
         if (!File::exists($newPath)) {
             File::makeDirectory($newPath, 0777, true);
         }
