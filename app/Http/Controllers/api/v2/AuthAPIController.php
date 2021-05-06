@@ -4,6 +4,7 @@ use App\Http\Services\AuthAPITokenCheckServiceProvider;
 use App\Models\AuthToken;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
 class AuthAPIController
@@ -21,6 +22,9 @@ class AuthAPIController
             $token     = AuthToken::generate($user);
             $token->ip = $request->getClientIp();
             $token->save();
+
+            Auth::attempt(["email" => $email, "password" => $password]);
+
             return response([
                 "user"  => $user,
                 "token" => $token

@@ -210,14 +210,17 @@ class APIController extends Controller
             return response($e->getMessage(), 400);
         }
 
+        $token = APIToken::where("key", $request->get("key"))->first();
+        Auth::login($token->user);
+
         // Rename the file
         try {
             $provider->renameFile($path, $newname);
         } catch (\Exception $e) {
-            return response($e->getMessage(), 500);
+            return response(["message" => $e->getMessage()], 500);
         }
 
-        return \response("Filename changed", 200);
+        return \response(["message" => "Filename changed"], 200);
     }
 
     public function copyFileToDriveAPI(MoveToDriveRequest $request, FileServiceProvider $provider)

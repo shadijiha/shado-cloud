@@ -116,6 +116,7 @@ class FileServiceProvider
             $uploaded_file->path = $native->getPath().$seperator.$newName;
             $uploaded_file->save();
         } else {
+
             // If it is not in the database then add it
             $uploaded_file             = new UploadedFile();
             $uploaded_file->user_id    = Auth::user() ? Auth::user()->id : null;
