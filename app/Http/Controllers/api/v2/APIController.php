@@ -1,5 +1,6 @@
 <?php namespace App\Http\Controllers\api\v2;
 
+use App\Http\Controllers\SaveController;
 use App\Http\Requests\StoreFileRequest;
 use App\Http\Services\AuthAPITokenCheckServiceProvider;
 use App\Http\Services\FileServiceProvider;
@@ -142,6 +143,29 @@ class APIController
         ]);
         $temp->setMethod("POST");
         return $provider->saveFileAPI($temp, new FileServiceProvider());
+    }
+
+    public function unzipFile(Request $request, SaveController $controller, AuthAPITokenCheckServiceProvider $tokenServiceProvider, FileServiceProvider $provider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification, $verification["code"]);
+
+        try {
+
+            $path = $request->get("path");
+            if (!$provider->ownsDirectory($verification["user"], $path)) {
+                throw new \Exception("User does not own path $path");
+            }
+
+            $provider->unzipFile($path);
+
+            return response(["message" => "File $path unzipped!"], 200);
+
+        } catch (\Exception $e) {
+            return response(["message", $e->getMessage()], 400);
+        }
+
     }
 
     public function getAPIKeys(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)

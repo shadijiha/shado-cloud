@@ -61,7 +61,7 @@ Route::prefix("api/v2")->group(function () {
     Route::post("/upload", [App\Http\Controllers\api\v2\APIController::class, "uploadFile"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("/createDir", [App\Http\Controllers\api\v2\APIController::class, "createDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("/createFile", [App\Http\Controllers\api\v2\APIController::class, "createFile"])->withoutMiddleware(VerifyCsrfToken ::class);
-
+    Route::post("/unzip", [App\Http\Controllers\api\v2\APIController::class, "unzipFile"])->withoutMiddleware(VerifyCsrfToken ::class);
 
     Route::get("/ping", [AuthAPIController::class, "ping"])->withoutMiddleware(VerifyCsrfToken ::class);
 

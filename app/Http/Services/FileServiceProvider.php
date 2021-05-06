@@ -140,7 +140,11 @@ class FileServiceProvider
     public function unzipFile(string $path)
     {
         $struct  = new \SplFileInfo($path);
-        $newPath = $struct->getPath();
+        $newPath = $struct->getPath().$this->getOSSeperator().$struct->getFilename()." ".str_replace(":", "", Carbon::now());
+        
+        if (!File::exists($newPath)) {
+            File::makeDirectory($newPath, 0777, true);
+        }
 
         $zip = new \ZipArchive();
         $zip->open($path);
