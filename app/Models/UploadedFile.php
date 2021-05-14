@@ -22,6 +22,11 @@ class UploadedFile extends Model
         return UploadedFile::where("path", UploadedFile::cleanPath($path))->first();
     }
 
+    public static function getFromTempURL(string $url)
+    {
+        return UploadedFile::where("temporary_url", UploadedFile::cleanPath($url))->first();
+    }
+
     /**
      * Removes unecessary slashes
      *

@@ -10,6 +10,7 @@ use App\Models\APIToken;
 use App\Models\UploadedFile;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -194,6 +195,39 @@ class APIController
             return response(["message", $e->getMessage()], 400);
         }
 
+    }
+
+    public function getTemporaryURL(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider, FileServiceProvider $provider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response($verification, $verification["code"]);
+
+        $path = $request->get("path");
+        if (!$provider->ownsDirectory($verification["user"], $path)) {
+            return response(["message" => $verification["user"]->email." does not own directory $path"], 400);
+        }
+
+        Auth::login($verification["user"]);
+
+        $file = new FileStruct(new \SplFileInfo($path));
+
+        return response(["url" => url("/api/v2/temp")."/".$file->getTemporaryURL()], 200);
+    }
+
+    public function getFileFromTempURL(Request $request, string $url)
+    {
+        $uploaded_file = UploadedFile::getFromTempURL($url);
+        if ($uploaded_file == null) {
+            return response(["message", "Invalid URL"]);
+        } else if (Carbon::now()->greaterThan($uploaded_file->url_expires_at)) {
+            return response(["message", "URL is expired"]);
+        } else {
+            return response()->file($uploaded_file->path, [
+                "Content-Type"        => $uploaded_file->mime_type,
+                'Content-Disposition' => 'inline; filename="'.Str::random().'"'
+            ]);
+        }
     }
 
     public function getAPIKeys(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider)

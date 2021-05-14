@@ -5,6 +5,7 @@ namespace App\Http\structs;
 use App\Http\Services\FileServiceProvider;
 use App\Models\UploadedFile;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Symfony\Component\Mime\MimeTypes;
@@ -78,6 +79,20 @@ class FileStruct
         return UploadedFile::where("path", UploadedFile::cleanPath($this->native->getRealPath()))->first();
     }
 
+    public function getOrCreateUploadedFile()
+    {
+        $uploadedFile = $this->getUploadedFile();
+        if ($uploadedFile == null) {
+            $uploadedFile            = new UploadedFile();
+            $uploadedFile->user_id   = Auth::check() ? Auth::user()->id : null;
+            $uploadedFile->path      = $this->path;
+            $uploadedFile->mime_type = $this->getMimeType();
+            $uploadedFile->save();
+        }
+
+        return $uploadedFile;
+    }
+
     /**
      * Attempts to find the Mime from that database.
      * If not found it will attempt to guess the Mime type
@@ -93,6 +108,27 @@ class FileStruct
         }
 
         return $mime;
+    }
+
+    public function getTemporaryURL(Carbon $expires_at = null): string
+    {
+        if ($expires_at == null) {
+            $expires_at = Carbon::now()->addMinutes(30);
+        }
+
+        $uploaded_file = $this->getOrCreateUploadedFile();
+
+        if ($uploaded_file->temporary_url != null && Carbon::now()->lessThan($uploaded_file->url_expires_at)) {
+            $uploaded_file->url_expires_at = $expires_at;
+            $uploaded_file->save();
+            return $uploaded_file->temporary_url;
+        } else {
+            $url                           = Str::random(128);
+            $uploaded_file->temporary_url  = $url;
+            $uploaded_file->url_expires_at = $expires_at;
+            $uploaded_file->save();
+            return $url;
+        }
     }
 
     /**

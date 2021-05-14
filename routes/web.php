@@ -68,6 +68,9 @@ Route::prefix("api/v2")->group(function () {
 
     Route::get("/ping", [AuthAPIController::class, "ping"])->withoutMiddleware(VerifyCsrfToken ::class);
 
+    Route::get("/temporaryUrl", [App\Http\Controllers\api\v2\APIController::class, "getTemporaryURL"])->withoutMiddleware(VerifyCsrfToken ::class);
+    Route::get("/temp/{url}", [App\Http\Controllers\api\v2\APIController::class, "getFileFromTempURL"])->withoutMiddleware(VerifyCsrfToken ::class);
+
     Route::get("/apikeys", [App\Http\Controllers\api\v2\APIController::class, "getAPIKeys"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("/deletekey", [App\Http\Controllers\api\v2\APIController::class, "deleteAPIKey"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::post("/generatekey", [App\Http\Controllers\api\v2\APIController::class, "generateAPIKey"])->withoutMiddleware(VerifyCsrfToken ::class);
