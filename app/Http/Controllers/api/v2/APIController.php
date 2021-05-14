@@ -15,6 +15,34 @@ use Illuminate\Support\Str;
 
 class APIController
 {
+    public function getFileContent(Request $request, AuthAPITokenCheckServiceProvider $tokenServiceProvider, FileServiceProvider $provider)
+    {
+        $verification = $tokenServiceProvider->verifyToken($request);
+        if ($verification["code"] != 200)
+            return response(["message", $verification["message"]], $verification["code"]);
+
+        $path = $request->path;
+
+        // API is ok, get the file content
+        try {
+            // If file is a directory
+            if (File::isDirectory($path)) {
+                return response(["message" => "This path is a directory"], 400);
+            }
+
+            $file_struct = $provider->getFile($path);
+
+            // Get the originial Mime Type
+            return response()->file($path, [
+                "Content-Type"        => $file_struct->getMimeType(),
+                'Content-Disposition' => 'inline; filename="'.$file_struct->getNative()->getFilename().'"'
+            ]);
+
+        } catch (\Exception $e) {
+            return \response(["message" => $e->getMessage()], 400);
+        }
+    }
+
     public function getRootDirectory(Request $request, FileServiceProvider $provider, AuthAPITokenCheckServiceProvider $tokenServiceProvider)
     {
         $verification = $tokenServiceProvider->verifyToken($request);

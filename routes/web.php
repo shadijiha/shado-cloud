@@ -54,6 +54,9 @@ Route::prefix('api')->group(function () {
 });
 
 Route::prefix("api/v2")->group(function () {
+
+    Route::get("", [App\Http\Controllers\api\v2\APIController::class, "getFileContent"])->withoutMiddleware(VerifyCsrfToken ::class);
+
     Route::post("/login", [AuthAPIController::class, "login"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::get("/rootdirectory", [App\Http\Controllers\api\v2\APIController::class, "getRootDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);
     Route::get("/files", [App\Http\Controllers\api\v2\APIController::class, "getFilesInDirectory"])->withoutMiddleware(VerifyCsrfToken ::class);

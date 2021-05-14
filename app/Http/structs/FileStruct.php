@@ -114,6 +114,11 @@ class FileStruct
         return $this->match(self::PDF_EXT) || Str::contains($this->getMimeType(), "pdf");
     }
 
+    public function isText(): bool
+    {
+        return str_contains($this->getMimeType(), "text");
+    }
+
     public function toArray()
     {
         $collection = collect((array)$this);
@@ -121,6 +126,7 @@ class FileStruct
         $collection->put("is_image", $this->isImage());
         $collection->put("is_video", $this->isVideo());
         $collection->put("is_pdf", $this->isPDF());
+        $collection->put("is_text", $this->isText());
         $collection->put("registered", $this->getUploadedFile());
         return $collection->all();
     }
