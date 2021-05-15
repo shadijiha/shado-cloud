@@ -34,6 +34,8 @@ class FileServiceProvider
         // Replace the word '{NEW_LINE}' by a \n because for some reason \n isn't working from C#
         $content = str_replace("!CMD_NEW_LINE!", "\n", $content);
 
+        $path = UploadedFile::cleanPath($path);
+
         if (File::exists($path)) {
             $mode   = $append ? "a" : "w";
             $stream = fopen($path, $mode);

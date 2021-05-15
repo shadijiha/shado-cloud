@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Http\Services\FileServiceProvider;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -40,6 +41,9 @@ class UploadedFile extends Model
         $temp = preg_replace('/\/+/i', "/", $temp);
         // Remove a / followed by \
         $temp = str_replace("/\\", "/", $temp);
+        $temp = str_replace("\\", (new FileServiceProvider())->getOSSeperator(), $temp);
+        $temp = str_replace("/", (new FileServiceProvider())->getOSSeperator(), $temp);
+
         return $temp;
     }
 
