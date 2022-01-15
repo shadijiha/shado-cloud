@@ -6,6 +6,7 @@ declare global {
 			JWT_SECRET: string;
 			FRONTEND_URL: string;
 			BACKEND_HOST: string;
+			BACKEND_HOST_NAME: string;
 			CLOUD_DIR: string;
 			DB_TYPE: string;
 			DB_HOST: string;

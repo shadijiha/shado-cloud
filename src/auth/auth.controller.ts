@@ -84,7 +84,7 @@ export class AuthController {
 		response
 			.clearCookie(process.env.COOKIE_NAME, {
 				httpOnly: true,
-				domain: process.env.BACKEND_HOST, // your domain here!
+				domain: process.env.BACKEND_HOST_NAME, // your domain here!
 			})
 			.send();
 	}
@@ -104,7 +104,7 @@ export class AuthController {
 		response
 			.cookie(process.env.COOKIE_NAME, token, {
 				httpOnly: true,
-				domain: process.env.BACKEND_HOST, // your domain here!
+				domain: process.env.BACKEND_HOST_NAME, // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
 			})
 			.send({ user, errors: [] });
