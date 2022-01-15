@@ -3,6 +3,7 @@ import {
 	Controller,
 	Delete,
 	Get,
+	Logger,
 	Param,
 	Patch,
 	Post,
@@ -11,6 +12,7 @@ import {
 import { AuthGuard } from "@nestjs/passport";
 import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import {
+	FileInfo,
 	NewFileRequest,
 	OperationStatus,
 	OperationStatusResponse,
@@ -59,6 +61,16 @@ export class DirectoriesController {
 				parent: null,
 				errors: [{ field: "", message: (<Error>e).message }],
 			};
+		}
+	}
+
+	@Get("listrecursive")
+	@ApiResponse({ type: [String] })
+	public async listrecursive(@AuthUser() userId: number) {
+		try {
+			return await this.directoriesService.listrecursive(userId);
+		} catch (e) {
+			return [];
 		}
 	}
 

@@ -5,6 +5,7 @@ import fs from "fs";
 import { DirectoryInfo } from "./directoriesApiTypes";
 import { FileInfo } from "src/files/filesApiTypes";
 import path from "path";
+import { User } from "src/models/user";
 
 @Injectable()
 export class DirectoriesService {
@@ -68,11 +69,49 @@ export class DirectoriesService {
 		fs.renameSync(dir, newDir);
 	}
 
+	public async createNewUserDir(user: User) {
+		fs.mkdirSync(path.join(process.env.CLOUD_DIR, user.email));
+	}
+
+	public async listrecursive(userId: number) {
+		const dir = await this.fileService.getUserRootPath(userId);
+		const files = this.getAllFiles(dir);
+
+		return files
+			.map((filedata) => {
+				return path.relative(dir, filedata.path);
+			})
+			.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+	}
+
 	public parent(_path: string) {
 		if (_path) {
 			return path.join(_path, "..");
 		} else {
 			return "";
 		}
+	}
+
+	private getAllFiles(path: string) {
+		const entries = fs.readdirSync(path, { withFileTypes: true });
+
+		// Get files within the current directory and add a path key to the file objects
+		const files = entries
+			.filter((file) => !file.isDirectory())
+			.map((file) => ({ ...file, path: path + "/" + file.name }));
+
+		// Get folders within the current directory
+		const folders = entries.filter((folder) => folder.isDirectory());
+
+		/*
+			  Add the found files within the subdirectory to the files array by calling the
+			  current function itself
+			*/
+
+		for (const folder of folders) {
+			files.push(...this.getAllFiles(`${path}/${folder.name}/`));
+		}
+
+		return files;
 	}
 }

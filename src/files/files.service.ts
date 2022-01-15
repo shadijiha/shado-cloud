@@ -163,7 +163,7 @@ export class FilesService {
 		if (!user)
 			throw new HttpException(
 				{
-					errors: ["Invalid user Id"],
+					errors: [{ field: "", message: "Invalid user Id" }],
 				},
 				400
 			);

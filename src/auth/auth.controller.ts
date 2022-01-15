@@ -13,6 +13,8 @@ import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response, Request } from "express";
+import { use } from "passport";
+import { DirectoriesService } from "src/directories/directories.service";
 import { User } from "src/models/user";
 import { AuthUser } from "src/util";
 import { AuthService } from "./auth.service";
@@ -23,7 +25,8 @@ import { LoginRequest, LoginResponse, RegisterRequest } from "./authApiTypes";
 export class AuthController {
 	constructor(
 		private jwtService: JwtService,
-		private authService: AuthService
+		private authService: AuthService,
+		private directoryService: DirectoriesService
 	) {}
 
 	@Post("login")
@@ -59,13 +62,18 @@ export class AuthController {
 		// Check if user exists
 		let user = await this.authService.getByEmail(body.email);
 		if (user) {
-			return {
+			response.send({
 				user: null,
 				errors: [{ field: "email", message: "email is taken" }],
-			};
+			});
+			return;
 		}
 
+		// Create user
 		user = await this.authService.new(body.name, body.email, body.password);
+
+		// Create his directory
+		await this.directoryService.createNewUserDir(user);
 
 		// Otherwise OK
 		this.createAuthCookie(user, response);

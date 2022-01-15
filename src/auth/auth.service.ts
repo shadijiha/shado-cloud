@@ -14,8 +14,7 @@ export class AuthService {
 		user.email = email;
 		user.password = await argon2.hash(password);
 		user.name = name;
-		user.save();
-		return user;
+		return await user.save();
 	}
 
 	public async getById(userId: number) {
