@@ -4,6 +4,7 @@ import {
 	Get,
 	Logger,
 	Post,
+	Put,
 	Req,
 	Res,
 	UseGuards,
@@ -68,6 +69,16 @@ export class AuthController {
 
 		// Otherwise OK
 		this.createAuthCookie(user, response);
+	}
+
+	@Put("logout")
+	async logout(@Res() response: Response) {
+		response
+			.clearCookie(process.env.COOKIE_NAME, {
+				httpOnly: true,
+				domain: process.env.BACKEND_HOST, // your domain here!
+			})
+			.send();
 	}
 
 	@Get("me")
