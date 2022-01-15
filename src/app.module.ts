@@ -3,9 +3,9 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { AuthModule } from "./auth/auth.module";
-import { FilesModule } from './files/files.module';
-import { DirectoriesModule } from './directories/directories.module';
-import { TempUrlModule } from './temp-url/temp-url.module';
+import { FilesModule } from "./files/files.module";
+import { DirectoriesModule } from "./directories/directories.module";
+import { TempUrlModule } from "./temp-url/temp-url.module";
 
 @Module({
 	imports: [
@@ -30,5 +30,6 @@ import { TempUrlModule } from './temp-url/temp-url.module';
 export class AppModule {}
 
 function isDev() {
-	return process.env.ENV == "dev";
+	return true;
+	//return process.env.ENV == "dev";
 }
