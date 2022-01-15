@@ -70,7 +70,8 @@ export class DirectoriesService {
 	}
 
 	public async createNewUserDir(user: User) {
-		fs.mkdirSync(path.join(process.env.CLOUD_DIR, user.email));
+		if (!fs.existsSync(path.join(process.env.CLOUD_DIR, user.email)))
+			fs.mkdirSync(path.join(process.env.CLOUD_DIR, user.email));
 	}
 
 	public async listrecursive(userId: number) {
