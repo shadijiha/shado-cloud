@@ -37,14 +37,12 @@ export class TempUrlConstoller {
 		@AuthUser() userId: number,
 		@Body() options: TempURLGenerateOptions
 	): Promise<TempURLGenerateResponse> {
-		const backendurl = request.protocol + "://" + request.get("host");
 		return {
 			url: await this.tempUrlService.generate(
 				userId,
 				options.filepath,
 				options.max_requests,
-				options.expires_at,
-				backendurl
+				options.expires_at
 			),
 		};
 	}

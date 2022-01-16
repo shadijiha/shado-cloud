@@ -17,8 +17,7 @@ export class TempUrlService {
 		userId: number,
 		filepath: string,
 		max_requests: number,
-		expires_at: Date,
-		backendUrl: string
+		expires_at: Date
 	): Promise<string> {
 		const dir = await this.fileService.absolutePath(userId, filepath);
 
@@ -30,7 +29,7 @@ export class TempUrlService {
 		tempUrl.filepath = dir;
 		tempUrl.save();
 
-		return backendUrl + "/temp/" + tempUrl.url + "/get";
+		return process.env.BACKEND_HOST + "/temp/" + tempUrl.url + "/get";
 	}
 
 	public async asStream(tempUrl: string) {
