@@ -39,6 +39,10 @@ export class User extends BaseEntity {
 	logs: Log[];
 
 	@ApiProperty()
+	@Column({ default: false })
+	is_admin: boolean;
+
+	@ApiProperty()
 	@CreateDateColumn()
 	created_at: Date;
 

@@ -3,7 +3,6 @@ import { PATH_METADATA } from "@nestjs/common/constants";
 import { Logger } from "@nestjs/common";
 import { Log } from "./models/log";
 import { User } from "./models/user";
-import { REQUEST } from "@nestjs/core";
 import { RequestContext } from "nestjs-request-context";
 import { Request } from "express";
 

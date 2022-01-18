@@ -7,6 +7,7 @@ import { FilesModule } from "./files/files.module";
 import { DirectoriesModule } from "./directories/directories.module";
 import { TempUrlModule } from "./temp-url/temp-url.module";
 import { RequestContextModule } from "nestjs-request-context";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
 	imports: [
@@ -25,6 +26,7 @@ import { RequestContextModule } from "nestjs-request-context";
 		FilesModule,
 		DirectoriesModule,
 		TempUrlModule,
+		AdminModule,
 	],
 	controllers: [AppController],
 	providers: [AppService],
