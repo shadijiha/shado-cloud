@@ -32,25 +32,29 @@ export class AuthController {
 
 	@Post("login")
 	@ApiResponse({ type: LoginResponse })
-	async login(
-		@Body() body: LoginRequest,
-		@Res() response: Response
-	): Promise<LoginResponse> {
+	async login(@Body() body: LoginRequest, @Res() response: Response) {
 		// Check if user exists
 		const user = await this.authService.getByEmail(body.email);
 		if (user == null) {
-			return {
+			response.send({
 				user: null,
 				errors: [{ field: "email", message: "Invalid email" }],
-			};
+			});
+			return;
 		}
 
 		// Check if password maches
-		if (!this.authService.passwordMatch(user.id, body.password)) {
-			return {
+		const passwordResult = await this.authService.passwordMatch(
+			user.id,
+			body.password
+		);
+
+		if (!passwordResult) {
+			response.send({
 				user: null,
 				errors: [{ field: "password", message: "Invalid credentials" }],
-			};
+			});
+			return;
 		}
 
 		// Otherwise OK

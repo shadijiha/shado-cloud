@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { User } from "src/models/user";
 import { getConnection } from "typeorm";
-const argon2 = require("argon2");
+import argon2 from "argon2";
 
 @Injectable()
 export class AuthService {
@@ -30,6 +30,6 @@ export class AuthService {
 				id: userId,
 			})
 			.getOne();
-		return argon2.verify(user.password, password);
+		return await argon2.verify(user.password, password);
 	}
 }
