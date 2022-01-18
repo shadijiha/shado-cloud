@@ -15,6 +15,7 @@ import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response, Request } from "express";
 import { use } from "passport";
 import { DirectoriesService } from "src/directories/directories.service";
+import { errorLog } from "src/logging";
 import { User } from "src/models/user";
 import { AuthUser } from "src/util";
 import { AuthService } from "./auth.service";
@@ -93,7 +94,12 @@ export class AuthController {
 	@UseGuards(AuthGuard("jwt"))
 	@ApiResponse({ type: User })
 	async me(@AuthUser() userId: number, @Req() request: Request) {
-		return await this.authService.getById(userId);
+		try {
+			return await this.authService.getById(userId);
+		} catch (e) {
+			errorLog(e, AuthController, userId);
+			return null;
+		}
 	}
 
 	private createAuthCookie(user: User, response: Response): void {

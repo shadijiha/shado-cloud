@@ -17,6 +17,7 @@ import {
 	OperationStatus,
 	OperationStatusResponse,
 } from "src/files/filesApiTypes";
+import { errorLog } from "src/logging";
 import { AuthUser } from "src/util";
 import { DirectoriesService } from "./directories.service";
 import {
@@ -33,9 +34,16 @@ export class DirectoriesController {
 
 	@Get("root")
 	public async root(@AuthUser() userId: number) {
-		return {
-			rootDir: await this.directoriesService.root(userId),
-		};
+		try {
+			return {
+				rootDir: await this.directoriesService.root(userId),
+			};
+		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
+			return {
+				rootDir: "",
+			};
+		}
 	}
 
 	@Get("list/:path?")
@@ -55,6 +63,7 @@ export class DirectoriesController {
 				errors: [],
 			};
 		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				data: null,
@@ -70,6 +79,7 @@ export class DirectoriesController {
 		try {
 			return await this.directoriesService.listrecursive(userId);
 		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
 			return [];
 		}
 	}
@@ -83,6 +93,7 @@ export class DirectoriesController {
 				status: OperationStatus[OperationStatus.SUCCESS],
 			};
 		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 			};
@@ -98,6 +109,7 @@ export class DirectoriesController {
 				status: OperationStatus[OperationStatus.SUCCESS],
 			};
 		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],
@@ -117,6 +129,7 @@ export class DirectoriesController {
 				status: OperationStatus[OperationStatus.SUCCESS],
 			};
 		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],

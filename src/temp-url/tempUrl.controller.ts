@@ -16,6 +16,7 @@ import {
 	OperationStatus,
 	OperationStatusResponse,
 } from "src/files/filesApiTypes";
+import { errorLog } from "src/logging";
 import { TempUrl } from "src/models/tempUrl";
 import { AuthUser } from "src/util";
 import { TempUrlService } from "./tempUrl.service";
@@ -37,14 +38,21 @@ export class TempUrlConstoller {
 		@AuthUser() userId: number,
 		@Body() options: TempURLGenerateOptions
 	): Promise<TempURLGenerateResponse> {
-		return {
-			url: await this.tempUrlService.generate(
-				userId,
-				options.filepath,
-				options.max_requests,
-				options.expires_at
-			),
-		};
+		try {
+			return {
+				url: await this.tempUrlService.generate(
+					userId,
+					options.filepath,
+					options.max_requests,
+					options.expires_at
+				),
+			};
+		} catch (e) {
+			errorLog(e, TempUrlConstoller, userId);
+			return {
+				url: "",
+			};
+		}
 	}
 
 	@Get(":tempUrl/get")
@@ -57,6 +65,7 @@ export class TempUrlConstoller {
 			file.stream.pipe(res);
 			return;
 		} catch (e) {
+			errorLog(e, TempUrlConstoller);
 			res.send({
 				errors: [{ field: "url", message: (<Error>e).message }],
 			});
@@ -70,6 +79,7 @@ export class TempUrlConstoller {
 		try {
 			return await this.tempUrlService.all(userId);
 		} catch (e) {
+			errorLog(e, TempUrlConstoller, userId);
 			return [];
 		}
 	}
@@ -89,6 +99,7 @@ export class TempUrlConstoller {
 				errors: [],
 			};
 		} catch (e) {
+			errorLog(e, TempUrlConstoller, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],

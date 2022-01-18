@@ -22,6 +22,7 @@ import {
 	ApiTags,
 } from "@nestjs/swagger";
 import { Response } from "express";
+import { errorLog } from "src/logging";
 import { ApiFile, AuthUser } from "src/util";
 import { FilesService } from "./files.service";
 import {
@@ -55,6 +56,7 @@ export class FilesConstoller {
 			const file = await this.fileService.asStream(userId, path);
 			file.pipe(res);
 		} catch (e) {
+			errorLog(e, FilesConstoller, userId);
 			res.send({
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "path", message: (<Error>e).message }],
@@ -73,7 +75,7 @@ export class FilesConstoller {
 		@Body() body: { dest: string }
 	) {
 		const data = await this.fileService.upload(userId, file, body.dest);
-		return this.returnObject(data);
+		return this.returnObject(data, userId);
 	}
 
 	@Post("new")
@@ -83,7 +85,7 @@ export class FilesConstoller {
 		@AuthUser() userId: number
 	): Promise<OperationStatusResponse> {
 		const data = await this.fileService.new(userId, body.name);
-		return this.returnObject(data);
+		return this.returnObject(data, userId);
 	}
 
 	@Patch("save")
@@ -98,7 +100,7 @@ export class FilesConstoller {
 			body.content,
 			body.append
 		);
-		return this.returnObject(data);
+		return this.returnObject(data, userId);
 	}
 
 	@Delete("delete")
@@ -109,7 +111,7 @@ export class FilesConstoller {
 	) {
 		const data = await this.fileService.delete(userId, body.name);
 
-		return this.returnObject(data);
+		return this.returnObject(data, userId);
 	}
 
 	@Patch("rename")
@@ -119,7 +121,7 @@ export class FilesConstoller {
 		@AuthUser() userId: number
 	) {
 		const data = await this.fileService.rename(userId, body.name, body.newName);
-		return this.returnObject(data);
+		return this.returnObject(data, userId);
 	}
 
 	@Get("info/:path")
@@ -137,6 +139,7 @@ export class FilesConstoller {
 				errors: [],
 			};
 		} catch (e) {
+			errorLog(e, FilesConstoller, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				data: null,
@@ -145,13 +148,14 @@ export class FilesConstoller {
 		}
 	}
 
-	private returnObject([success, message]: [boolean, string]) {
+	private returnObject([success, message]: [boolean, string], userId?: number) {
 		if (success) {
 			return {
 				status: OperationStatus[OperationStatus.SUCCESS],
 				errors: [],
 			};
 		} else {
+			errorLog(new Error(message), FilesConstoller, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message }],

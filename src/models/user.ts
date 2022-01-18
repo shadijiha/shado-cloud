@@ -8,6 +8,7 @@ import {
 	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from "typeorm";
+import { Log } from "./log";
 import { TempUrl } from "./tempUrl";
 import { UploadedFile } from "./uploadedFile";
 
@@ -33,6 +34,9 @@ export class User extends BaseEntity {
 
 	@OneToMany(() => TempUrl, (url) => url.user)
 	temp_urls: TempUrl[];
+
+	@OneToMany(() => Log, (log) => log.user)
+	logs: Log[];
 
 	@ApiProperty()
 	@CreateDateColumn()
