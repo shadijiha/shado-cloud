@@ -1,7 +1,11 @@
+import "reflect-metadata";
 import { PATH_METADATA } from "@nestjs/common/constants";
 import { Logger } from "@nestjs/common";
 import { Log } from "./models/log";
 import { User } from "./models/user";
+import { REQUEST } from "@nestjs/core";
+import { RequestContext } from "nestjs-request-context";
+import { Request } from "express";
 
 export function errorLog(e: Error | any, source: Function, userId?: number) {
 	logHelper(e, source, "error", userId);
@@ -35,7 +39,7 @@ async function logHelper(
 	const log = new Log();
 	log.message = e.message;
 	log.controller = source.name;
-	log.route = getRoute(source);
+	log.route = getRoute();
 	log.type = type;
 
 	// Get user
@@ -49,9 +53,12 @@ async function logHelper(
 	log.save();
 }
 
-function getRoute(controller: Function) {
-	let routePath = Reflect.getMetadata(PATH_METADATA, controller);
-	routePath +=
-		"/" + Reflect.getMetadata(PATH_METADATA, controller.prototype.serveStatic);
-	return routePath;
+function getRoute() {
+	try {
+		const req: Request = RequestContext.currentContext.req;
+		let routePath = req.originalUrl;
+		return routePath;
+	} catch (e) {
+		Logger.debug((e as Error).message);
+	}
 }

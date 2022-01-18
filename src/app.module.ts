@@ -6,9 +6,11 @@ import { AuthModule } from "./auth/auth.module";
 import { FilesModule } from "./files/files.module";
 import { DirectoriesModule } from "./directories/directories.module";
 import { TempUrlModule } from "./temp-url/temp-url.module";
+import { RequestContextModule } from "nestjs-request-context";
 
 @Module({
 	imports: [
+		RequestContextModule,
 		AuthModule,
 		TypeOrmModule.forRoot({
 			type: process.env.DB_TYPE as any,
