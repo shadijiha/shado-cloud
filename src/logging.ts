@@ -40,6 +40,8 @@ async function logHelper(
 	log.controller = source.name;
 	log.route = getRoute();
 	log.type = type;
+	log.userAgent = getUserAgent();
+	log.ipAddress = getIp();
 
 	// Get user
 	if (userId) {
@@ -57,6 +59,30 @@ function getRoute() {
 		const req: Request = RequestContext.currentContext.req;
 		let routePath = req.originalUrl;
 		return routePath;
+	} catch (e) {
+		Logger.debug((e as Error).message);
+	}
+}
+
+function getUserAgent() {
+	try {
+		const req: Request = RequestContext.currentContext.req;
+		return req.headers["user-agent"];
+	} catch (e) {
+		Logger.debug((e as Error).message);
+	}
+}
+
+function getIp() {
+	try {
+		const req: Request = RequestContext.currentContext.req;
+
+		if (req.ip == "127.0.0.1" || req.ip == "localhost" || req.ip == "::1") {
+			const ips = req.headers["x-forwarded-for"];
+			return ips instanceof Array ? (<Array<string>>ips).join(",") : ips;
+		} else {
+			return req.ip;
+		}
 	} catch (e) {
 		Logger.debug((e as Error).message);
 	}

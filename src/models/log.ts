@@ -35,6 +35,14 @@ export class Log extends BaseEntity {
 	@ApiProperty()
 	user: User;
 
+	@Column({ nullable: true })
+	@ApiProperty()
+	userAgent: string;
+
+	@Column({ nullable: true })
+	@ApiProperty()
+	ipAddress: string;
+
 	@CreateDateColumn()
 	@ApiProperty()
 	created_at: Date;
