@@ -16,7 +16,7 @@ import {
 	OperationStatus,
 	OperationStatusResponse,
 } from "src/files/filesApiTypes";
-import { errorLog } from "src/logging";
+import { errorLog, warnLog } from "src/logging";
 import { TempUrl } from "src/models/tempUrl";
 import { AuthUser } from "src/util";
 import { TempUrlService } from "./tempUrl.service";
@@ -65,7 +65,7 @@ export class TempUrlConstoller {
 			file.stream.pipe(res);
 			return;
 		} catch (e) {
-			errorLog(e, TempUrlConstoller);
+			warnLog(e, TempUrlConstoller);
 			res.send({
 				errors: [{ field: "url", message: (<Error>e).message }],
 			});
