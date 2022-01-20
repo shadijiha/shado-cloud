@@ -77,7 +77,11 @@ function getIp() {
 	try {
 		const req: Request = RequestContext.currentContext.req;
 
-		if (req.ip == "127.0.0.1" || req.ip == "localhost" || req.ip == "::1") {
+		if (
+			req.ip.includes("127.0.0.1") ||
+			req.ip.includes("localhost") ||
+			req.ip == "::1"
+		) {
 			const ips = req.headers["x-forwarded-for"];
 			return ips instanceof Array ? (<Array<string>>ips).join(",") : ips;
 		} else {
