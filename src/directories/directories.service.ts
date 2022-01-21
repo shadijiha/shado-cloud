@@ -6,6 +6,9 @@ import { DirectoryInfo } from "./directoriesApiTypes";
 import { FileInfo } from "src/files/filesApiTypes";
 import path from "path";
 import { User } from "src/models/user";
+import archiver from "archiver";
+import extract from "extract-zip";
+import { errorLog } from "src/logging";
 
 @Injectable()
 export class DirectoriesService {
@@ -83,6 +86,34 @@ export class DirectoriesService {
 				return path.relative(dir, filedata.path);
 			})
 			.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+	}
+
+	public async zip(userId: number, name: string) {
+		const dir = await this.fileService.absolutePath(userId, name);
+
+		if (!fs.lstatSync(dir).isDirectory()) {
+			throw new Error("FIle to zip must be a directory");
+		}
+
+		const output = fs.createWriteStream(dir + ".zip");
+		const archive = archiver("zip");
+
+		archive.on("error", function (err) {
+			errorLog(err, DirectoriesService, userId);
+		});
+		archive.pipe(output);
+		archive.directory(dir, false);
+		archive.finalize();
+	}
+
+	public async unzip(userId: number, name: string) {
+		const dir = await this.fileService.absolutePath(userId, name);
+		const fileFullName = path.basename(dir);
+		const fileName = path.parse(fileFullName).name;
+		const dirPath = path.dirname(dir);
+		const outputPath = path.join(dirPath, fileName);
+
+		await extract(dir, { dir: outputPath });
 	}
 
 	public parent(_path: string) {

@@ -136,4 +136,48 @@ export class DirectoriesController {
 			};
 		}
 	}
+
+	@Patch("zip")
+	@ApiResponse({ type: OperationStatusResponse })
+	public zip(
+		@AuthUser() userId: number,
+		@Body() body: NewDirRequest
+	): OperationStatusResponse {
+		try {
+			this.directoriesService
+				.zip(userId, body.name)
+				.catch((e) => errorLog(e, DirectoriesController, userId));
+			return {
+				status: OperationStatus[OperationStatus.ONGOING],
+				errors: [],
+			};
+		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "", message: (<Error>e).message }],
+			};
+		}
+	}
+
+	@Patch("unzip")
+	@ApiResponse({ type: OperationStatusResponse })
+	public unzip(@AuthUser() userId: number, @Body() body: NewDirRequest) {
+		try {
+			this.directoriesService
+				.unzip(userId, body.name)
+				.catch((e) => errorLog(e, DirectoriesController, userId));
+
+			return {
+				status: OperationStatus[OperationStatus.ONGOING],
+				errors: [],
+			};
+		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "", message: (<Error>e).message }],
+			};
+		}
+	}
 }
