@@ -51,7 +51,7 @@ export class DirectoriesService {
 				return a.is_dir ? -1 : 1;
 			}
 
-			if (a.name > b.name) return 1;
+			if (a.name.toLowerCase() > b.name.toLowerCase()) return 1;
 			else return -1;
 		});
 	}
