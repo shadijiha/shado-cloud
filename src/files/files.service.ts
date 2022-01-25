@@ -23,12 +23,12 @@ export class FilesService {
 		file: Express.Multer.File,
 		dest: string
 	): FileServiceResult {
-		const dir = await this.absolutePath(
-			userId,
-			path.join(dest, file.originalname)
-		);
-
 		try {
+			const dir = await this.absolutePath(
+				userId,
+				path.join(dest, file.originalname)
+			);
+
 			fs.writeFileSync(dir, file.buffer);
 
 			const fileDB = new UploadedFile();
@@ -44,9 +44,8 @@ export class FilesService {
 	}
 
 	public async new(userId: number, name: string): FileServiceResult {
-		const dir = path.join(await this.getUserRootPath(userId), name);
-
 		try {
+			const dir = path.join(await this.getUserRootPath(userId), name);
 			fs.writeFileSync(dir, "");
 
 			// Register file in DB
@@ -69,10 +68,8 @@ export class FilesService {
 		content: string,
 		append: boolean = false
 	): FileServiceResult {
-		const dir = await this.absolutePath(userId, fileRelativePath);
-
-		Logger.debug(dir);
 		try {
+			const dir = await this.absolutePath(userId, fileRelativePath);
 			if (append) {
 				fs.appendFileSync(dir, content);
 			} else {
@@ -86,9 +83,8 @@ export class FilesService {
 	}
 
 	public async delete(userId: number, relativePath: string): FileServiceResult {
-		const dir = await this.absolutePath(userId, relativePath);
-
 		try {
+			const dir = await this.absolutePath(userId, relativePath);
 			fs.unlinkSync(dir);
 
 			// See if file is in DB, if yes, then delete it
@@ -106,10 +102,9 @@ export class FilesService {
 		name: string,
 		newName: string
 	): FileServiceResult {
-		const dir = await this.absolutePath(userId, name);
-		const newDir = await this.absolutePath(userId, newName);
-
 		try {
+			const dir = await this.absolutePath(userId, name);
+			const newDir = await this.absolutePath(userId, newName);
 			fs.renameSync(dir, newDir);
 
 			// Rename file in DB
