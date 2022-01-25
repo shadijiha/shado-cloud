@@ -7,6 +7,7 @@ import {
 	Param,
 	Patch,
 	Post,
+	Query,
 	Res,
 	UploadedFile,
 	UseGuards,
@@ -33,7 +34,6 @@ import {
 	RenameFileRequest,
 	SaveFileRequest,
 } from "./filesApiTypes";
-
 @Controller("file")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Files")
@@ -145,6 +145,39 @@ export class FilesConstoller {
 				data: null,
 				errors: [],
 			};
+		}
+	}
+
+	@Get("thumbnail/:path")
+	@ApiResponse({
+		description: "Returns a thumnail stream of the requested file",
+	})
+	@ApiParam({
+		name: "path",
+		description: "File relative path + file name + extension",
+		type: String,
+	})
+	public async thumbnail(
+		@Param("path") path: string,
+		@AuthUser() userId: number,
+		@Res() res: Response,
+		@Query("width") width: number | undefined,
+		@Query("height") height: number | undefined
+	) {
+		try {
+			const stream = await this.fileService.toThumbnail(
+				path,
+				userId,
+				width,
+				height
+			);
+			stream.pipe(res);
+		} catch (e) {
+			errorLog(e, FilesConstoller, userId);
+			res.send({
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "path", message: (<Error>e).message }],
+			});
 		}
 	}
 
