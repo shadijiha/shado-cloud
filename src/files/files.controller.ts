@@ -74,8 +74,9 @@ export class FilesConstoller {
 		@UploadedFile() file: Express.Multer.File,
 		@Body() body: { dest: string }
 	) {
-		const data = await this.fileService.upload(userId, file, body.dest);
-		return this.returnObject(data, userId);
+		return await this.errorWrapper(async () => {
+			await this.fileService.upload(userId, file, body.dest);
+		}, userId);
 	}
 
 	@Post("new")
@@ -84,8 +85,9 @@ export class FilesConstoller {
 		@Body() body: NewFileRequest,
 		@AuthUser() userId: number
 	): Promise<OperationStatusResponse> {
-		const data = await this.fileService.new(userId, body.name);
-		return this.returnObject(data, userId);
+		return await this.errorWrapper(async () => {
+			await this.fileService.new(userId, body.name);
+		}, userId);
 	}
 
 	@Patch("save")
@@ -94,13 +96,24 @@ export class FilesConstoller {
 		@Body() body: SaveFileRequest,
 		@AuthUser() userId: number
 	): Promise<OperationStatusResponse> {
-		const data = await this.fileService.save(
+		const [success, message] = await this.fileService.save(
 			userId,
 			body.name,
 			body.content,
 			body.append
 		);
-		return this.returnObject(data, userId);
+		if (success) {
+			return {
+				status: OperationStatus[OperationStatus.SUCCESS],
+				errors: [],
+			};
+		} else {
+			errorLog(new Error(message), FilesConstoller, userId);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "", message }],
+			};
+		}
 	}
 
 	@Delete("delete")
@@ -109,9 +122,19 @@ export class FilesConstoller {
 		@Body() body: NewFileRequest,
 		@AuthUser() userId: number
 	) {
-		const data = await this.fileService.delete(userId, body.name);
-
-		return this.returnObject(data, userId);
+		const [success, message] = await this.fileService.delete(userId, body.name);
+		if (success) {
+			return {
+				status: OperationStatus[OperationStatus.SUCCESS],
+				errors: [],
+			};
+		} else {
+			errorLog(new Error(message), FilesConstoller, userId);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "", message }],
+			};
+		}
 	}
 
 	@Patch("rename")
@@ -120,8 +143,9 @@ export class FilesConstoller {
 		@Body() body: RenameFileRequest,
 		@AuthUser() userId: number
 	) {
-		const data = await this.fileService.rename(userId, body.name, body.newName);
-		return this.returnObject(data, userId);
+		return await this.errorWrapper(async () => {
+			await this.fileService.rename(userId, body.name, body.newName);
+		}, userId);
 	}
 
 	@Get("info/:path")
@@ -181,17 +205,20 @@ export class FilesConstoller {
 		}
 	}
 
-	private returnObject([success, message]: [boolean, string], userId?: number) {
-		if (success) {
-			return {
-				status: OperationStatus[OperationStatus.SUCCESS],
-				errors: [],
-			};
-		} else {
-			errorLog(new Error(message), FilesConstoller, userId);
+	private async errorWrapper(func: () => any, userId?: number) {
+		try {
+			const data = await func();
+			return (
+				data || {
+					status: OperationStatus[OperationStatus.SUCCESS],
+					errors: [],
+				}
+			);
+		} catch (e) {
+			errorLog(e, FilesConstoller, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
-				errors: [{ field: "", message }],
+				errors: [{ field: "", message: (<Error>e).message }],
 			};
 		}
 	}

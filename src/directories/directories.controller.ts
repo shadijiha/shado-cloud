@@ -86,16 +86,21 @@ export class DirectoriesController {
 
 	@Post("new")
 	@ApiResponse({ type: OperationStatusResponse })
-	public async new(@AuthUser() userId: number, @Body() body: NewDirRequest) {
+	public async new(
+		@AuthUser() userId: number,
+		@Body() body: NewDirRequest
+	): Promise<OperationStatusResponse> {
 		try {
 			await this.directoriesService.new(userId, body.name);
 			return {
 				status: OperationStatus[OperationStatus.SUCCESS],
+				errors: [],
 			};
 		} catch (e) {
 			errorLog(e, DirectoriesController, userId);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "path", message: (<Error>e).message }],
 			};
 		}
 	}

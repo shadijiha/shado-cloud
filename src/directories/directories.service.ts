@@ -58,6 +58,9 @@ export class DirectoriesService {
 
 	public async new(userId: number, name: string) {
 		const dir = await this.fileService.absolutePath(userId, name);
+
+		this.fileService.verifyFileName(dir);
+
 		fs.mkdirSync(dir, { recursive: true });
 	}
 
@@ -69,6 +72,7 @@ export class DirectoriesService {
 	public async rename(userId: number, name: string, newName: string) {
 		const dir = await this.fileService.absolutePath(userId, name);
 		const newDir = await this.fileService.absolutePath(userId, newName);
+		this.fileService.verifyFileName(newDir);
 		fs.renameSync(dir, newDir);
 	}
 

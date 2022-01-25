@@ -5,6 +5,7 @@ import { Log } from "./models/log";
 import { User } from "./models/user";
 import { RequestContext } from "nestjs-request-context";
 import { Request } from "express";
+import { SoftException } from "./util";
 
 export function errorLog(e: Error | any, source: Function, userId?: number) {
 	logHelper(e, source, "error", userId);
@@ -24,6 +25,9 @@ async function logHelper(
 	type: "error" | "info" | "warn",
 	userId?: number
 ) {
+	// IF it is a softexception, don't log it
+	if (e instanceof SoftException) return;
+
 	switch (type) {
 		case "error":
 			Logger.error(e.message);

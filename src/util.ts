@@ -75,3 +75,12 @@ export function enumToArray(_enum: Enum): string[] {
 		.filter((value) => typeof value === "string")
 		.map((value) => value as string);
 }
+
+/**
+ * A soft exception is an exception that doesn't need to be logged
+ */
+export class SoftException extends Error {
+	public constructor(message?: string) {
+		super(message);
+	}
+}

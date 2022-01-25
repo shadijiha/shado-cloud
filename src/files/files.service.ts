@@ -7,6 +7,7 @@ import mmmagic from "mmmagic";
 import { TempUrl } from "src/models/tempUrl";
 import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
+import { SoftException } from "src/util";
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
@@ -28,9 +29,9 @@ export class FilesService {
 		try {
 			const dir = await this.absolutePath(
 				userId,
-				path.join(dest, file.originalname)
+				path.join(dest, this.replaceIllegalChars(file.originalname))
 			);
-
+			Logger.debug(dir);
 			fs.writeFileSync(dir, file.buffer);
 
 			const fileDB = new UploadedFile();
@@ -48,6 +49,9 @@ export class FilesService {
 	public async new(userId: number, name: string): FileServiceResult {
 		try {
 			const dir = path.join(await this.getUserRootPath(userId), name);
+
+			this.verifyFileName(dir);
+
 			fs.writeFileSync(dir, "");
 
 			// Register file in DB
@@ -103,24 +107,21 @@ export class FilesService {
 		userId: number,
 		name: string,
 		newName: string
-	): FileServiceResult {
-		try {
-			const dir = await this.absolutePath(userId, name);
-			const newDir = await this.absolutePath(userId, newName);
-			fs.renameSync(dir, newDir);
+	): Promise<void> {
+		const dir = await this.absolutePath(userId, name);
+		const newDir = await this.absolutePath(userId, newName);
 
-			// Rename file in DB
-			const file = await UploadedFile.findOne({
-				where: { absolute_path: dir },
-			});
-			if (file) {
-				file.absolute_path = newDir;
-				file.save();
-			}
+		this.verifyFileName(newDir);
 
-			return [true, ""];
-		} catch (e) {
-			return [false, (<Error>e).message];
+		fs.renameSync(dir, newDir);
+
+		// Rename file in DB
+		const file = await UploadedFile.findOne({
+			where: { absolute_path: dir },
+		});
+		if (file) {
+			file.absolute_path = newDir;
+			file.save();
 		}
 	}
 
@@ -222,5 +223,73 @@ export class FilesService {
 				resolve(result);
 			});
 		});
+	}
+
+	public verifyFileName(fullpath: string) {
+		// Verify that the user is not creating a hidden folder
+		const basename = path.basename(fullpath);
+		if (basename.startsWith("."))
+			throw new SoftException("Directory/File name cannot start with '.'");
+
+		// Check for illegal chars
+		const illegal = [
+			"?",
+			"!",
+			"[",
+			"]",
+			"{",
+			"}",
+			"/",
+			"\\",
+			"*",
+			"<",
+			">",
+			"|",
+			'"',
+			"'",
+			":",
+			"@",
+		];
+		for (const c of illegal) {
+			if (basename.includes(c))
+				throw new SoftException("Directory/File name cannot contain " + c);
+		}
+	}
+
+	private replaceIllegalChars(filename: string) {
+		// Verify that the user is not creating a hidden folder
+		let basename = path.basename(filename);
+		while (basename.startsWith(".")) {
+			basename = basename.substring(1);
+		}
+
+		// Check for illegal chars
+		const illegal = [
+			"?",
+			"!",
+			"[",
+			"]",
+			"{",
+			"}",
+			"/",
+			"\\",
+			"*",
+			"<",
+			">",
+			"|",
+			'"',
+			"'",
+			"@",
+			":",
+		];
+		for (const c of illegal) {
+			basename = basename.replace(new RegExp(`\\${c}`, "g"), "");
+		}
+
+		// Check if the name is empty after replacing stuff
+		if (basename == "")
+			basename = new Date().toLocaleDateString().replace(":", "-");
+
+		return basename;
 	}
 }
