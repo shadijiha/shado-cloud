@@ -8,6 +8,7 @@ import {
 	Req,
 	Res,
 	UseGuards,
+	UsePipes,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
@@ -20,6 +21,7 @@ import { User } from "src/models/user";
 import { AuthUser } from "src/util";
 import { AuthService } from "./auth.service";
 import { LoginRequest, LoginResponse, RegisterRequest } from "./authApiTypes";
+import { ValidationPipeline } from "./ValidationPipeline";
 
 @Controller("auth")
 @ApiTags("Authentication")
@@ -31,6 +33,7 @@ export class AuthController {
 	) {}
 
 	@Post("login")
+	@UsePipes(new ValidationPipeline())
 	@ApiResponse({ type: LoginResponse })
 	async login(@Body() body: LoginRequest, @Res() response: Response) {
 		// Check if user exists
@@ -62,6 +65,7 @@ export class AuthController {
 	}
 
 	@Post("register")
+	@UsePipes(new ValidationPipeline())
 	@ApiResponse({ type: LoginResponse })
 	async register(@Body() body: RegisterRequest, @Res() response: Response) {
 		// Check if user exists

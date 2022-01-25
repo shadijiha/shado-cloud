@@ -2,6 +2,7 @@
  * Types for all The Requests and Responses of the Auth Controller
  */
 import { ApiProperty } from "@nestjs/swagger";
+import { IsEmail, IsNotEmpty } from "class-validator";
 import { User } from "src/models/user";
 
 class FieldError {
@@ -20,9 +21,11 @@ export class ErrorProne {
 // Login
 export class LoginRequest {
 	@ApiProperty()
+	@IsEmail()
 	email: string;
 
 	@ApiProperty()
+	@IsNotEmpty()
 	password: string;
 }
 
@@ -34,10 +37,13 @@ export class LoginResponse extends ErrorProne {
 // Register
 export class RegisterRequest {
 	@ApiProperty()
+	@IsNotEmpty()
 	name: string;
 	@ApiProperty()
+	@IsEmail()
 	email: string;
 	@ApiProperty()
+	@IsNotEmpty()
 	password: string;
 }
 
