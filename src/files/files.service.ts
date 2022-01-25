@@ -167,7 +167,9 @@ export class FilesService {
 		if (mime.includes("image")) {
 			if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
-			const resized = sharp().resize(Number(width), height);
+			const resized = sharp()
+				.resize(Number(width) || undefined, Number(height) || undefined)
+				.withMetadata();
 
 			return fs.createReadStream(dir).pipe(resized);
 		} else {
