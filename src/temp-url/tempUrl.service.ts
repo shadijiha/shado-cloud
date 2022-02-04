@@ -4,7 +4,8 @@ import path from "path";
 import { AuthService } from "src/auth/auth.service";
 import { FilesService } from "src/files/files.service";
 import { TempUrl } from "src/models/tempUrl";
-import { User } from "src/models/user";
+import fs from "fs";
+import { SoftException } from "src/util";
 
 @Injectable()
 export class TempUrlService {
@@ -17,7 +18,8 @@ export class TempUrlService {
 		userId: number,
 		filepath: string,
 		max_requests: number,
-		expires_at: Date
+		expires_at: Date,
+		is_readonly: boolean
 	): Promise<string> {
 		const dir = await this.fileService.absolutePath(userId, filepath);
 
@@ -27,6 +29,7 @@ export class TempUrlService {
 		tempUrl.max_requests = max_requests;
 		tempUrl.expires_at = expires_at;
 		tempUrl.filepath = dir;
+		tempUrl.is_readonly = is_readonly;
 		tempUrl.save();
 
 		return process.env.BACKEND_HOST + "/temp/" + tempUrl.url + "/get";
@@ -36,11 +39,11 @@ export class TempUrlService {
 		// Get temp url
 		const temp = await TempUrl.findOne({ where: { url: tempUrl } });
 		if (!temp) {
-			throw new Error("Invalid temporary URL");
+			throw new SoftException("Invalid temporary URL");
 		}
 
 		if (!this.verifyUrlConditions(temp)) {
-			throw new Error(
+			throw new SoftException(
 				"Max requests exhausted OR temporary URL expired OR url is readonly"
 			);
 		}
@@ -53,6 +56,30 @@ export class TempUrlService {
 			stream: createReadStream(dir),
 			filename: path.basename(temp.filepath),
 		};
+	}
+
+	public async save(tempUrl: string, content: string, append: boolean = false) {
+		// Get temp url
+		const temp = await TempUrl.findOne({ where: { url: tempUrl } });
+		if (!temp) {
+			throw new SoftException("Invalid temporary URL");
+		}
+
+		if (!this.verifyUrlConditions(temp, true)) {
+			throw new SoftException(
+				"Max requests exhausted OR temporary URL expired OR url is readonly"
+			);
+		}
+
+		temp.requests += 1;
+		temp.save();
+		const dir = temp.filepath;
+
+		if (append) {
+			fs.appendFileSync(dir, content);
+		} else {
+			fs.writeFileSync(dir, content);
+		}
 	}
 
 	public async all(userId: number) {
@@ -73,12 +100,12 @@ export class TempUrlService {
 		});
 
 		if (!tempUrl) {
-			throw new Error("Invalid temporary URL " + tempUrl.url);
+			throw new SoftException("Invalid temporary URL " + tempUrl.url);
 		}
 
 		// Check if user owns temp url
 		if (user.id != tempUrl.user.id) {
-			throw new Error("Cannot delete a temprary URL you don't own");
+			throw new SoftException("Cannot delete a temprary URL you don't own");
 		}
 
 		// Otherwise delete

@@ -23,3 +23,11 @@ export class TempURLGenerateResponse {
 	@ApiProperty()
 	url: string;
 }
+
+export class TempURLSaveRequest {
+	@ApiProperty()
+	content: string;
+
+	@ApiProperty({ default: false })
+	append: boolean;
+}

@@ -4,6 +4,7 @@ import {
 	Delete,
 	Get,
 	Param,
+	Patch,
 	Post,
 	Req,
 	Res,
@@ -23,6 +24,7 @@ import { TempUrlService } from "./tempUrl.service";
 import {
 	TempURLGenerateOptions,
 	TempURLGenerateResponse,
+	TempURLSaveRequest,
 } from "./tempUrlApiTypes";
 
 @Controller("temp")
@@ -44,7 +46,8 @@ export class TempUrlConstoller {
 					userId,
 					options.filepath,
 					options.max_requests,
-					options.expires_at
+					options.expires_at,
+					options.is_readonly
 				),
 			};
 		} catch (e) {
@@ -69,6 +72,27 @@ export class TempUrlConstoller {
 			res.send({
 				errors: [{ field: "url", message: (<Error>e).message }],
 			});
+		}
+	}
+
+	@Patch(":tempUrl/save")
+	@ApiResponse({ type: OperationStatusResponse })
+	public async save(
+		@Param("tempUrl") tempUrl: string,
+		@Body() body: TempURLSaveRequest
+	): Promise<OperationStatusResponse> {
+		try {
+			await this.tempUrlService.save(tempUrl, body.content, body.append);
+			return {
+				status: OperationStatus[OperationStatus.SUCCESS],
+				errors: [],
+			};
+		} catch (e) {
+			warnLog(e, TempUrlConstoller);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "url", message: (<Error>e).message }],
+			};
 		}
 	}
 
