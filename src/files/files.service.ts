@@ -5,9 +5,11 @@ import path from "path";
 import { UploadedFile } from "src/models/uploadedFile";
 import mmmagic from "mmmagic";
 import { TempUrl } from "src/models/tempUrl";
-import sharp from "sharp";
+import sharp, { cache } from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
 import { SoftException } from "src/util";
+import { use } from "passport";
+import { channel } from "diagnostics_channel";
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
@@ -162,23 +164,30 @@ export class FilesService {
 		height: number | undefined = undefined
 	) {
 		const dir = await this.absolutePath(userId, path_);
-		const mime = await this.detectFile(dir);
 
+		const cachedDir = await this.metaDataDir(
+			userId,
+			`thumbnail.${width ?? "auto"}.${height ?? "auto"}.${path
+				.basename(dir)
+				.replace(`thumbnail.${width ?? "auto"}.${height ?? "auto"}.`, "")}`
+		);
+		// If cached Image exists, then submit it
+		if (fs.existsSync(cachedDir)) {
+			return fs.createReadStream(cachedDir);
+		}
+
+		const mime = await this.detectFile(dir);
 		if (mime.includes("image")) {
 			if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
-
-			const resized = sharp()
+			const resized = await sharp()
 				.resize(Number(width) || undefined, Number(height) || undefined)
-				.withMetadata();
+				.withMetadata()
+				.toBuffer();
 
-			return fs.createReadStream(dir).pipe(resized);
+			fs.writeFileSync(cachedDir, resized);
+			return fs.createReadStream(cachedDir);
 		} else {
 			// If it is a video generate thumbnail
-			const thumbnailPath = path.join(
-				path.dirname(dir),
-				".videometa." + path.basename(dir) + ".png"
-			);
-
 			const thumbGen = new ThumbnailGenerator({
 				verbose: false, // Whether to print out warning/errors
 				size: [width ?? "?", height ?? "?"], // Default size, either a single number of an array of two numbers - [width, height].
@@ -187,15 +196,10 @@ export class FilesService {
 
 			await thumbGen.getThumbnail({
 				path: dir,
-				output: thumbnailPath,
+				output: cachedDir,
 			});
 
-			// Delete that thumbnail after 1 second (request sent)
-			setTimeout(() => {
-				fs.unlinkSync(thumbnailPath);
-			}, 1000);
-
-			return fs.createReadStream(thumbnailPath);
+			return fs.createReadStream(cachedDir);
 		}
 	}
 
@@ -293,5 +297,18 @@ export class FilesService {
 			basename = new Date().toLocaleDateString().replace(":", "-");
 
 		return basename;
+	}
+
+	private async metaDataDir(userId: number, filename?: string) {
+		const dir = await this.absolutePath(userId, ".metadata");
+		if (!fs.existsSync(dir)) {
+			fs.mkdirSync(dir);
+		}
+
+		if (filename) {
+			return path.join(dir, filename);
+		} else {
+			return dir;
+		}
 	}
 }
