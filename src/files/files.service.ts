@@ -46,26 +46,19 @@ export class FilesService {
 		}
 	}
 
-	public async new(userId: number, name: string): FileServiceResult {
-		try {
-			const dir = path.join(await this.getUserRootPath(userId), name);
+	public async new(userId: number, name: string): Promise<void> | never {
+		const dir = path.join(await this.getUserRootPath(userId), name);
 
-			this.verifyFileName(dir);
+		this.verifyFileName(dir);
 
-			fs.writeFileSync(dir, "");
+		fs.writeFileSync(dir, "");
 
-			// Register file in DB
-			const file = new UploadedFile();
-			file.user = await this.userService.getById(userId);
-			file.absolute_path = dir;
-			file.mime = "text/plain";
-			file.save();
-
-			return [true, ""];
-		} catch (e) {
-			const err = <Error>e;
-			return [false, err.message];
-		}
+		// Register file in DB
+		const file = new UploadedFile();
+		file.user = await this.userService.getById(userId);
+		file.absolute_path = dir;
+		file.mime = "text/plain";
+		file.save();
 	}
 
 	public async save(
@@ -107,7 +100,7 @@ export class FilesService {
 		userId: number,
 		name: string,
 		newName: string
-	): Promise<void> {
+	): Promise<void> | never {
 		const dir = await this.absolutePath(userId, name);
 		const newDir = await this.absolutePath(userId, newName);
 
