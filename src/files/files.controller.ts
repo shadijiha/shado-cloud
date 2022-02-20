@@ -8,6 +8,7 @@ import {
 	Patch,
 	Post,
 	Query,
+	Req,
 	Res,
 	UploadedFile,
 	UseGuards,
@@ -22,7 +23,7 @@ import {
 	ApiResponse,
 	ApiTags,
 } from "@nestjs/swagger";
-import { Response } from "express";
+import { Request, Response } from "express";
 import { errorLog } from "src/logging";
 import { ApiFile, AuthUser } from "src/util";
 import { FilesService } from "./files.service";
@@ -50,11 +51,57 @@ export class FilesConstoller {
 	public async getFile(
 		@Param("path") path: string,
 		@AuthUser() userId: number,
-		@Res() res: Response
+		@Res() res: Response,
+		@Req() req: Request
 	) {
 		try {
-			const file = await this.fileService.asStream(userId, path);
-			file.pipe(res);
+			const fileInto = await this.fileService.info(userId, path);
+
+			// In case that it is a video or audio
+			// We need to see if this request is for seeking
+			if (fileInto.is_video || fileInto.is_audio) {
+				/*res.set({
+					"Content-Type": fileInto.mime,
+					"Content-Disposition": `filename="${fileInto.name}"`,
+					"Content-Length": fileInto.size,
+				});*/
+
+				const total = fileInto.size;
+				if (req.headers.range) {
+					const range = req.headers.range;
+					const parts = range.replace(/bytes=/, "").split("-");
+					const partialstart = parts[0];
+					const partialend = parts[1];
+
+					const start = parseInt(partialstart, 10);
+					const end = partialend ? parseInt(partialend, 10) : total - 1;
+					const chunksize = end - start + 1;
+
+					const file = await this.fileService.asStream(userId, path, {
+						start: start,
+						end: end,
+					});
+					res.writeHead(206, {
+						"Content-Range": "bytes " + start + "-" + end + "/" + total,
+						"Accept-Ranges": "bytes",
+						"Content-Length": chunksize,
+						"Content-Type": fileInto.mime,
+					});
+
+					file.pipe(res);
+				} else {
+					res.writeHead(200, {
+						"Content-Length": total,
+						"Content-Type": fileInto.mime,
+					});
+					(await this.fileService.asStream(userId, path)).pipe(res);
+				}
+			}
+			// Otherwise for any other file just do a simple stream
+			else {
+				const file = await this.fileService.asStream(userId, path);
+				file.pipe(res);
+			}
 		} catch (e) {
 			errorLog(e, FilesConstoller, userId);
 			res.send({

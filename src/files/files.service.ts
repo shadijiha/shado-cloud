@@ -14,11 +14,11 @@ type FileServiceResult = Promise<[boolean, string]>;
 export class FilesService {
 	constructor(private userService: AuthService) {}
 
-	public async asStream(userId: number, relativePath: string) {
+	public async asStream(userId: number, relativePath: string, options?: any) {
 		const dir = await this.absolutePath(userId, relativePath);
 		if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
-		return createReadStream(dir);
+		return createReadStream(dir, options);
 	}
 
 	public async upload(
