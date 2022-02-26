@@ -21,14 +21,14 @@ export class TempUrlService {
 		expires_at: Date,
 		is_readonly: boolean
 	): Promise<string> {
-		const dir = await this.fileService.absolutePath(userId, filepath);
+		//const dir = await this.fileService.absolutePath(userId, filepath);
 
 		const tempUrl = new TempUrl();
 		tempUrl.user = await this.userService.getById(userId);
 		tempUrl.url = this.makeUrl();
 		tempUrl.max_requests = max_requests;
 		tempUrl.expires_at = expires_at;
-		tempUrl.filepath = dir;
+		tempUrl.filepath = filepath;
 		tempUrl.is_readonly = is_readonly;
 		tempUrl.save();
 
@@ -37,7 +37,10 @@ export class TempUrlService {
 
 	public async asStream(tempUrl: string) {
 		// Get temp url
-		const temp = await TempUrl.findOne({ where: { url: tempUrl } });
+		const temp = await TempUrl.findOne({
+			where: { url: tempUrl },
+			relations: ["user"],
+		});
 		if (!temp) {
 			throw new SoftException("Invalid temporary URL");
 		}
@@ -51,7 +54,10 @@ export class TempUrlService {
 		temp.requests += 1;
 		temp.save();
 
-		const dir = temp.filepath;
+		const dir = await this.fileService.absolutePath(
+			temp.user.id,
+			temp.filepath
+		);
 		return {
 			stream: createReadStream(dir),
 			filename: path.basename(temp.filepath),
