@@ -27,15 +27,18 @@ export class FilesService {
 		dest: string
 	): FileServiceResult {
 		try {
-			const dir = await this.absolutePath(
-				userId,
-				path.join(dest, this.replaceIllegalChars(file.originalname))
+			const cleanName = path.join(
+				dest,
+				this.replaceIllegalChars(file.originalname)
 			);
-			Logger.debug(dir);
+			const root = await this.getUserRootPath(userId);
+			const dir = await this.absolutePath(userId, cleanName);
+			const relative = path.relative(root, dir);
+
 			fs.writeFileSync(dir, file.buffer);
 
 			const fileDB = new UploadedFile();
-			fileDB.absolute_path = dir;
+			fileDB.absolute_path = relative;
 			fileDB.user = await this.userService.getById(userId);
 			fileDB.mime = file.mimetype;
 			fileDB.save();
@@ -47,7 +50,9 @@ export class FilesService {
 	}
 
 	public async new(userId: number, name: string): Promise<void> | never {
-		const dir = path.join(await this.getUserRootPath(userId), name);
+		const root = await this.getUserRootPath(userId);
+		const dir = path.join(root, name);
+		const relative = path.relative(root, dir);
 
 		this.verifyFileName(dir);
 
@@ -56,7 +61,7 @@ export class FilesService {
 		// Register file in DB
 		const file = new UploadedFile();
 		file.user = await this.userService.getById(userId);
-		file.absolute_path = dir;
+		file.absolute_path = relative;
 		file.mime = "text/plain";
 		file.save();
 	}
@@ -83,12 +88,14 @@ export class FilesService {
 
 	public async delete(userId: number, relativePath: string): FileServiceResult {
 		try {
+			const root = await this.getUserRootPath(userId);
 			const dir = await this.absolutePath(userId, relativePath);
+			const relative = path.relative(root, dir);
 			fs.unlinkSync(dir);
 
 			// See if file is in DB, if yes, then delete it
 			const user = await this.userService.getById(userId);
-			await UploadedFile.delete({ absolute_path: dir, user });
+			await UploadedFile.delete({ absolute_path: relative, user });
 
 			return [true, ""];
 		} catch (e) {
@@ -101,36 +108,45 @@ export class FilesService {
 		name: string,
 		newName: string
 	): Promise<void> | never {
+		const root = await this.getUserRootPath(userId);
 		const dir = await this.absolutePath(userId, name);
 		const newDir = await this.absolutePath(userId, newName);
+		const relative = path.relative(root, dir);
+		const relativeNew = path.relative(root, newDir);
 
 		this.verifyFileName(newDir);
 
 		fs.renameSync(dir, newDir);
 
 		// Rename file in DB
+		const user = await this.userService.getById(userId);
 		const file = await UploadedFile.findOne({
-			where: { absolute_path: dir },
+			where: { absolute_path: relative, user },
 		});
+		Logger.debug(name);
 		if (file) {
-			file.absolute_path = newDir;
+			file.absolute_path = relativeNew;
 			file.save();
 		}
 	}
 
 	public async info(userId: number, relativePath: string) {
+		const root = await this.getUserRootPath(userId);
 		const dir = await this.absolutePath(userId, relativePath);
+		const relative = path.relative(root, dir);
 
 		const stats = fs.statSync(dir);
 		const file = await UploadedFile.findOne({
-			where: { absolute_path: dir },
+			where: { absolute_path: relative },
 		});
 
 		const mime = file ? file.mime : await this.detectFile(dir);
 
 		// Get temp url if exists and is active
 		const user = await this.userService.getById(userId);
-		const tempUrls = await TempUrl.find({ where: { user, filepath: dir } });
+		const tempUrls = await TempUrl.find({
+			where: { user, filepath: relative },
+		});
 
 		return {
 			extension: path.extname(relativePath),
