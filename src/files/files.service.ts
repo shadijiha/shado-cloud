@@ -123,10 +123,19 @@ export class FilesService {
 		const file = await UploadedFile.findOne({
 			where: { absolute_path: relative, user },
 		});
-		Logger.debug(name);
+
 		if (file) {
 			file.absolute_path = relativeNew;
 			file.save();
+		} else {
+			// Else if it is not in DB then insert it
+			const mime = await this.detectFile(newDir);
+
+			const uploadedFile = new UploadedFile();
+			uploadedFile.user = user;
+			uploadedFile.absolute_path = relativeNew;
+			uploadedFile.mime = mime;
+			uploadedFile.save();
 		}
 	}
 
