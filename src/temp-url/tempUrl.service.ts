@@ -66,7 +66,10 @@ export class TempUrlService {
 
 	public async save(tempUrl: string, content: string, append: boolean = false) {
 		// Get temp url
-		const temp = await TempUrl.findOne({ where: { url: tempUrl } });
+		const temp = await TempUrl.findOne({
+			where: { url: tempUrl },
+			relations: ["user"],
+		});
 		if (!temp) {
 			throw new SoftException("Invalid temporary URL");
 		}
@@ -79,7 +82,10 @@ export class TempUrlService {
 
 		temp.requests += 1;
 		temp.save();
-		const dir = temp.filepath;
+		const dir = await this.fileService.absolutePath(
+			temp.user.id,
+			temp.filepath
+		);
 
 		if (append) {
 			fs.appendFileSync(dir, content);
