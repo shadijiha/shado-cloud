@@ -6,6 +6,29 @@ import { User } from "./models/user";
 import { RequestContext } from "nestjs-request-context";
 import { Request } from "express";
 import { SoftException } from "./util";
+import { OperationStatus } from "./files/filesApiTypes";
+
+export async function errorWrapper(
+	func: () => any,
+	controller: Function,
+	userId?: number
+) {
+	try {
+		const data = await func();
+		return (
+			data || {
+				status: OperationStatus[OperationStatus.SUCCESS],
+				errors: [],
+			}
+		);
+	} catch (e) {
+		errorLog(e, controller, userId);
+		return {
+			status: OperationStatus[OperationStatus.FAILED],
+			errors: [{ field: "", message: (<Error>e).message }],
+		};
+	}
+}
 
 export function errorLog(e: Error | any, source: Function, userId?: number) {
 	logHelper(e, source, "error", userId);

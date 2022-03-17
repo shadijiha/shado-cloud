@@ -5,6 +5,8 @@ import { createParamDecorator, ExecutionContext, Logger } from "@nestjs/common";
 import { ApiBody } from "@nestjs/swagger";
 import { Request } from "express";
 import { CookiePayload } from "./auth/authApiTypes";
+import { OperationStatus } from "./files/filesApiTypes";
+import { errorLog } from "./logging";
 
 /**
  * @example Use this function as decorator on top of controller functions

@@ -1,10 +1,6 @@
-/**
- *
- */
-
 import { ApiProperty } from "@nestjs/swagger";
-import { ErrorProne } from "src/auth/authApiTypes";
-import { enumToArray } from "src/util";
+import { ErrorProne } from "../auth/authApiTypes";
+import { enumToArray } from "../util";
 
 export class NewFileRequest {
 	@ApiProperty({ example: "Relative path + file name + file extension" })

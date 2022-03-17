@@ -24,7 +24,7 @@ import {
 	ApiTags,
 } from "@nestjs/swagger";
 import { Request, Response } from "express";
-import { errorLog } from "src/logging";
+import { errorLog, errorWrapper } from "src/logging";
 import { ApiFile, AuthUser } from "src/util";
 import { FilesService } from "./files.service";
 import {
@@ -121,9 +121,13 @@ export class FilesConstoller {
 		@UploadedFile() file: Express.Multer.File,
 		@Body() body: { dest: string }
 	) {
-		return await this.errorWrapper(async () => {
-			await this.fileService.upload(userId, file, body.dest);
-		}, userId);
+		return await errorWrapper(
+			async () => {
+				await this.fileService.upload(userId, file, body.dest);
+			},
+			FilesConstoller,
+			userId
+		);
 	}
 
 	@Post("new")
@@ -132,9 +136,13 @@ export class FilesConstoller {
 		@Body() body: NewFileRequest,
 		@AuthUser() userId: number
 	): Promise<OperationStatusResponse> {
-		return await this.errorWrapper(async () => {
-			await this.fileService.new(userId, body.name);
-		}, userId);
+		return await errorWrapper(
+			async () => {
+				await this.fileService.new(userId, body.name);
+			},
+			FilesConstoller,
+			userId
+		);
 	}
 
 	@Patch("save")
@@ -190,9 +198,13 @@ export class FilesConstoller {
 		@Body() body: RenameFileRequest,
 		@AuthUser() userId: number
 	) {
-		return await this.errorWrapper(async () => {
-			await this.fileService.rename(userId, body.name, body.newName);
-		}, userId);
+		return await errorWrapper(
+			async () => {
+				await this.fileService.rename(userId, body.name, body.newName);
+			},
+			FilesConstoller,
+			userId
+		);
 	}
 
 	@Get("info/:path")
@@ -249,24 +261,6 @@ export class FilesConstoller {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "path", message: (<Error>e).message }],
 			});
-		}
-	}
-
-	private async errorWrapper(func: () => any, userId?: number) {
-		try {
-			const data = await func();
-			return (
-				data || {
-					status: OperationStatus[OperationStatus.SUCCESS],
-					errors: [],
-				}
-			);
-		} catch (e) {
-			errorLog(e, FilesConstoller, userId);
-			return {
-				status: OperationStatus[OperationStatus.FAILED],
-				errors: [{ field: "", message: (<Error>e).message }],
-			};
 		}
 	}
 }
