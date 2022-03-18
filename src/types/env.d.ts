@@ -14,6 +14,7 @@ declare global {
 			DB_USERNAME: string;
 			DB_PASSWORD: string;
 			DB_NAME: string;
+			PASSWORD_VAULT_SALT: string;
 		}
 	}
 }

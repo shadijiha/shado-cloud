@@ -32,4 +32,17 @@ export class AuthService {
 			.getOne();
 		return await argon2.verify(user.password, password);
 	}
+
+	public async getWithPassword(userId: number) {
+		const query = getConnection().createQueryBuilder();
+		const user = await query
+			.select("user.password")
+			.addSelect("user")
+			.from(User, "user")
+			.where("id = :id", {
+				id: userId,
+			})
+			.getOne();
+		return user;
+	}
 }
