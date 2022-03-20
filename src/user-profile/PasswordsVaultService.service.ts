@@ -7,7 +7,12 @@ import { promisify } from "util";
 import { SoftException } from "src/util";
 import { getConnection, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
-import { paginate, Paginated, PaginateQuery } from "nestjs-paginate";
+import {
+	FilterOperator,
+	paginate,
+	Paginated,
+	PaginateQuery,
+} from "nestjs-paginate";
 
 @Injectable()
 export class PasswordsVaultService {
@@ -21,14 +26,11 @@ export class PasswordsVaultService {
 		userId: number,
 		query: PaginateQuery
 	): Promise<Paginated<EncryptedPassword>> {
-		const builder = this.catsRepository
-			.createQueryBuilder("pass")
-			.leftJoinAndSelect("pass.user", "user")
-			.where("pass.user = :userId", { userId });
-
-		return paginate<EncryptedPassword>(query, builder, {
+		return paginate<EncryptedPassword>(query, this.catsRepository, {
+			relations: ["user"],
 			sortableColumns: ["website", "username", "id"],
 			searchableColumns: ["id", "username", "website"],
+			where: { user: { id: userId } },
 		});
 	}
 
@@ -89,7 +91,7 @@ export class PasswordsVaultService {
 			);
 		}
 
-		EncryptedPassword.delete(vault);
+		EncryptedPassword.delete(vault.id);
 	}
 
 	/**

@@ -82,7 +82,6 @@ export class PasswordsVaultController {
 							)
 						);
 					} catch (e) {
-						console.log(data.website);
 						errors.push({ field: "", message: (<Error>e).message });
 					}
 				}
