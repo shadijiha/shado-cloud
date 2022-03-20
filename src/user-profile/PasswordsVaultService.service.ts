@@ -27,9 +27,8 @@ export class PasswordsVaultService {
 			.where("pass.user = :userId", { userId });
 
 		return paginate<EncryptedPassword>(query, builder, {
-			sortableColumns: ["id", "username", "website"],
+			sortableColumns: ["website", "username", "id"],
 			searchableColumns: ["id", "username", "website"],
-			defaultSortBy: [["website", "ASC"]],
 		});
 	}
 
