@@ -8,7 +8,7 @@ import {
 	UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Paginate, Paginated, PaginateQuery } from "nestjs-paginate";
 import {
 	OperationStatus,
@@ -32,6 +32,7 @@ export class PasswordsVaultController {
 	constructor(private readonly passwordVaultService: PasswordsVaultService) {}
 
 	@Get("all")
+	@ApiQuery({ name: "search", type: String })
 	@ApiResponse({ type: AllPasswordsResponse })
 	public async all(
 		@AuthUser() userId: number,

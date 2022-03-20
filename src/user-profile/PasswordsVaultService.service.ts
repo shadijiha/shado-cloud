@@ -5,14 +5,8 @@ import { User } from "src/models/user";
 import { createCipheriv, createDecipheriv, randomBytes, scrypt } from "crypto";
 import { promisify } from "util";
 import { SoftException } from "src/util";
-import { getConnection, getRepository, Repository } from "typeorm";
-import { InjectRepository } from "@nestjs/typeorm";
-import {
-	FilterOperator,
-	paginate,
-	Paginated,
-	PaginateQuery,
-} from "nestjs-paginate";
+import { getConnection, getRepository } from "typeorm";
+import { paginate, Paginated, PaginateQuery } from "nestjs-paginate";
 
 @Injectable()
 export class PasswordsVaultService {
