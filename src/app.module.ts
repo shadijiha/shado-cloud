@@ -8,7 +8,7 @@ import { DirectoriesModule } from "./directories/directories.module";
 import { TempUrlModule } from "./temp-url/temp-url.module";
 import { RequestContextModule } from "nestjs-request-context";
 import { AdminModule } from "./admin/admin.module";
-import { UserProfileModule } from './user-profile/user-profile.module';
+import { UserProfileModule } from "./user-profile/user-profile.module";
 
 @Module({
 	imports: [
@@ -36,6 +36,5 @@ import { UserProfileModule } from './user-profile/user-profile.module';
 export class AppModule {}
 
 function isDev() {
-	return true;
-	//return process.env.ENV == "dev";
+	return process.env.ENV == "dev";
 }
