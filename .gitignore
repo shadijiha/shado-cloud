@@ -2,7 +2,7 @@
 /dist
 /node_modules
 /ffmpeg
-/migration
+src/migrations
 # Logs
 logs
 *.log
