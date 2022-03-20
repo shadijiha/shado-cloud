@@ -19,7 +19,8 @@ export class EncryptedPassword extends BaseEntity {
 	@ApiProperty()
 	username: string; // This can be username or email
 
-	@Column({ update: false })
+	@Column({ name: "website" })
+	@ApiProperty()
 	website: string;
 
 	@Column({ select: false })
