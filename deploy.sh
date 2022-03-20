@@ -1,4 +1,4 @@
-date=$(date '+%Y-%m-%d %H-%M-%S')
+date=$(date'+%Y-%m-%d%H-%M-%S')
 
 pm2 stop "shado-cloud-backend"
 git pull
