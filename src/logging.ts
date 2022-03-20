@@ -68,7 +68,7 @@ async function logHelper(
 	log.route = getRoute();
 	log.type = type;
 	log.userAgent = getUserAgent();
-	log.ipAddress = getIp();
+	log.ipAddress = getIp() || "localhost";
 
 	// Get user
 	if (userId) {

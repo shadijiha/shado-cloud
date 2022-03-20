@@ -8,7 +8,6 @@ import { UserProfileController } from "./UserProfile.controller";
 import { UserProfileService } from "./UserProfile.service";
 
 @Module({
-	imports: [TypeOrmModule.forFeature([EncryptedPassword])],
 	controllers: [UserProfileController, PasswordsVaultController],
 	providers: [UserProfileService, PasswordsVaultService, AuthService],
 })

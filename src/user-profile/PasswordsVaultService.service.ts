@@ -5,7 +5,7 @@ import { User } from "src/models/user";
 import { createCipheriv, createDecipheriv, randomBytes, scrypt } from "crypto";
 import { promisify } from "util";
 import { SoftException } from "src/util";
-import { getConnection, Repository } from "typeorm";
+import { getConnection, getRepository, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
 	FilterOperator,
@@ -16,21 +16,20 @@ import {
 
 @Injectable()
 export class PasswordsVaultService {
-	public constructor(
-		private readonly userService: AuthService,
-		@InjectRepository(EncryptedPassword)
-		private readonly catsRepository: Repository<EncryptedPassword>
-	) {}
+	public constructor(private readonly userService: AuthService) {}
 
 	public async all(
 		userId: number,
 		query: PaginateQuery
 	): Promise<Paginated<EncryptedPassword>> {
-		return paginate<EncryptedPassword>(query, this.catsRepository, {
-			relations: ["user"],
+		const builder = getRepository(EncryptedPassword)
+			.createQueryBuilder("pass")
+			.leftJoinAndSelect("pass.user", "user")
+			.where("pass.user = :userId", { userId });
+
+		return paginate<EncryptedPassword>(query, builder, {
 			sortableColumns: ["website", "username", "id"],
 			searchableColumns: ["id", "username", "website"],
-			where: { user: { id: userId } },
 		});
 	}
 
