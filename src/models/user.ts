@@ -9,7 +9,7 @@ import {
 	UpdateDateColumn,
 } from "typeorm";
 import { Log } from "./log";
-import { PasswordsVault } from "./PasswordsVault";
+import { EncryptedPassword } from "./EncryptedPassword";
 import { TempUrl } from "./tempUrl";
 import { UploadedFile } from "./uploadedFile";
 
@@ -39,8 +39,8 @@ export class User extends BaseEntity {
 	@OneToMany(() => Log, (log) => log.user)
 	logs: Log[];
 
-	@OneToMany(() => PasswordsVault, (pass) => pass.user)
-	vault: PasswordsVault[];
+	@OneToMany(() => EncryptedPassword, (pass) => pass.user)
+	encrypted_passwords: EncryptedPassword[];
 
 	@ApiProperty()
 	@Column({ default: false })

@@ -11,13 +11,16 @@ import {
 import { User } from "./user";
 
 @Entity()
-export class PasswordsVault extends BaseEntity {
+export class EncryptedPassword extends BaseEntity {
 	@PrimaryGeneratedColumn()
 	id: number;
 
 	@Column()
 	@ApiProperty()
 	username: string; // This can be username or email
+
+	@Column({ update: false })
+	website: string;
 
 	@Column({ select: false })
 	encryption_key: string;
@@ -32,7 +35,7 @@ export class PasswordsVault extends BaseEntity {
 	@Column({ select: false })
 	iv: string;
 
-	@ManyToOne(() => User, (user) => user.vault)
+	@ManyToOne(() => User, (user) => user.encrypted_passwords)
 	@ApiProperty({ type: () => User })
 	user: User;
 

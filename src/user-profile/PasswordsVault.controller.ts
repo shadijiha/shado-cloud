@@ -9,13 +9,19 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiResponse, ApiTags } from "@nestjs/swagger";
-import { OperationStatusResponse } from "src/files/filesApiTypes";
+import { Paginate, Paginated, PaginateQuery } from "nestjs-paginate";
+import {
+	OperationStatus,
+	OperationStatusResponse,
+} from "src/files/filesApiTypes";
 import { errorWrapper } from "src/logging";
-import { PasswordsVault } from "src/models/PasswordsVault";
+import { EncryptedPassword } from "src/models/EncryptedPassword";
 import { AuthUser } from "src/util";
 import { PasswordsVaultService } from "./PasswordsVaultService.service";
 import {
 	AddToVaultRequest,
+	AddToVaultResponse,
+	AllPasswordsResponse,
 	PasswordsVaultAllResponse,
 } from "./user-profile-types";
 
@@ -26,11 +32,14 @@ export class PasswordsVaultController {
 	constructor(private readonly passwordVaultService: PasswordsVaultService) {}
 
 	@Get("all")
-	@ApiResponse({ type: PasswordsVaultAllResponse })
-	public async all(@AuthUser() userId: number) {
+	@ApiResponse({ type: AllPasswordsResponse })
+	public async all(
+		@AuthUser() userId: number,
+		@Paginate() query: PaginateQuery
+	): Promise<Paginated<EncryptedPassword>> {
 		return await errorWrapper(
 			async () => {
-				return await this.passwordVaultService.all();
+				return await this.passwordVaultService.all(userId, query);
 			},
 			PasswordsVaultController,
 			userId
@@ -53,24 +62,35 @@ export class PasswordsVaultController {
 	}
 
 	@Post("add")
-	@ApiResponse({ type: PasswordsVault })
+	@ApiResponse({ type: AddToVaultResponse })
 	public async add(
 		@AuthUser() userId: number,
 		@Body() body: AddToVaultRequest
-	) {
+	): Promise<AddToVaultResponse> {
 		return await errorWrapper(
 			async () => {
-				const result: PasswordsVault[] = [];
+				const result: EncryptedPassword[] = [];
+				const errors = [];
 				for (const data of body.elements) {
-					result.push(
-						await this.passwordVaultService.add(
-							userId,
-							data.username,
-							data.password_to_encrypt
-						)
-					);
+					try {
+						result.push(
+							await this.passwordVaultService.add(
+								userId,
+								data.username,
+								data.website,
+								data.password_to_encrypt
+							)
+						);
+					} catch (e) {
+						console.log(data.website);
+						errors.push({ field: "", message: (<Error>e).message });
+					}
 				}
-				return result;
+				return {
+					result,
+					status: OperationStatus[OperationStatus.SUCCESS],
+					errors,
+				};
 			},
 			PasswordsVaultController,
 			userId

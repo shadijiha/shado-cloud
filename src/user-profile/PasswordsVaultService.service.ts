@@ -1,28 +1,56 @@
 import { Injectable } from "@nestjs/common";
 import { AuthService } from "src/auth/auth.service";
-import { PasswordsVault } from "src/models/PasswordsVault";
+import { EncryptedPassword } from "src/models/EncryptedPassword";
 import { User } from "src/models/user";
 import { createCipheriv, createDecipheriv, randomBytes, scrypt } from "crypto";
 import { promisify } from "util";
 import { SoftException } from "src/util";
-import { getConnection } from "typeorm";
+import { getConnection, Repository } from "typeorm";
+import { InjectRepository } from "@nestjs/typeorm";
+import { paginate, Paginated, PaginateQuery } from "nestjs-paginate";
 
 @Injectable()
 export class PasswordsVaultService {
-	public constructor(private readonly userService: AuthService) {}
+	public constructor(
+		private readonly userService: AuthService,
+		@InjectRepository(EncryptedPassword)
+		private readonly catsRepository: Repository<EncryptedPassword>
+	) {}
 
-	public async all() {
-		return await PasswordsVault.find();
+	public async all(
+		userId: number,
+		query: PaginateQuery
+	): Promise<Paginated<EncryptedPassword>> {
+		const builder = this.catsRepository
+			.createQueryBuilder("pass")
+			.leftJoinAndSelect("pass.user", "user")
+			.where("pass.user = :userId", { userId });
+
+		return paginate<EncryptedPassword>(query, builder, {
+			sortableColumns: ["id", "username", "website"],
+			searchableColumns: ["id", "username", "website"],
+			defaultSortBy: [["website", "ASC"]],
+		});
 	}
 
-	public async add(userId: number, username: string, passwordToStore: string) {
+	public async add(
+		userId: number,
+		username: string,
+		website: string,
+		passwordToStore: string
+	) {
 		const user = await this.userService.getWithPassword(userId);
 		if (!user) {
 			throw new Error("User " + userId + " not found");
 		}
 
 		// Encrypt
-		return await this.encrypt(username, passwordToStore, user);
+		return await this.encrypt(
+			username,
+			new URL(website),
+			passwordToStore,
+			user
+		);
 	}
 
 	public async get(
@@ -44,7 +72,7 @@ export class PasswordsVaultService {
 			.addSelect("vault.password")
 			.addSelect("vault")
 			.addSelect("vault.userId")
-			.from(PasswordsVault, "vault")
+			.from(EncryptedPassword, "vault")
 			.leftJoinAndSelect("vault.user", "user")
 			.where("vault.id = :encryption_id", {
 				encryption_id,
@@ -62,7 +90,7 @@ export class PasswordsVaultService {
 			);
 		}
 
-		PasswordsVault.delete(vault);
+		EncryptedPassword.delete(vault);
 	}
 
 	/**
@@ -70,7 +98,12 @@ export class PasswordsVaultService {
 	 * @param text
 	 * @param user
 	 */
-	private async encrypt(username: string, passwordToStore: string, user: User) {
+	private async encrypt(
+		username: string,
+		website: URL,
+		passwordToStore: string,
+		user: User
+	) {
 		if (!user.password) {
 			throw new Error(
 				"To encrypt text you need to select user's password from DB"
@@ -94,13 +127,14 @@ export class PasswordsVaultService {
 		]);
 
 		// Store in DB
-		const passwordVault = new PasswordsVault();
+		const passwordVault = new EncryptedPassword();
 		passwordVault.iv = iv.toString("hex");
 		passwordVault.encryption_key = key.toString("hex");
 		passwordVault.password = encryptedText.toString("hex");
 		passwordVault.password_length = passwordToStore.length;
 		passwordVault.username = username;
 		passwordVault.user = user;
+		passwordVault.website = website.origin;
 		passwordVault.save();
 
 		delete passwordVault.user.password;
@@ -111,7 +145,7 @@ export class PasswordsVaultService {
 	private async decrypt(
 		userId: number,
 		encryptionId: number
-	): Promise<{ vault: PasswordsVault; decryptedPassword: string }> {
+	): Promise<{ vault: EncryptedPassword; decryptedPassword: string }> {
 		const query = getConnection().createQueryBuilder();
 		const vault = await query
 			.select("vault.encryption_key")
@@ -119,7 +153,7 @@ export class PasswordsVaultService {
 			.addSelect("vault.password")
 			.addSelect("vault")
 			.addSelect("vault.userId")
-			.from(PasswordsVault, "vault")
+			.from(EncryptedPassword, "vault")
 			.leftJoinAndSelect("vault.user", "user")
 			.where("vault.id = :encryptionId", {
 				encryptionId,
