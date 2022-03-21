@@ -40,7 +40,19 @@ export class PasswordsVaultController {
 	): Promise<Paginated<EncryptedPassword>> {
 		return await errorWrapper(
 			async () => {
-				return await this.passwordVaultService.all(userId, query);
+				const result = await this.passwordVaultService.all(userId, query);
+
+				// Now we need to do this because nest pagination was giving worng url on Pi server
+				// Instead of sending full URL to frontend, send relative URL only so frontend can make proper call
+				const resolveLink = (e: string) =>
+					e ? e.replace(new URL(e).origin, "") : e;
+				result.links.current = resolveLink(result.links.current);
+				result.links.first = resolveLink(result.links.first);
+				result.links.last = resolveLink(result.links.last);
+				result.links.next = resolveLink(result.links.next);
+				result.links.previous = resolveLink(result.links.previous);
+
+				return result;
 			},
 			PasswordsVaultController,
 			userId
