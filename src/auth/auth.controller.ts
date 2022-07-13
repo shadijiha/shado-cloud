@@ -16,6 +16,7 @@ import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response, Request } from "express";
 import { use } from "passport";
 import { DirectoriesService } from "src/directories/directories.service";
+import { FilesService } from "src/files/files.service";
 import { errorLog } from "src/logging";
 import { User } from "src/models/user";
 import { AuthUser } from "src/util";
@@ -29,7 +30,8 @@ export class AuthController {
 	constructor(
 		private jwtService: JwtService,
 		private authService: AuthService,
-		private directoryService: DirectoriesService
+		private directoryService: DirectoriesService,
+		private fileService: FilesService
 	) {}
 
 	@Post("login")
@@ -103,14 +105,18 @@ export class AuthController {
 	@ApiResponse({ type: User })
 	async me(@AuthUser() userId: number, @Req() request: Request) {
 		try {
-			return await this.authService.getById(userId);
+			const user = await this.authService.getById(userId);
+			return {
+				...user,
+				profPic: await this.fileService.profilePictureInfo(userId),
+			};
 		} catch (e) {
 			errorLog(e, AuthController, userId);
 			return null;
 		}
 	}
 
-	private createAuthCookie(user: User, response: Response): void {
+	private async createAuthCookie(user: User, response: Response) {
 		const userId = user.id;
 		const payload = { userId: userId };
 		const token = this.jwtService.sign(payload);
@@ -121,6 +127,12 @@ export class AuthController {
 				domain: process.env.BACKEND_HOST_NAME, // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
 			})
-			.send({ user, errors: [] });
+			.send({
+				user: {
+					...user,
+					profPic: await this.fileService.profilePictureInfo(userId),
+				},
+				errors: [],
+			});
 	}
 }

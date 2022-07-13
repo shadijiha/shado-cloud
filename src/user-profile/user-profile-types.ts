@@ -18,6 +18,11 @@ export class ChangeNameRequest {
 	new_name: string;
 }
 
+export class ChangePictureRequest {
+	@ApiProperty()
+	password: string;
+}
+
 class AddToVaultElement {
 	@ApiProperty()
 	username: string;

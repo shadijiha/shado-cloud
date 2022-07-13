@@ -1,10 +1,22 @@
-import { Body, Controller, Patch, UseGuards } from "@nestjs/common";
+import {
+	Body,
+	Controller,
+	Patch,
+	UploadedFile,
+	UseGuards,
+	UseInterceptors,
+} from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { FileInterceptor } from "@nestjs/platform-express/multer";
 import { ApiResponse, ApiTags } from "@nestjs/swagger";
 import { OperationStatusResponse } from "src/files/filesApiTypes";
 import { errorWrapper } from "src/logging";
 import { AuthUser } from "src/util";
-import { ChangeNameRequest, ChangePasswordRequest } from "./user-profile-types";
+import {
+	ChangeNameRequest,
+	ChangePasswordRequest,
+	ChangePictureRequest,
+} from "./user-profile-types";
 import { UserProfileService } from "./UserProfile.service";
 
 @Controller("profile")
@@ -45,6 +57,23 @@ export class UserProfileController {
 					body.password,
 					body.new_name
 				);
+			},
+			UserProfileController,
+			userId
+		);
+	}
+
+	@Patch("change/picture")
+	@UseInterceptors(FileInterceptor("file"))
+	@ApiResponse({ type: OperationStatusResponse })
+	public async changePicture(
+		@AuthUser() userId: number,
+		@UploadedFile() file: Express.Multer.File,
+		@Body() body: ChangePictureRequest
+	) {
+		return await errorWrapper(
+			async () => {
+				await this.profileService.changePicture(userId, body.password, file);
 			},
 			UserProfileController,
 			userId

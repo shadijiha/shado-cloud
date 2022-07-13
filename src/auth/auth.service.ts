@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { User } from "src/models/user";
 import { getConnection } from "typeorm";
 import argon2 from "argon2";
+import { FilesService } from "src/files/files.service";
 
 @Injectable()
 export class AuthService {

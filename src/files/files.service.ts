@@ -12,6 +12,8 @@ type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
 export class FilesService {
+	public static readonly METADATA_FOLDER_NAME = ".metadata";
+
 	constructor(private userService: AuthService) {}
 
 	public async asStream(userId: number, relativePath: string, options?: any) {
@@ -276,7 +278,7 @@ export class FilesService {
 		}
 	}
 
-	private replaceIllegalChars(filename: string) {
+	public replaceIllegalChars(filename: string) {
 		// Verify that the user is not creating a hidden folder
 		let basename = path.basename(filename);
 		while (basename.startsWith(".")) {
@@ -311,5 +313,24 @@ export class FilesService {
 			basename = new Date().toLocaleDateString().replace(":", "-");
 
 		return basename;
+	}
+
+	public async profilePictureInfo(userId: number) {
+		const dir = await this.absolutePath(
+			userId,
+			FilesService.METADATA_FOLDER_NAME + "/prof"
+		);
+		return {
+			exists: fs.existsSync(dir),
+			path: path.relative(await this.getUserRootPath(userId), dir),
+		};
+	}
+
+	public async createMetaFolderIfNotExists(userId: number) {
+		const dir = await this.absolutePath(
+			userId,
+			FilesService.METADATA_FOLDER_NAME
+		);
+		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 	}
 }
