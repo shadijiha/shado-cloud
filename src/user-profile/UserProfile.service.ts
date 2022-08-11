@@ -8,6 +8,8 @@ import { User } from "src/models/user";
 import { SoftException } from "src/util";
 import fs from "fs";
 import { UploadedFile } from "src/models/uploadedFile";
+import { ProfileCropData } from "./user-profile-types";
+import sharp from "sharp";
 
 @Injectable()
 export class UserProfileService {
@@ -42,10 +44,11 @@ export class UserProfileService {
 	public async changePicture(
 		userId: number,
 		password: string,
-		file: Express.Multer.File
+		file: Express.Multer.File,
+		crop: ProfileCropData
 	) {
 		const user = await this.verifyPassword(userId, password);
-		this.saveProfilePicture(user, file);
+		this.saveProfilePicture(user, file, crop);
 	}
 
 	private async verifyPassword(
@@ -60,7 +63,11 @@ export class UserProfileService {
 		return user;
 	}
 
-	private async saveProfilePicture(user: User, file: Express.Multer.File) {
+	private async saveProfilePicture(
+		user: User,
+		file: Express.Multer.File,
+		crop: ProfileCropData
+	) {
 		// Create metadata folder
 		this.fileService.createMetaFolderIfNotExists(user.id);
 		const userId = user.id;
@@ -73,8 +80,22 @@ export class UserProfileService {
 			);
 			const relative = path.relative(root, dir);
 
-			fs.writeFileSync(dir, file.buffer);
-
+			if (crop == undefined) {
+				fs.writeFileSync(dir, file.buffer);
+			} else {
+				console.log(crop);
+				const image = sharp(file.buffer);
+				const metadata = await image.metadata();
+				const resizedImg = await image
+					.extract({
+						top: Math.floor((crop.y / 100) * metadata.height),
+						left: Math.floor((crop.x / 100) * metadata.width),
+						width: Math.floor((crop.width / 100) * metadata.width),
+						height: Math.floor((crop.height / 100) * metadata.height),
+					})
+					.toBuffer();
+				fs.writeFileSync(dir, resizedImg);
+			}
 			const fileDB = new UploadedFile();
 			fileDB.absolute_path = relative;
 			fileDB.user = await this.userService.getById(userId);

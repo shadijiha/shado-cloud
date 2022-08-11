@@ -18,9 +18,25 @@ export class ChangeNameRequest {
 	new_name: string;
 }
 
+export class ProfileCropData {
+	@ApiProperty()
+	x: number;
+	@ApiProperty()
+	y: number;
+	@ApiProperty()
+	width: number;
+	@ApiProperty()
+	height: number;
+	@ApiProperty()
+	unit: "px" | "%";
+}
+
 export class ChangePictureRequest {
 	@ApiProperty()
 	password: string;
+
+	@ApiProperty()
+	crop: ProfileCropData | string | undefined;
 }
 
 class AddToVaultElement {

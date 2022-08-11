@@ -73,7 +73,12 @@ export class UserProfileController {
 	) {
 		return await errorWrapper(
 			async () => {
-				await this.profileService.changePicture(userId, body.password, file);
+				await this.profileService.changePicture(
+					userId,
+					body.password,
+					file,
+					JSON.parse(body.crop as string)
+				);
 			},
 			UserProfileController,
 			userId
