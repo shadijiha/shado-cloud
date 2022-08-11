@@ -71,13 +71,16 @@ export class UserProfileController {
 		@UploadedFile() file: Express.Multer.File,
 		@Body() body: ChangePictureRequest
 	) {
+		console.log();
 		return await errorWrapper(
 			async () => {
 				await this.profileService.changePicture(
 					userId,
 					body.password,
 					file,
-					JSON.parse(body.crop as string)
+					body.crop && body.crop != "undefined"
+						? JSON.parse(body.crop as string)
+						: undefined
 				);
 			},
 			UserProfileController,
