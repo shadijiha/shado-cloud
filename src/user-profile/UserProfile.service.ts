@@ -83,7 +83,6 @@ export class UserProfileService {
 			if (crop == undefined) {
 				fs.writeFileSync(dir, file.buffer);
 			} else {
-				console.log(crop);
 				const image = sharp(file.buffer);
 				const metadata = await image.metadata();
 				const resizedImg = await image
