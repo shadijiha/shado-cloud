@@ -20,6 +20,7 @@ import {
 	ApiConsumes,
 	ApiParam,
 	ApiProduces,
+	ApiProperty,
 	ApiResponse,
 	ApiTags,
 } from "@nestjs/swagger";
@@ -32,6 +33,7 @@ import {
 	NewFileRequest,
 	OperationStatus,
 	OperationStatusResponse,
+	OpResWithData,
 	RenameFileRequest,
 	SaveFileRequest,
 } from "./filesApiTypes";
@@ -216,6 +218,27 @@ export class FilesConstoller {
 	): Promise<FileInfoResponse> {
 		try {
 			const info = await this.fileService.info(userId, path);
+			return {
+				status: OperationStatus[OperationStatus.SUCCESS],
+				data: info,
+				errors: [],
+			};
+		} catch (e) {
+			errorLog(e, FilesConstoller, userId);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				data: null,
+				errors: [],
+			};
+		}
+	}
+
+	@Get("exists/:path")
+	@ApiParam({ name: "path" })
+	@ApiResponse({ type: OpResWithData })
+	public async exists(@Param("path") path: string, @AuthUser() userId: number) {
+		try {
+			const info = await this.fileService.exists(userId, path);
 			return {
 				status: OperationStatus[OperationStatus.SUCCESS],
 				data: info,

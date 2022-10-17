@@ -175,6 +175,12 @@ export class FilesService {
 		};
 	}
 
+	public async exists(userId: number, relativePath: string) {
+		const root = await this.getUserRootPath(userId);
+		const dir = await this.absolutePath(userId, relativePath);
+		return fs.existsSync(dir);
+	}
+
 	public async toThumbnail(
 		path_: string,
 		userId: number,

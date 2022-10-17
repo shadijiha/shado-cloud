@@ -78,3 +78,8 @@ export class FileInfoResponse extends ErrorProne {
 	@ApiProperty()
 	data: FileInfo;
 }
+
+export class OpResWithData extends OperationStatusResponse {
+	@ApiProperty()
+	data: boolean;
+}
