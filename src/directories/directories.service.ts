@@ -181,7 +181,10 @@ export class DirectoriesService {
 
 		const dir = await ProtectedDirectory.findOne({
 			where: {
-				relative_path: relative_path,
+				absolute_path: await this.fileService.absolutePath(
+					userId,
+					relative_path
+				),
 				user: { id: userId },
 			},
 		});
