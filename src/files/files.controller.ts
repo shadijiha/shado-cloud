@@ -26,9 +26,10 @@ import {
 } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { errorLog, errorWrapper } from "src/logging";
-import { ApiFile, AuthUser } from "src/util";
+import { ApiFile, AuthUser, SoftException } from "src/util";
 import { FilesService } from "./files.service";
 import {
+	FileInfo,
 	FileInfoResponse,
 	NewFileRequest,
 	OperationStatus,
@@ -57,18 +58,23 @@ export class FilesConstoller {
 		@Req() req: Request
 	) {
 		try {
-			const fileInto = await this.fileService.info(userId, path);
+			const dirOrFileInfo = await this.fileService.info(userId, path);
 
+			// Check if it is a directory
+			if (dirOrFileInfo.is_dir)
+				throw new SoftException("Cannot get a directory as a file stream");
+
+			const fileInfo = dirOrFileInfo as FileInfo;
 			// In case that it is a video or audio
 			// We need to see if this request is for seeking
-			if (fileInto.is_video || fileInto.is_audio) {
+			if (fileInfo.is_video || fileInfo.is_audio) {
 				/*res.set({
 					"Content-Type": fileInto.mime,
 					"Content-Disposition": `filename="${fileInto.name}"`,
 					"Content-Length": fileInto.size,
 				});*/
 
-				const total = fileInto.size;
+				const total = fileInfo.size;
 				if (req.headers.range) {
 					const range = req.headers.range;
 					const parts = range.replace(/bytes=/, "").split("-");
@@ -87,14 +93,14 @@ export class FilesConstoller {
 						"Content-Range": "bytes " + start + "-" + end + "/" + total,
 						"Accept-Ranges": "bytes",
 						"Content-Length": chunksize,
-						"Content-Type": fileInto.mime,
+						"Content-Type": fileInfo.mime,
 					});
 
 					file.pipe(res);
 				} else {
 					res.writeHead(200, {
 						"Content-Length": total,
-						"Content-Type": fileInto.mime,
+						"Content-Type": fileInfo.mime,
 					});
 					(await this.fileService.asStream(userId, path)).pipe(res);
 				}

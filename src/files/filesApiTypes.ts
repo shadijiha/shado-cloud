@@ -1,4 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { DirectoryInfo } from "src/directories/directoriesApiTypes";
+import { TempUrl } from "src/models/tempUrl";
 import { ErrorProne } from "../auth/authApiTypes";
 import { enumToArray } from "../util";
 
@@ -67,6 +69,12 @@ export class FileInfo {
 
 	@ApiProperty()
 	is_audio: boolean;
+
+	@ApiProperty()
+	is_dir: boolean = false;
+
+	@ApiProperty()
+	temp_url?: TempUrl;
 }
 
 export class FileInfoResponse extends ErrorProne {
@@ -76,7 +84,7 @@ export class FileInfoResponse extends ErrorProne {
 	status: string;
 
 	@ApiProperty()
-	data: FileInfo;
+	data: FileInfo | DirectoryInfo;
 }
 
 export class OpResWithData extends OperationStatusResponse {

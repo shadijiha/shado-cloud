@@ -9,11 +9,14 @@ import { User } from "src/models/user";
 import archiver from "archiver";
 import extract from "extract-zip";
 import { errorLog } from "src/logging";
+import { ProtectedDirectory } from "src/models/ProtectedDirectory";
+import argon2 from "argon2";
+import { SoftException } from "src/util";
 
 @Injectable()
 export class DirectoriesService {
 	constructor(
-		private userService: AuthService,
+		private readonly userService: AuthService,
 		private readonly fileService: FilesService
 	) {}
 
@@ -21,7 +24,9 @@ export class DirectoriesService {
 		return await this.fileService.getUserRootPath(userId);
 	}
 
-	public async list(userId: number, relativePath: string) {
+	public async list(userId: number, relativePath: string, password?: string) {
+		await this.verifyDirPassword(userId, relativePath, password);
+
 		const dir = await this.fileService.absolutePath(userId, relativePath);
 		const files = fs.readdirSync(dir, { withFileTypes: true });
 		const result: (DirectoryInfo | FileInfo)[] = [];
@@ -35,6 +40,10 @@ export class DirectoriesService {
 						dir
 					),
 					is_dir: true,
+					is_protected: await this.fileService.isProtected(
+						userId,
+						relativePath
+					),
 				});
 			} else {
 				result.push(
@@ -64,16 +73,31 @@ export class DirectoriesService {
 		fs.mkdirSync(dir, { recursive: true });
 	}
 
-	public async delete(userId: number, relativePath: string) {
+	public async delete(userId: number, relativePath: string, password?: string) {
+		await this.verifyDirPassword(userId, relativePath, password);
+
 		const dir = await this.fileService.absolutePath(userId, relativePath);
 		fs.rmdirSync(dir, { recursive: true });
 	}
 
-	public async rename(userId: number, name: string, newName: string) {
+	public async rename(
+		userId: number,
+		name: string,
+		newName: string,
+		password?: string
+	) {
+		await this.verifyDirPassword(userId, name, password);
+
 		const dir = await this.fileService.absolutePath(userId, name);
 		const newDir = await this.fileService.absolutePath(userId, newName);
 		this.fileService.verifyFileName(newDir);
 		fs.renameSync(dir, newDir);
+
+		const protectedDir = await this.fileService.getProtectDirObj(userId, name);
+		if (protectedDir != null) {
+			protectedDir.absolute_path = newDir;
+			protectedDir.save();
+		}
 	}
 
 	public async createNewUserDir(user: User) {
@@ -99,6 +123,9 @@ export class DirectoriesService {
 			throw new Error("FIle to zip must be a directory");
 		}
 
+		if (await this.fileService.isProtected(userId, name))
+			throw new Error(`Unable to zip ${name} because it is protected!`);
+
 		const output = fs.createWriteStream(dir + ".zip");
 		const archive = archiver("zip");
 
@@ -118,6 +145,52 @@ export class DirectoriesService {
 		const outputPath = path.join(dirPath, fileName);
 
 		await extract(dir, { dir: outputPath });
+	}
+
+	public async protect(
+		userId: number,
+		relative_path: string,
+		password: string
+	) {
+		if (await this.fileService.isProtected(userId, relative_path))
+			throw new Error(`Directory "${relative_path}" already protected`);
+
+		const user = await this.userService.getById(userId);
+		if (!user) throw new Error(`Invalid user!`);
+
+		const dir = new ProtectedDirectory();
+		dir.user = user;
+		dir.absolute_path = await this.fileService.absolutePath(
+			userId,
+			relative_path
+		);
+		dir.password = await argon2.hash(password);
+		dir.save();
+	}
+
+	public async unprotect(
+		userId: number,
+		relative_path: string,
+		password: string
+	) {
+		if (!this.fileService.isProtected(userId, relative_path))
+			throw new Error(`Directory "${relative_path}" is not protected`);
+
+		const user = await this.userService.getById(userId);
+		if (!user) throw new Error(`Invalid user!`);
+
+		const dir = await ProtectedDirectory.findOne({
+			where: {
+				relative_path: relative_path,
+				user: { id: userId },
+			},
+		});
+
+		if (await argon2.verify(dir.password, password)) {
+			ProtectedDirectory.delete(dir);
+		} else {
+			throw new Error("Invalid password");
+		}
 	}
 
 	public parent(_path: string) {
@@ -149,5 +222,18 @@ export class DirectoriesService {
 		}
 
 		return files;
+	}
+
+	private async verifyDirPassword(
+		userId: number,
+		relativePath: string,
+		password?: string
+	) {
+		if (await this.fileService.isProtected(userId, relativePath)) {
+			const dir = await this.fileService.getProtectDirObj(userId, relativePath);
+
+			if (!(await argon2.verify(dir.password, password ?? "")))
+				throw new SoftException("Wrong password for " + relativePath);
+		}
 	}
 }

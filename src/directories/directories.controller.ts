@@ -7,10 +7,11 @@ import {
 	Param,
 	Patch,
 	Post,
+	Query,
 	UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import {
 	FileInfo,
 	NewFileRequest,
@@ -24,6 +25,7 @@ import {
 	DirListResponse,
 	NewDirRequest,
 	RenameDirRequest,
+	WithPass,
 } from "./directoriesApiTypes";
 
 @Controller("directory")
@@ -48,13 +50,19 @@ export class DirectoriesController {
 
 	@Get("list/:path?")
 	@ApiParam({ name: "path", type: String, allowEmptyValue: true })
+	@ApiQuery({ name: "pass", type: String, allowEmptyValue: true })
 	@ApiResponse({ type: DirListResponse })
 	public async list(
 		@AuthUser() userId: number,
-		@Param("path") path: string
+		@Param("path") path: string,
+		@Query("pass") password?: string
 	): Promise<DirListResponse> {
 		try {
-			const list = await this.directoriesService.list(userId, path ?? "");
+			const list = await this.directoriesService.list(
+				userId,
+				path ?? "",
+				password
+			);
 
 			return {
 				status: OperationStatus[OperationStatus.SUCCESS],
@@ -109,7 +117,7 @@ export class DirectoriesController {
 	@ApiResponse({ type: OperationStatusResponse })
 	public async delete(@AuthUser() userId: number, @Body() body: NewDirRequest) {
 		try {
-			await this.directoriesService.delete(userId, body.name);
+			await this.directoriesService.delete(userId, body.name, body.password);
 			return {
 				status: OperationStatus[OperationStatus.SUCCESS],
 			};
@@ -129,7 +137,12 @@ export class DirectoriesController {
 		@Body() body: RenameDirRequest
 	) {
 		try {
-			await this.directoriesService.rename(userId, body.name, body.newName);
+			await this.directoriesService.rename(
+				userId,
+				body.name,
+				body.newName,
+				body.password
+			);
 			return {
 				status: OperationStatus[OperationStatus.SUCCESS],
 			};
@@ -175,6 +188,48 @@ export class DirectoriesController {
 
 			return {
 				status: OperationStatus[OperationStatus.ONGOING],
+				errors: [],
+			};
+		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "", message: (<Error>e).message }],
+			};
+		}
+	}
+
+	@Patch("protect")
+	@ApiResponse({ type: OperationStatusResponse })
+	public async protected(
+		@AuthUser() userId: number,
+		@Body() body: NewDirRequest
+	) {
+		try {
+			await this.directoriesService.protect(userId, body.name, body.password);
+			return {
+				status: OperationStatus[OperationStatus.SUCCESS],
+				errors: [],
+			};
+		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "", message: (<Error>e).message }],
+			};
+		}
+	}
+
+	@Patch("unprotect")
+	@ApiResponse({ type: OperationStatusResponse })
+	public async unprotected(
+		@AuthUser() userId: number,
+		@Body() body: NewDirRequest
+	) {
+		try {
+			await this.directoriesService.unprotect(userId, body.name, body.password);
+			return {
+				status: OperationStatus[OperationStatus.SUCCESS],
 				errors: [],
 			};
 		} catch (e) {

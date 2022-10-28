@@ -16,6 +16,9 @@ export class DirectoryInfo {
 
 	@ApiProperty()
 	is_dir: boolean = true;
+
+	@ApiProperty()
+	is_protected: boolean;
 }
 
 export class DirListResponse extends ErrorProne {
@@ -31,7 +34,12 @@ export class DirListResponse extends ErrorProne {
 	data: (DirectoryInfo | FileInfo)[];
 }
 
-export class NewDirRequest {
+export class WithPass {
+	@ApiProperty({ example: "password used to protect", nullable: true })
+	password?: string;
+}
+
+export class NewDirRequest extends WithPass {
 	@ApiProperty({ example: "relative path + name" })
 	name: string;
 }

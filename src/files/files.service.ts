@@ -8,6 +8,9 @@ import { TempUrl } from "src/models/tempUrl";
 import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
 import { SoftException } from "src/util";
+import { ProtectedDirectory } from "src/models/ProtectedDirectory";
+import { DirectoryInfo } from "src/directories/directoriesApiTypes";
+import { FileInfo } from "./filesApiTypes";
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
@@ -141,12 +144,26 @@ export class FilesService {
 		}
 	}
 
-	public async info(userId: number, relativePath: string) {
+	public async info(
+		userId: number,
+		relativePath: string
+	): Promise<DirectoryInfo | FileInfo> {
 		const root = await this.getUserRootPath(userId);
 		const dir = await this.absolutePath(userId, relativePath);
 		const relative = path.relative(root, dir);
 
 		const stats = fs.statSync(dir);
+
+		// If it is a directory
+		if (stats.isDirectory()) {
+			return {
+				is_dir: true,
+				is_protected: await this.isProtected(userId, relativePath),
+				path: path.relative(await this.getUserRootPath(userId), dir),
+				name: path.basename(dir),
+			};
+		}
+
 		const file = await UploadedFile.findOne({
 			where: { absolute_path: relative },
 		});
@@ -172,6 +189,7 @@ export class FilesService {
 			size: stats.size,
 			temp_url:
 				tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid())[0] : null,
+			is_dir: false,
 		};
 	}
 
@@ -338,5 +356,19 @@ export class FilesService {
 			FilesService.METADATA_FOLDER_NAME
 		);
 		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+	}
+
+	public async getProtectDirObj(userId: number, relativePath: string) {
+		return await ProtectedDirectory.findOne({
+			where: {
+				absolute_path: await this.absolutePath(userId, relativePath),
+				user: { id: userId },
+			},
+		});
+	}
+
+	public async isProtected(userId: number, relativePath: string) {
+		const dir = await this.getProtectDirObj(userId, relativePath);
+		return dir == null ? false : true;
 	}
 }

@@ -12,6 +12,7 @@ import { Log } from "./log";
 import { EncryptedPassword } from "./EncryptedPassword";
 import { TempUrl } from "./tempUrl";
 import { UploadedFile } from "./uploadedFile";
+import { ProtectedDirectory } from "./ProtectedDirectory";
 
 @Entity()
 export class User extends BaseEntity {
@@ -41,6 +42,9 @@ export class User extends BaseEntity {
 
 	@OneToMany(() => EncryptedPassword, (pass) => pass.user)
 	encrypted_passwords: EncryptedPassword[];
+
+	@OneToMany(() => ProtectedDirectory, (dir) => dir.user)
+	protected_dirs: ProtectedDirectory[];
 
 	@ApiProperty()
 	@Column({ default: false })
