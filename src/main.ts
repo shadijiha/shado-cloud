@@ -6,6 +6,7 @@ import { AppModule } from "./app.module";
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import { Logger, ValidationPipe } from "@nestjs/common";
+import { json, urlencoded } from "express";
 
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule, {
@@ -26,6 +27,8 @@ async function bootstrap() {
 	SwaggerModule.setup("api", app, document);
 	//fs.writeFileSync("./swagger-spec.json", JSON.stringify(document));
 	app.use(cookieParser());
+	app.use(json({ limit: "100mb" }));
+	app.use(urlencoded({ extended: true, limit: "100mb" }));
 	await app.listen(9000);
 }
 bootstrap();
