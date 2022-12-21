@@ -72,14 +72,14 @@ export class FilesService {
 		userId: number,
 		fileRelativePath: string,
 		content: string,
-		append: boolean = false
+		append: boolean | string = false
 	): FileServiceResult {
 		try {
 			const dir = await this.absolutePath(userId, fileRelativePath);
-			if (append) {
-				fs.appendFileSync(dir, content);
-			} else {
+			if (!append || append == "false") {
 				fs.writeFileSync(dir, content);
+			} else {
+				fs.appendFileSync(dir, content);
 			}
 
 			return [true, ""];
