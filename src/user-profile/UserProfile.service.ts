@@ -95,9 +95,13 @@ export class UserProfileService {
 					.toBuffer();
 				fs.writeFileSync(dir, resizedImg);
 			}
+
+			// Remove previous metadata prof indexed file
+			await UploadedFile.delete({ user: user, absolute_path: relative });
+
 			const fileDB = new UploadedFile();
 			fileDB.absolute_path = relative;
-			fileDB.user = await this.userService.getById(userId);
+			fileDB.user = user;
 			fileDB.mime = file.mimetype;
 			fileDB.save();
 
