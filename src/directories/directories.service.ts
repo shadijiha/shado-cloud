@@ -127,6 +127,19 @@ export class DirectoriesService {
 		const outputPath = path.join(dirPath, fileName);
 
 		await extract(dir, { dir: outputPath });
+
+		// After extracting the zip, go though all the files and index them
+		const files = this.getAllFiles(outputPath);
+		const absoluteRootPath = await this.fileService.absolutePath(userId, "");
+		const user = await this.userService.getById(userId);
+		for (const file of files) {
+			const relativePath = path.relative(absoluteRootPath, file.path);
+			const indexed = new UploadedFile();
+			indexed.user = user;
+			indexed.absolute_path = relativePath;
+			indexed.mime = await FilesService.detectFile(file.path);
+			indexed.save();
+		}
 	}
 
 	public parent(_path: string) {

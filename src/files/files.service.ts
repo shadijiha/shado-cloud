@@ -131,7 +131,7 @@ export class FilesService {
 			file.save();
 		} else {
 			// Else if it is not in DB then insert it
-			const mime = await this.detectFile(newDir);
+			const mime = await FilesService.detectFile(newDir);
 
 			const uploadedFile = new UploadedFile();
 			uploadedFile.user = user;
@@ -151,7 +151,7 @@ export class FilesService {
 			where: { absolute_path: relative },
 		});
 
-		const mime = file ? file.mime : await this.detectFile(dir);
+		const mime = file ? file.mime : await FilesService.detectFile(dir);
 
 		// Get temp url if exists and is active
 		const user = await this.userService.getById(userId);
@@ -188,7 +188,7 @@ export class FilesService {
 		height: number | undefined = undefined
 	) {
 		const dir = await this.absolutePath(userId, path_);
-		const mime = await this.detectFile(dir);
+		const mime = await FilesService.detectFile(dir);
 
 		if (mime.includes("image")) {
 			if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
@@ -243,7 +243,7 @@ export class FilesService {
 		return path.join(await this.getUserRootPath(userId), relativePath);
 	}
 
-	private detectFile(filename: string): Promise<string> {
+	public static detectFile(filename: string): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const magic = new mmmagic.Magic(mmmagic.MAGIC_MIME_TYPE);
 			magic.detectFile(filename, function (err, result) {
