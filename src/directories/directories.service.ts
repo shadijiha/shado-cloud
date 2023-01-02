@@ -11,6 +11,7 @@ import extract from "extract-zip";
 import { errorLog } from "src/logging";
 import { UploadedFile } from "src/models/uploadedFile";
 import { getRepository, Like } from "typeorm";
+import { SoftException } from "src/util";
 
 @Injectable()
 export class DirectoriesService {
@@ -67,7 +68,29 @@ export class DirectoriesService {
 	}
 
 	public async delete(userId: number, relativePath: string) {
-		const dir = await this.fileService.absolutePath(userId, relativePath);
+		const root = await this.fileService.absolutePath(userId, "");
+		const dir = path.join(root, relativePath);
+
+		// Get all files in that dir recusively, and for each
+		// delete the index from DB
+		for (const file of this.getAllFiles(dir)) {
+			const relative = path.relative(root, file.path);
+			try {
+				UploadedFile.delete({
+					absolute_path: relative,
+					user: { id: userId },
+				});
+			} catch (e) {
+				errorLog(
+					new Error(
+						"Unable to delete file " + relative + ". " + (<Error>e).message
+					),
+					DirectoriesService,
+					userId
+				);
+			}
+		}
+
 		fs.rmdirSync(dir, { recursive: true });
 	}
 
@@ -132,6 +155,7 @@ export class DirectoriesService {
 		const files = this.getAllFiles(outputPath);
 		const absoluteRootPath = await this.fileService.absolutePath(userId, "");
 		const user = await this.userService.getById(userId);
+
 		for (const file of files) {
 			const relativePath = path.relative(absoluteRootPath, file.path);
 			const indexed = new UploadedFile();
