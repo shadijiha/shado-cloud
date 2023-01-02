@@ -3,24 +3,24 @@ import {
 	Controller,
 	Delete,
 	Get,
-	Logger,
 	Param,
 	Patch,
 	Post,
+	Query,
 	UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import {
-	FileInfo,
-	NewFileRequest,
 	OperationStatus,
 	OperationStatusResponse,
 } from "src/files/filesApiTypes";
 import { errorLog } from "src/logging";
+import { UploadedFile } from "src/models/uploadedFile";
 import { AuthUser } from "src/util";
 import { DirectoriesService } from "./directories.service";
 import {
+	DirectoryInfo,
 	DirListResponse,
 	NewDirRequest,
 	RenameDirRequest,
@@ -139,6 +139,21 @@ export class DirectoriesController {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],
 			};
+		}
+	}
+
+	@Get("search")
+	@ApiQuery({ name: "val" })
+	@ApiResponse({ type: [UploadedFile] })
+	public async search(
+		@AuthUser() userId: number,
+		@Query("val") searchText: string
+	) {
+		try {
+			return await this.directoriesService.search(userId, searchText);
+		} catch (e) {
+			errorLog(e, DirectoriesController, userId);
+			return [];
 		}
 	}
 

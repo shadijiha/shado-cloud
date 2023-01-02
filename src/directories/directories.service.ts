@@ -9,6 +9,8 @@ import { User } from "src/models/user";
 import archiver from "archiver";
 import extract from "extract-zip";
 import { errorLog } from "src/logging";
+import { UploadedFile } from "src/models/uploadedFile";
+import { getRepository, Like } from "typeorm";
 
 @Injectable()
 export class DirectoriesService {
@@ -90,6 +92,13 @@ export class DirectoriesService {
 				return path.relative(dir, filedata.path);
 			})
 			.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+	}
+
+	public async search(userId: number, searchText: string) {
+		const files = await getRepository(UploadedFile).find({
+			where: [{ absolute_path: Like(`%${searchText}%`), user: { id: userId } }],
+		});
+		return files ?? [];
 	}
 
 	public async zip(userId: number, name: string) {

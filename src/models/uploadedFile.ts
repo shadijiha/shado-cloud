@@ -4,6 +4,7 @@ import {
 	Column,
 	CreateDateColumn,
 	Entity,
+	Index,
 	ManyToOne,
 	PrimaryGeneratedColumn,
 	UpdateDateColumn,
@@ -17,11 +18,12 @@ export class UploadedFile extends BaseEntity {
 	id: number;
 
 	@Column()
+	@Index({ fulltext: true })
 	@ApiProperty()
 	absolute_path: string;
 
 	@ManyToOne(() => User, (user) => user.files)
-	@ApiProperty()
+	@ApiProperty({ type: () => User })
 	user: User;
 
 	@Column()
