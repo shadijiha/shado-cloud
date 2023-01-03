@@ -12,6 +12,7 @@ import { Log } from "./log";
 import { EncryptedPassword } from "./EncryptedPassword";
 import { TempUrl } from "./tempUrl";
 import { UploadedFile } from "./uploadedFile";
+import { SearchStat } from "./stats/searchStat";
 
 @Entity()
 export class User extends BaseEntity {

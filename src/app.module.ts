@@ -21,7 +21,7 @@ import { UserProfileModule } from "./user-profile/user-profile.module";
 			username: process.env.DB_USERNAME,
 			password: process.env.DB_PASSWORD,
 			database: process.env.DB_NAME,
-			entities: ["dist/models/*{.ts,.js}"],
+			entities: ["dist/models/**/*{.ts,.js}"],
 			synchronize: isDev(),
 		}),
 		FilesModule,

@@ -12,6 +12,7 @@ import { errorLog } from "src/logging";
 import { UploadedFile } from "src/models/uploadedFile";
 import { getRepository, Like } from "typeorm";
 import { SoftException } from "src/util";
+import { SearchStat } from "src/models/stats/searchStat";
 
 @Injectable()
 export class DirectoriesService {
@@ -121,6 +122,13 @@ export class DirectoriesService {
 		const files = await getRepository(UploadedFile).find({
 			where: [{ absolute_path: Like(`%${searchText}%`), user: { id: userId } }],
 		});
+
+		// Save stats
+		const stat = new SearchStat();
+		stat.text = searchText;
+		stat.user = await this.userService.getById(userId);
+		stat.save();
+
 		return files ?? [];
 	}
 

@@ -4,37 +4,26 @@ import {
 	Column,
 	CreateDateColumn,
 	Entity,
-	Index,
 	ManyToOne,
 	PrimaryGeneratedColumn,
-	UpdateDateColumn,
 } from "typeorm";
-import { User } from "./user";
+import { User } from "../user";
 
-@Entity()
-export class UploadedFile extends BaseEntity {
+@Entity({ name: "search_stats" })
+export class SearchStat extends BaseEntity {
 	@PrimaryGeneratedColumn()
 	@ApiProperty()
 	id: number;
 
 	@Column()
-	@Index({ fulltext: true })
 	@ApiProperty()
-	absolute_path: string;
+	text: string;
 
-	@ManyToOne(() => User, (user) => user.files)
-	@Index()
+	@ManyToOne(() => User)
 	@ApiProperty({ type: () => User })
 	user: User;
-
-	@Column()
-	@ApiProperty()
-	mime: string;
 
 	@CreateDateColumn()
 	@ApiProperty()
 	created_at: Date;
-
-	@UpdateDateColumn()
-	updated_at: Date;
 }

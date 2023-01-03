@@ -5,36 +5,40 @@ import {
 	CreateDateColumn,
 	Entity,
 	Index,
+	JoinColumn,
 	ManyToOne,
+	OneToOne,
 	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from "typeorm";
-import { User } from "./user";
+import { UploadedFile } from "../uploadedFile";
+import { User } from "../user";
 
-@Entity()
-export class UploadedFile extends BaseEntity {
+@Entity({ name: "file_access_stats" })
+export class FileAccessStat extends BaseEntity {
 	@PrimaryGeneratedColumn()
-	@ApiProperty()
 	id: number;
 
-	@Column()
-	@Index({ fulltext: true })
-	@ApiProperty()
-	absolute_path: string;
+	@OneToOne(() => UploadedFile)
+	@JoinColumn()
+	@Index()
+	@ApiProperty({ type: () => UploadedFile })
+	uploaded_file: UploadedFile;
 
-	@ManyToOne(() => User, (user) => user.files)
+	@Column()
+	@ApiProperty()
+	count: number;
+
+	@ManyToOne(() => User)
 	@Index()
 	@ApiProperty({ type: () => User })
 	user: User;
-
-	@Column()
-	@ApiProperty()
-	mime: string;
 
 	@CreateDateColumn()
 	@ApiProperty()
 	created_at: Date;
 
 	@UpdateDateColumn()
+	@ApiProperty()
 	updated_at: Date;
 }

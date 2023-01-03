@@ -8,6 +8,7 @@ import { TempUrl } from "src/models/tempUrl";
 import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
 import { SoftException } from "src/util";
+import { FileAccessStat } from "src/models/stats/fileAccessStat";
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
@@ -19,6 +20,8 @@ export class FilesService {
 	public async asStream(userId: number, relativePath: string, options?: any) {
 		const dir = await this.absolutePath(userId, relativePath);
 		if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
+
+		this.updateStats(userId, dir);
 
 		return createReadStream(dir, options);
 	}
@@ -338,5 +341,40 @@ export class FilesService {
 			FilesService.METADATA_FOLDER_NAME
 		);
 		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+	}
+
+	private async updateStats(userId: number, absolute_path: string) {
+		const root = await this.getUserRootPath(userId);
+		const sanitizedRelative = path.relative(root, absolute_path); // Need this to avoid weird slashes
+		const user = await this.userService.getById(userId);
+
+		// Check if file is indexed
+		let indexed = await UploadedFile.findOne({
+			where: { absolute_path: sanitizedRelative, user: user },
+		});
+
+		// If not index then created it
+		if (!indexed) {
+			indexed = new UploadedFile();
+			indexed.absolute_path = sanitizedRelative;
+			indexed.user = user;
+			indexed.mime = await FilesService.detectFile(absolute_path);
+			await indexed.save();
+		}
+
+		// Not see if the stat already exists
+		let stat = await FileAccessStat.findOne({
+			where: { user: user, uploaded_file: indexed },
+		});
+		if (!stat) {
+			stat = new FileAccessStat();
+			stat.uploaded_file = indexed;
+			stat.user = user;
+			stat.count = 0;
+			await stat.save();
+		}
+
+		stat.count += 1;
+		await stat.save();
 	}
 }
