@@ -79,10 +79,15 @@ export class FilesConstoller {
 					const end = partialend ? parseInt(partialend, 10) : total - 1;
 					const chunksize = end - start + 1;
 
-					const file = await this.fileService.asStream(userId, path, {
-						start: start,
-						end: end,
-					});
+					const file = await this.fileService.asStream(
+						userId,
+						path,
+						req.headers["user-agent"],
+						{
+							start: start,
+							end: end,
+						}
+					);
 					res.writeHead(206, {
 						"Content-Range": "bytes " + start + "-" + end + "/" + total,
 						"Accept-Ranges": "bytes",
@@ -96,12 +101,22 @@ export class FilesConstoller {
 						"Content-Length": total,
 						"Content-Type": fileInto.mime,
 					});
-					(await this.fileService.asStream(userId, path)).pipe(res);
+					(
+						await this.fileService.asStream(
+							userId,
+							path,
+							req.headers["user-agent"]
+						)
+					).pipe(res);
 				}
 			}
 			// Otherwise for any other file just do a simple stream
 			else {
-				const file = await this.fileService.asStream(userId, path);
+				const file = await this.fileService.asStream(
+					userId,
+					path,
+					req.headers["user-agent"]
+				);
 				file.pipe(res);
 			}
 		} catch (e) {

@@ -19,15 +19,19 @@ export class FileAccessStat extends BaseEntity {
 	@PrimaryGeneratedColumn()
 	id: number;
 
-	@OneToOne(() => UploadedFile)
+	@ManyToOne(() => UploadedFile)
 	@JoinColumn()
-	@Index()
+	@Index({ unique: false })
 	@ApiProperty({ type: () => UploadedFile })
 	uploaded_file: UploadedFile;
 
 	@Column()
 	@ApiProperty()
 	count: number;
+
+	@Column()
+	@ApiProperty()
+	user_agent: string;
 
 	@ManyToOne(() => User)
 	@Index()

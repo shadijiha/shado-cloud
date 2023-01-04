@@ -17,11 +17,16 @@ export class FilesService {
 
 	constructor(private userService: AuthService) {}
 
-	public async asStream(userId: number, relativePath: string, options?: any) {
+	public async asStream(
+		userId: number,
+		relativePath: string,
+		user_agent: string,
+		options?: any
+	) {
 		const dir = await this.absolutePath(userId, relativePath);
 		if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
-		this.updateStats(userId, dir);
+		this.updateStats(userId, dir, user_agent);
 
 		return createReadStream(dir, options);
 	}
@@ -343,7 +348,11 @@ export class FilesService {
 		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 	}
 
-	private async updateStats(userId: number, absolute_path: string) {
+	private async updateStats(
+		userId: number,
+		absolute_path: string,
+		user_agent: string
+	) {
 		const root = await this.getUserRootPath(userId);
 		const sanitizedRelative = path.relative(root, absolute_path); // Need this to avoid weird slashes
 		const user = await this.userService.getById(userId);
@@ -364,13 +373,14 @@ export class FilesService {
 
 		// Not see if the stat already exists
 		let stat = await FileAccessStat.findOne({
-			where: { user: user, uploaded_file: indexed },
+			where: { user, uploaded_file: indexed, user_agent },
 		});
 		if (!stat) {
 			stat = new FileAccessStat();
 			stat.uploaded_file = indexed;
 			stat.user = user;
 			stat.count = 0;
+			stat.user_agent = user_agent;
 			await stat.save();
 		}
 
