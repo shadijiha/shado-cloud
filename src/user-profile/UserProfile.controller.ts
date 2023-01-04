@@ -1,6 +1,7 @@
 import {
 	Body,
 	Controller,
+	Get,
 	Patch,
 	UploadedFile,
 	UseGuards,
@@ -16,6 +17,7 @@ import {
 	ChangeNameRequest,
 	ChangePasswordRequest,
 	ChangePictureRequest,
+	ProfileStats,
 } from "./user-profile-types";
 import { UserProfileService } from "./UserProfile.service";
 
@@ -71,7 +73,6 @@ export class UserProfileController {
 		@UploadedFile() file: Express.Multer.File,
 		@Body() body: ChangePictureRequest
 	) {
-		console.log();
 		return await errorWrapper(
 			async () => {
 				await this.profileService.changePicture(
@@ -82,6 +83,18 @@ export class UserProfileController {
 						? JSON.parse(body.crop as string)
 						: undefined
 				);
+			},
+			UserProfileController,
+			userId
+		);
+	}
+
+	@Get("stats")
+	@ApiResponse({ type: ProfileStats })
+	public async getStats(@AuthUser() userId: number) {
+		return await errorWrapper(
+			async () => {
+				return await this.profileService.getStats(userId);
 			},
 			UserProfileController,
 			userId

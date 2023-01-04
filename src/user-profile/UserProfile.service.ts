@@ -8,8 +8,11 @@ import { User } from "src/models/user";
 import { SoftException } from "src/util";
 import fs from "fs";
 import { UploadedFile } from "src/models/uploadedFile";
-import { ProfileCropData } from "./user-profile-types";
+import { ProfileCropData, ProfileStats } from "./user-profile-types";
 import sharp from "sharp";
+import { FileAccessStat } from "src/models/stats/fileAccessStat";
+import { SearchStat } from "src/models/stats/searchStat";
+import { getConnection } from "typeorm";
 
 @Injectable()
 export class UserProfileService {
@@ -49,6 +52,39 @@ export class UserProfileService {
 	) {
 		const user = await this.verifyPassword(userId, password);
 		this.saveProfilePicture(user, file, crop);
+	}
+
+	public async getStats(userId: number) {
+		const fileAccesMeta = getConnection().getMetadata(FileAccessStat);
+		const uploadedFileMeta = getConnection().getMetadata(UploadedFile);
+		const userTbMeta = getConnection().getMetadata(User);
+
+		const most_accesed_files_raw = await FileAccessStat.query(`
+			SELECT SUM(T.count) AS Total, U.*
+			FROM ${fileAccesMeta.tableName} AS T
+			LEFT JOIN ${uploadedFileMeta.tableName} AS U ON T.${uploadedFileMeta.name}Id = U.id
+			WHERE T.${userTbMeta.name}Id = ${userId}
+			GROUP BY U.id
+		`);
+
+		const most_search_raw = await SearchStat.createQueryBuilder("search")
+			.addSelect("count(search.text) AS Total")
+			.where(`search.${userTbMeta.name}Id = ${userId}`)
+			.groupBy("search.text")
+			.getRawAndEntities();
+
+		const most_accesed_files: ProfileStats = {
+			most_accesed_files: most_accesed_files_raw.map(({ Total, ...file }) => ({
+				access_count: Total,
+				file,
+			})),
+			most_searched: most_search_raw.raw.map((e, i) => ({
+				search_count: e.Total,
+				search: most_search_raw.entities[i],
+			})),
+		};
+
+		return most_accesed_files;
 	}
 
 	private async verifyPassword(

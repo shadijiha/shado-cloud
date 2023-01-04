@@ -1,6 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { OperationStatusResponse } from "src/files/filesApiTypes";
 import { EncryptedPassword } from "src/models/EncryptedPassword";
+import { SearchStat } from "src/models/stats/searchStat";
+import { UploadedFile } from "src/models/uploadedFile";
 
 export class ChangePasswordRequest {
 	@ApiProperty()
@@ -39,6 +41,31 @@ export class ChangePictureRequest {
 	crop: ProfileCropData | string | undefined;
 }
 
+/**
+ * Stats API Types
+ */
+class AccessFileStat {
+	@ApiProperty()
+	access_count: number;
+	@ApiProperty({ type: UploadedFile })
+	file: UploadedFile;
+}
+class MostSearchStat {
+	@ApiProperty()
+	search_count: number;
+	@ApiProperty({ type: SearchStat })
+	search: SearchStat;
+}
+export class ProfileStats {
+	@ApiProperty({ type: [AccessFileStat] })
+	most_accesed_files: AccessFileStat[];
+	@ApiProperty({ type: [MostSearchStat] })
+	most_searched: MostSearchStat[];
+}
+
+/**
+ * Password vault API
+ */
 class AddToVaultElement {
 	@ApiProperty()
 	username: string;
