@@ -65,12 +65,16 @@ export class UserProfileService {
 			LEFT JOIN ${uploadedFileMeta.tableName} AS U ON T.${uploadedFileMeta.name}Id = U.id
 			WHERE T.${userTbMeta.name}Id = ${userId}
 			GROUP BY U.id
+			ORDER BY Total DESC
+			LIMIT 5
 		`);
 
 		const most_search_raw = await SearchStat.createQueryBuilder("search")
 			.addSelect("count(search.text) AS Total")
 			.where(`search.${userTbMeta.name}Id = ${userId}`)
 			.groupBy("search.text")
+			.orderBy("Total", "DESC")
+			.limit(5)
 			.getRawAndEntities();
 
 		const most_accesed_files: ProfileStats = {
