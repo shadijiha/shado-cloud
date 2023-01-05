@@ -66,7 +66,7 @@ export class UserProfileService {
 			WHERE T.${userTbMeta.name}Id = ${userId}
 			GROUP BY U.id
 			ORDER BY Total DESC
-			LIMIT 5
+			LIMIT 6 	-- Needed to ignore the profile picture access
 		`);
 
 		const most_search_raw = await SearchStat.createQueryBuilder("search")
