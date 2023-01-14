@@ -1,17 +1,21 @@
 # A Fully featured Could Drive
-Fun fact! All files you see in the readme are hosted on this cloud drive!
 
-## Overall view 
-![](http://shadijiha.ddns.net/apinest/temp/0bOUcYJZoczPFmOqxrI2gzFFE8shXqsU/get)
+## Overall view
+
+![](https://github.com/shadijiha/shado-cloud/blob/nest-js-backend/readme images/Capture.PNG?raw=true)
 
 ## Upload and Create files
-![](http://shadijiha.ddns.net/apinest/temp/E1ZVpPgOiHe5iWxu2nLOB4VkT0auNYYA/get)
+
+![](https://github.com/shadijiha/shado-cloud/blob/nest-js-backend/readme%20images/upload.png?raw=true)
 
 ## Share files
-![](http://shadijiha.ddns.net/apinest/temp/6RAHyqzjJIHfk8hy7ogxrS0w8h90VQxD/get)
 
-## Manage shared files 
-![](http://shadijiha.ddns.net/apinest/temp/sH1IahzpIxCmCWgYDYecGu58nnGoqbk5/get)
+![](https://github.com/shadijiha/shado-cloud/blob/nest-js-backend/readme%20images/share.png?raw=true)
+
+## Manage shared files
+
+![](https://github.com/shadijiha/shado-cloud/blob/nest-js-backend/readme%20images/manage%20shared.PNG?raw=true)
 
 ## Secure authentication system using JWT
-![](http://shadijiha.ddns.net/apinest/temp/DulWjahSP8CoFE3JxXB9yzFAsTHBGHhp/get)
+
+![](https://github.com/shadijiha/shado-cloud/blob/nest-js-backend/readme%20images/auth.PNG?raw=true)
