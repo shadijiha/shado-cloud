@@ -2,7 +2,7 @@
 
 ## Overall view
 
-![](https://github.com/shadijiha/shado-cloud/blob/nest-js-backend/readme images/Capture.PNG?raw=true)
+![](https://github.com/shadijiha/shado-cloud/blob/nest-js-backend/readme%20images/Capture.PNG?raw=true)
 
 ## Upload and Create files
 
