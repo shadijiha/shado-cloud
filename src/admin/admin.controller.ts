@@ -4,6 +4,7 @@ import {
 	Get,
 	Logger,
 	Param,
+	Post,
 	UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
@@ -72,5 +73,10 @@ export class AdminController {
 		this.adminService
 			.deleteByIds(ids)
 			.catch((e) => errorLog(e, AdminController, userId));
+	}
+
+	@Post("redeploy")
+	async redeploy() {
+		return await this.adminService.redeploy();
 	}
 }

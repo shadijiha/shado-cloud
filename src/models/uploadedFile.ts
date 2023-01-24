@@ -3,6 +3,7 @@ import {
 	BaseEntity,
 	Column,
 	CreateDateColumn,
+	DeleteDateColumn,
 	Entity,
 	Index,
 	ManyToOne,
@@ -37,4 +38,7 @@ export class UploadedFile extends BaseEntity {
 
 	@UpdateDateColumn()
 	updated_at: Date;
+
+	@DeleteDateColumn()
+	deleted_at: Date;
 }

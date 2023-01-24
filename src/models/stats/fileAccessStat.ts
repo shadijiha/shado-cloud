@@ -3,6 +3,7 @@ import {
 	BaseEntity,
 	Column,
 	CreateDateColumn,
+	DeleteDateColumn,
 	Entity,
 	Index,
 	JoinColumn,
@@ -45,4 +46,7 @@ export class FileAccessStat extends BaseEntity {
 	@UpdateDateColumn()
 	@ApiProperty()
 	updated_at: Date;
+
+	@DeleteDateColumn()
+	deleted_at: Date;
 }

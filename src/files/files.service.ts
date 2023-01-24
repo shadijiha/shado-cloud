@@ -105,7 +105,15 @@ export class FilesService {
 
 			// See if file is in DB, if yes, then delete it
 			const user = await this.userService.getById(userId);
-			await UploadedFile.delete({ absolute_path: relative, user });
+			const uploadedFile = await UploadedFile.findOne({
+				where: { absolute_path: relative, user },
+			});
+			const accessData = await FileAccessStat.find({
+				where: { uploaded_file: uploadedFile },
+			});
+			if (accessData) await FileAccessStat.softRemove(accessData);
+
+			await UploadedFile.softRemove(uploadedFile);
 
 			return [true, ""];
 		} catch (e) {

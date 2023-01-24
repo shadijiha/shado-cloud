@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { exec, ExecException } from "child_process";
 import { Log } from "src/models/log";
 
 @Injectable()
@@ -14,4 +15,24 @@ export class AdminService {
 	public async deleteByIds(ids: number[]) {
 		await Log.delete(ids);
 	}
+
+	public async redeploy() {
+		const result = await cmd("./deploy");
+		return { result };
+	}
+}
+
+// Helper
+function cmd(command: string): Promise<ExecException | string> {
+	return new Promise((resolve, reject) => {
+		exec(command, (err, stdout, stderr) => {
+			if (err) {
+				reject(err);
+				return;
+			}
+
+			// the *entire* stdout and stderr (buffered)
+			resolve(stdout);
+		});
+	});
 }
