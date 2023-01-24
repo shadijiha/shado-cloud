@@ -27,12 +27,11 @@ function cmd(command: string): Promise<ExecException | string> {
 	return new Promise((resolve, reject) => {
 		exec(command, (err, stdout, stderr) => {
 			if (err) {
-				reject(err);
-				return;
+				return reject(err);
 			}
 
 			// the *entire* stdout and stderr (buffered)
-			resolve(stdout);
+			return resolve(stdout);
 		});
 	});
 }
