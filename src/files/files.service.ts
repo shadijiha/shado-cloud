@@ -113,7 +113,7 @@ export class FilesService {
 			});
 			if (accessData) await FileAccessStat.softRemove(accessData);
 
-			await UploadedFile.softRemove(uploadedFile);
+			if (uploadedFile) await UploadedFile.softRemove(uploadedFile);
 
 			return [true, ""];
 		} catch (e) {
@@ -379,7 +379,7 @@ export class FilesService {
 			await indexed.save();
 		}
 
-		// Not see if the stat already exists
+		// Now see if the stat already exists
 		let stat = await FileAccessStat.findOne({
 			where: { user, uploaded_file: indexed, user_agent },
 		});

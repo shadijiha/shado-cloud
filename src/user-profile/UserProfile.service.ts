@@ -54,7 +54,7 @@ export class UserProfileService {
 		this.saveProfilePicture(user, file, crop);
 	}
 
-	public async getStats(userId: number) {
+	public async getStats(userId: number, withDeleted: boolean = false) {
 		const fileAccesMeta = getConnection().getMetadata(FileAccessStat);
 		const uploadedFileMeta = getConnection().getMetadata(UploadedFile);
 		const userTbMeta = getConnection().getMetadata(User);
@@ -62,8 +62,11 @@ export class UserProfileService {
 		const most_accesed_files_raw = await FileAccessStat.query(`
 			SELECT SUM(T.count) AS Total, U.*
 			FROM ${fileAccesMeta.tableName} AS T
-			LEFT JOIN ${uploadedFileMeta.tableName} AS U ON T.${uploadedFileMeta.name}Id = U.id
+			LEFT JOIN ${uploadedFileMeta.tableName} AS U ON T.${
+			uploadedFileMeta.name
+		}Id = U.id
 			WHERE T.${userTbMeta.name}Id = ${userId}
+					${withDeleted ? "" : " AND T.deleted_at is null"}
 			GROUP BY U.id
 			ORDER BY Total DESC
 			LIMIT 6 	-- Needed to ignore the profile picture access

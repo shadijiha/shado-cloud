@@ -3,13 +3,15 @@ import {
 	Controller,
 	Get,
 	Patch,
+	Query,
 	UploadedFile,
 	UseGuards,
 	UseInterceptors,
+	ValidationPipe,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { FileInterceptor } from "@nestjs/platform-express/multer";
-import { ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { OperationStatusResponse } from "src/files/filesApiTypes";
 import { errorWrapper } from "src/logging";
 import { AuthUser } from "src/util";
@@ -90,11 +92,16 @@ export class UserProfileController {
 	}
 
 	@Get("stats")
+	@ApiQuery({ name: "with_deleted", required: false })
 	@ApiResponse({ type: ProfileStats })
-	public async getStats(@AuthUser() userId: number) {
+	public async getStats(
+		@AuthUser() userId: number,
+		@Query("with_deleted", new ValidationPipe({ transform: true }))
+		with_deleted: boolean = false
+	) {
 		return await errorWrapper(
 			async () => {
-				return await this.profileService.getStats(userId);
+				return await this.profileService.getStats(userId, with_deleted);
 			},
 			UserProfileController,
 			userId
