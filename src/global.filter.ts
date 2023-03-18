@@ -1,0 +1,36 @@
+import {
+	ExceptionFilter,
+	Catch,
+	ArgumentsHost,
+	HttpException,
+	Logger,
+} from "@nestjs/common";
+import { Request, Response } from "express";
+import { CookiePayload } from "./auth/authApiTypes";
+import { errorLog } from "./logging";
+import { parseJwt } from "./util";
+
+@Catch(Error)
+export class GlobalExceptionFilter implements ExceptionFilter {
+	catch(exception: Error, host: ArgumentsHost) {
+		const ctx = host.switchToHttp();
+		const response = ctx.getResponse<Response>();
+		const request = ctx.getRequest<Request>();
+		const status =
+			exception instanceof HttpException ? exception.getStatus() : 400;
+
+		// Log it
+		Logger.error(exception.message, exception.stack, ctx);
+		const userId = (<CookiePayload>(
+			parseJwt(request.cookies[process.env.COOKIE_NAME])
+		)).userId;
+		errorLog(exception, { name: request.route } as Function, userId);
+
+		response.status(status).json({
+			statusCode: status,
+			timestamp: new Date().toISOString(),
+			path: request.url,
+			message: exception.message,
+		});
+	}
+}

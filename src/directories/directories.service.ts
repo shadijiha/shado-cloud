@@ -11,13 +11,12 @@ import extract from "extract-zip";
 import { errorLog } from "src/logging";
 import { UploadedFile } from "src/models/uploadedFile";
 import { getRepository, Like } from "typeorm";
-import { SoftException } from "src/util";
 import { SearchStat } from "src/models/stats/searchStat";
 
 @Injectable()
 export class DirectoriesService {
 	constructor(
-		private userService: AuthService,
+		private readonly userService: AuthService,
 		private readonly fileService: FilesService
 	) {}
 

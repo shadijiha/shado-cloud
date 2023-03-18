@@ -54,4 +54,8 @@ export class User extends BaseEntity {
 	@ApiProperty()
 	@UpdateDateColumn()
 	updated_at: Date;
+
+	public getMaxData(): number {
+		return 5 * 1024 * 1024 * 1024; // 5 GB
+	}
 }

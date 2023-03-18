@@ -8,19 +8,17 @@ import { User } from "src/models/user";
 import { SoftException } from "src/util";
 import fs from "fs";
 import { UploadedFile } from "src/models/uploadedFile";
-import { ProfileCropData, ProfileStats, UsedData } from "./user-profile-types";
+import { ProfileCropData, ProfileStats } from "./user-profile-types";
 import sharp from "sharp";
 import { FileAccessStat } from "src/models/stats/fileAccessStat";
 import { SearchStat } from "src/models/stats/searchStat";
 import { getConnection } from "typeorm";
-import { DirectoriesService } from "src/directories/directories.service";
 
 @Injectable()
 export class UserProfileService {
 	constructor(
 		private readonly userService: AuthService,
-		private readonly fileService: FilesService,
-		private readonly dirService: DirectoriesService
+		private readonly fileService: FilesService
 	) {}
 
 	public async changePassword(
@@ -91,7 +89,7 @@ export class UserProfileService {
 				search_count: e.Total,
 				search: most_search_raw.entities[i],
 			})),
-			used_data: await this.getUsedData(userId),
+			used_data: await this.fileService.getUsedData(userId),
 		};
 
 		return most_accesed_files;
@@ -155,54 +153,5 @@ export class UserProfileService {
 		} catch (e) {
 			return [false, (<Error>e).message];
 		}
-	}
-
-	private async getUsedData(userId: number) {
-		const root = await this.fileService.getUserRootPath(userId);
-		const used_data: UsedData = {
-			max: 5 * 1024 * 1024 * 1024, // 5GB,
-			images: 0,
-			videos: 0,
-			documents: 0,
-			other: 0,
-		};
-
-		const arrayOfFiles = await this.dirService.listrecursive(userId);
-		arrayOfFiles.forEach((relativePath) => {
-			const filePath = path.join(root, relativePath);
-			// Get the file extension
-			const ext = path.extname(filePath).toLowerCase();
-			const size = fs.statSync(filePath).size;
-
-			if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif")
-				used_data.images += size;
-			else if (
-				ext == ".mp4" ||
-				ext == ".webm" ||
-				ext == ".mkv" ||
-				ext == ".avi" ||
-				ext == ".mov" ||
-				ext == ".wmv"
-			)
-				used_data.videos += size;
-			else if (
-				ext == ".pdf" ||
-				ext == ".doc" ||
-				ext == ".docx" ||
-				ext == ".xls" ||
-				ext == ".xlsx" ||
-				ext == ".ppt" ||
-				ext == ".pptx" ||
-				ext == ".odt" ||
-				ext == ".ods" ||
-				ext == ".odp" ||
-				ext == ".txt" ||
-				ext == ".rtf"
-			)
-				used_data.documents += size;
-			else used_data.other += size;
-		});
-
-		return used_data;
 	}
 }

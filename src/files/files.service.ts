@@ -9,13 +9,18 @@ import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
 import { SoftException } from "src/util";
 import { FileAccessStat } from "src/models/stats/fileAccessStat";
+import { UsedData } from "src/user-profile/user-profile-types";
+import { DirectoriesService } from "src/directories/directories.service";
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
 export class FilesService {
 	public static readonly METADATA_FOLDER_NAME = ".metadata";
+	private readonly dirService: DirectoriesService; // Not injected, because it would cause a circular dependency
 
-	constructor(private userService: AuthService) {}
+	constructor(private userService: AuthService) {
+		this.dirService = new DirectoriesService(userService, this);
+	}
 
 	public async asStream(
 		userId: number,
@@ -346,6 +351,57 @@ export class FilesService {
 			exists: fs.existsSync(dir),
 			path: path.relative(await this.getUserRootPath(userId), dir),
 		};
+	}
+
+	public async getUsedData(userId: number) {
+		// TODO: Cache this in redis
+		const root = await this.getUserRootPath(userId);
+		const user = await this.userService.getById(userId);
+		const used_data: UsedData = {
+			max: user.getMaxData(), // 5GB,
+			images: 0,
+			videos: 0,
+			documents: 0,
+			other: 0,
+		};
+
+		const arrayOfFiles = await this.dirService.listrecursive(userId);
+		arrayOfFiles.forEach((relativePath) => {
+			const filePath = path.join(root, relativePath);
+			// Get the file extension
+			const ext = path.extname(filePath).toLowerCase();
+			const size = fs.statSync(filePath).size;
+
+			if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif")
+				used_data.images += size;
+			else if (
+				ext == ".mp4" ||
+				ext == ".webm" ||
+				ext == ".mkv" ||
+				ext == ".avi" ||
+				ext == ".mov" ||
+				ext == ".wmv"
+			)
+				used_data.videos += size;
+			else if (
+				ext == ".pdf" ||
+				ext == ".doc" ||
+				ext == ".docx" ||
+				ext == ".xls" ||
+				ext == ".xlsx" ||
+				ext == ".ppt" ||
+				ext == ".pptx" ||
+				ext == ".odt" ||
+				ext == ".ods" ||
+				ext == ".odp" ||
+				ext == ".txt" ||
+				ext == ".rtf"
+			)
+				used_data.documents += size;
+			else used_data.other += size;
+		});
+
+		return used_data;
 	}
 
 	public async createMetaFolderIfNotExists(userId: number) {
