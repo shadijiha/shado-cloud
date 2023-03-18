@@ -42,6 +42,13 @@ export class FilesService {
 		dest: string
 	): FileServiceResult {
 		try {
+			// Check if user has enough space to upload the file
+			const usedData = await this.getUsedData(userId);
+			const user = await this.userService.getById(userId);
+			if (usedData.total() + file.size > (await user.getMaxData())) {
+				return [false, "You don't have enough space to upload this file"];
+			}
+
 			const cleanName = path.join(
 				dest,
 				this.replaceIllegalChars(file.originalname)
@@ -357,13 +364,8 @@ export class FilesService {
 		// TODO: Cache this in redis
 		const root = await this.getUserRootPath(userId);
 		const user = await this.userService.getById(userId);
-		const used_data: UsedData = {
-			max: user.getMaxData(), // 5GB,
-			images: 0,
-			videos: 0,
-			documents: 0,
-			other: 0,
-		};
+		const used_data: UsedData = new UsedData();
+		used_data.max = user.getMaxData();
 
 		const arrayOfFiles = await this.dirService.listrecursive(userId);
 		arrayOfFiles.forEach((relativePath) => {

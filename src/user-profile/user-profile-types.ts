@@ -60,13 +60,17 @@ export class UsedData {
 	@ApiProperty()
 	max: number;
 	@ApiProperty()
-	images: number;
+	images: number = 0;
 	@ApiProperty()
-	videos: number;
+	videos: number = 0;
 	@ApiProperty()
-	other: number;
+	other: number = 0;
 	@ApiProperty()
-	documents: number;
+	documents: number = 0;
+
+	public total() {
+		return this.images + this.videos + this.other + this.documents;
+	}
 }
 export class ProfileStats {
 	@ApiProperty({ type: [AccessFileStat] })
