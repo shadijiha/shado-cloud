@@ -56,11 +56,25 @@ class MostSearchStat {
 	@ApiProperty({ type: SearchStat })
 	search: SearchStat;
 }
+export class UsedData {
+	@ApiProperty()
+	max: number;
+	@ApiProperty()
+	images: number;
+	@ApiProperty()
+	videos: number;
+	@ApiProperty()
+	other: number;
+	@ApiProperty()
+	documents: number;
+}
 export class ProfileStats {
 	@ApiProperty({ type: [AccessFileStat] })
 	most_accesed_files: AccessFileStat[];
 	@ApiProperty({ type: [MostSearchStat] })
 	most_searched: MostSearchStat[];
+	@ApiProperty({ type: UsedData })
+	used_data: UsedData;
 }
 
 /**
