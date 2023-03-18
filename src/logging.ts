@@ -1,5 +1,4 @@
 import "reflect-metadata";
-import { PATH_METADATA } from "@nestjs/common/constants";
 import { Logger } from "@nestjs/common";
 import { Log } from "./models/log";
 import { User } from "./models/user";
@@ -51,15 +50,16 @@ async function logHelper(
 	// IF it is a softexception, don't log it
 	if (e instanceof SoftException) return;
 
+	const ctx = RequestContext.currentContext;
 	switch (type) {
 		case "error":
-			Logger.error(e.message);
+			Logger.error(e.message, e.stack, ctx);
 			break;
 		case "info":
-			Logger.log(e.message);
+			Logger.log(e.message, e.stack, ctx);
 			break;
 		case "warn":
-			Logger.warn(e.message);
+			Logger.warn(e.message, e.stack, ctx);
 			break;
 	}
 	const log = new Log();

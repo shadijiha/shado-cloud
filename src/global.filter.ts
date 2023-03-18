@@ -20,11 +20,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 			exception instanceof HttpException ? exception.getStatus() : 400;
 
 		// Log it
-		Logger.error(exception.message, exception.stack, ctx);
 		const userId = (<CookiePayload>(
 			parseJwt(request.cookies[process.env.COOKIE_NAME])
 		)).userId;
-		errorLog(exception, { name: request.route } as Function, userId);
+		errorLog(exception, GlobalExceptionFilter, userId);
 
 		response.status(status).json({
 			statusCode: status,

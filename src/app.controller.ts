@@ -8,11 +8,6 @@ export class AppController {
 
 	@Get()
 	getHello(): string {
-		try {
-			return this.appService.getHello();
-		} catch (e) {
-			errorLog(e, AppController);
-			return "An error has occured";
-		}
+		return this.appService.getHello();
 	}
 }

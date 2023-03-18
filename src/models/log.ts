@@ -32,7 +32,7 @@ export class Log extends BaseEntity {
 	controller: string;
 
 	@ManyToOne(() => User, (user) => user.logs)
-	@ApiProperty()
+	@ApiProperty({ type: () => User })
 	user: User;
 
 	@Column({ nullable: true })
