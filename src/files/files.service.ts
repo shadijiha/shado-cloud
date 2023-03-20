@@ -20,6 +20,11 @@ export class FilesService {
 
 	constructor(private userService: AuthService) {
 		this.dirService = new DirectoriesService(userService, this);
+
+		// Sharp cache
+		sharp.cache(true);
+		sharp.cache({ memory: 1024, items: 5000, files: 500 });
+		sharp.simd(true);
 	}
 
 	public async asStream(
