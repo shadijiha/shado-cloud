@@ -23,6 +23,17 @@ import { UserProfileModule } from "./user-profile/user-profile.module";
 			database: process.env.DB_NAME,
 			entities: ["dist/models/**/*{.ts,.js}"],
 			synchronize: isDev(),
+			logging: isDev(),
+			cache: {
+				type: "redis",
+				duration: 1000 * 60 * 60,
+				options: {
+					host: process.env.REDIS_HOST,
+					port: Number(process.env.REDIS_PORT),
+					password: process.env.REDIS_PASSWORD,
+				},
+				alwaysEnabled: false,
+			},
 		}),
 		FilesModule,
 		DirectoriesModule,

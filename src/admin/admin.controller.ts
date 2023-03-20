@@ -57,7 +57,7 @@ export class AdminController {
 
 			try {
 				buffer.forEach((e) => {
-					ids.push(Number(e));
+					ids.push(parseInt(e));
 				});
 			} catch (e) {
 				errorLog(e, AdminController, userId);

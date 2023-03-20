@@ -1,11 +1,10 @@
 /**
  * Utlity functions
  */
-import { createParamDecorator, ExecutionContext, Logger } from "@nestjs/common";
+import { createParamDecorator, ExecutionContext } from "@nestjs/common";
 import { ApiBody } from "@nestjs/swagger";
 import { Request } from "express";
 import { CookiePayload } from "./auth/authApiTypes";
-import { Transform } from "class-transformer";
 
 /**
  * @example Use this function as decorator on top of controller functions
@@ -14,9 +13,8 @@ import { Transform } from "class-transformer";
 export const AuthUser = createParamDecorator(
 	(data: unknown, ctx: ExecutionContext) => {
 		const request = <Request>ctx.switchToHttp().getRequest();
-		const payload = <CookiePayload>(
-			parseJwt(request.cookies[process.env.COOKIE_NAME])
-		);
+		const token = parseJwt(request.cookies[process.env.COOKIE_NAME]);
+		const payload = <CookiePayload>(token == null ? { userId: -1 } : token);
 
 		return payload.userId;
 	}
@@ -46,7 +44,10 @@ export const ApiFile =
  * @param token The token to parse
  * @returns Returns the json object with the JWT data
  */
-export function parseJwt(token) {
+export function parseJwt(token: string | undefined): Object | null {
+	if (!token) {
+		return null;
+	}
 	var base64Url = token.split(".")[1];
 	var base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
 	var jsonPayload = decodeURIComponent(
