@@ -1,24 +1,26 @@
 import { Injectable, Logger } from "@nestjs/common";
 import argon2 from "argon2";
 import path from "path";
-import { AuthService } from "src/auth/auth.service";
-import { FilesService } from "src/files/files.service";
-import { infoLog } from "src/logging";
-import { User } from "src/models/user";
-import { SoftException } from "src/util";
+import { AuthService } from "../auth/auth.service";
+import { FilesService } from "../files/files.service";
+import { infoLog } from "../logging";
+import { User } from "../models/user";
+import { SoftException } from "../util";
 import fs from "fs";
-import { UploadedFile } from "src/models/uploadedFile";
+import { UploadedFile } from "../models/uploadedFile";
 import { ProfileCropData, ProfileStats } from "./user-profile-types";
 import sharp from "sharp";
-import { FileAccessStat } from "src/models/stats/fileAccessStat";
-import { SearchStat } from "src/models/stats/searchStat";
-import { getConnection } from "typeorm";
+import { FileAccessStat } from "../models/stats/fileAccessStat";
+import { SearchStat } from "../models/stats/searchStat";
+import { getConnection, In } from "typeorm";
+import { DirectoriesService } from "../directories/directories.service";
 
 @Injectable()
 export class UserProfileService {
 	constructor(
 		private readonly userService: AuthService,
-		private readonly fileService: FilesService
+		private readonly fileService: FilesService,
+		private readonly directoryService: DirectoriesService
 	) {}
 
 	public async changePassword(
@@ -93,6 +95,54 @@ export class UserProfileService {
 		};
 
 		return most_accesed_files;
+	}
+
+	public async indexFiles(userId: number) {
+		const user = await this.userService.getById(userId);
+
+		// Get current indexed files
+		const currentIndexedFiles = await UploadedFile.find({ user: user });
+
+		// Re-index all files
+		const files = await this.directoryService.listrecursive(user.id);
+		const newIndexedFiles: UploadedFile[] = [];
+		for (const file of files) {
+			const newFile = new UploadedFile();
+			newFile.user = user;
+			newFile.absolute_path = file;
+
+			let mime: string =
+				currentIndexedFiles.find(
+					(e) => path.normalize(e.absolute_path) == path.normalize(file)
+				)?.mime ??
+				(await FilesService.detectFile(
+					await this.fileService.absolutePath(userId, file)
+				));
+
+			newFile.mime = mime;
+			newIndexedFiles.push(await newFile.save());
+		}
+
+		// Get all references to the uploaded files (can't delete yet because of foreign key constraints)
+		const fileAccessStats = await FileAccessStat.find({
+			where: {
+				uploaded_file: { id: In(currentIndexedFiles.map((e) => e.id)) },
+			},
+			relations: ["uploaded_file"],
+		});
+		for (const fileAccessStat of fileAccessStats) {
+			fileAccessStat.uploaded_file = newIndexedFiles.find(
+				(e) =>
+					path.normalize(e.absolute_path) ==
+					path.normalize(fileAccessStat.uploaded_file.absolute_path)
+			);
+			await fileAccessStat.save();
+		}
+
+		// Clear previous indexed files
+		await UploadedFile.remove(currentIndexedFiles);
+
+		return newIndexedFiles.length;
 	}
 
 	private async verifyPassword(

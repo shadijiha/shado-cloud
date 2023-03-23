@@ -9,6 +9,7 @@ import { TempUrlModule } from "./temp-url/temp-url.module";
 import { RequestContextModule } from "nestjs-request-context";
 import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
+import { Connection } from "typeorm";
 
 @Module({
 	imports: [
@@ -23,6 +24,17 @@ import { UserProfileModule } from "./user-profile/user-profile.module";
 			database: process.env.DB_NAME,
 			entities: ["dist/models/**/*{.ts,.js}"],
 			synchronize: isDev(),
+			logging: false,
+			cache: {
+				type: "redis",
+				duration: 1000, // 1 second
+				options: {
+					host: process.env.REDIS_HOST,
+					port: Number(process.env.REDIS_PORT),
+					password: process.env.REDIS_PASSWORD,
+				},
+				alwaysEnabled: true,
+			},
 		}),
 		FilesModule,
 		DirectoriesModule,

@@ -1,6 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { exec, ExecException } from "child_process";
 import { Log } from "src/models/log";
+import { In } from "typeorm";
 
 @Injectable()
 export class AdminService {
@@ -13,6 +14,7 @@ export class AdminService {
 	}
 
 	public async deleteByIds(ids: number[]) {
+		Logger.debug(typeof ids[0]);
 		await Log.delete(ids);
 	}
 
