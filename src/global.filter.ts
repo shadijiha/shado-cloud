@@ -4,11 +4,12 @@ import {
 	ArgumentsHost,
 	HttpException,
 	Logger,
+	UnauthorizedException,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { CookiePayload } from "./auth/authApiTypes";
 import { errorLog } from "./logging";
-import { parseJwt } from "./util";
+import { parseJwt, SoftException } from "./util";
 
 @Catch(Error)
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -16,15 +17,23 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 		const ctx = host.switchToHttp();
 		const response = ctx.getResponse<Response>();
 		const request = ctx.getRequest<Request>();
-		const status =
+		let status =
 			exception instanceof HttpException ? exception.getStatus() : 400;
+		if (exception instanceof UnauthorizedException) status = 401;
 
 		// Log it
-		const userId = (<CookiePayload>(
-			parseJwt(request.cookies[process.env.COOKIE_NAME])
-		)).userId;
-		errorLog(exception, GlobalExceptionFilter, userId);
-
+		if (
+			!(
+				exception instanceof HttpException ||
+				exception instanceof UnauthorizedException ||
+				exception instanceof SoftException
+			)
+		) {
+			const userId = (<CookiePayload>(
+				parseJwt(request.cookies[process.env.COOKIE_NAME])
+			))?.userId;
+			errorLog(exception, GlobalExceptionFilter, userId);
+		}
 		response.status(status).json({
 			statusCode: status,
 			timestamp: new Date().toISOString(),

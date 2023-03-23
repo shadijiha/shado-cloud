@@ -107,4 +107,10 @@ export class UserProfileController {
 			userId
 		);
 	}
+
+	@Patch("indexfiles")
+	@ApiResponse({ type: OperationStatusResponse })
+	public async indexFiles(@AuthUser() userId: number) {
+		return await this.profileService.indexFiles(userId);
+	}
 }
