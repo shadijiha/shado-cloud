@@ -131,12 +131,24 @@ export class UserProfileService {
 			relations: ["uploaded_file"],
 		});
 		for (const fileAccessStat of fileAccessStats) {
-			fileAccessStat.uploaded_file = newIndexedFiles.find(
+			const uploaded_file_new: UploadedFile | undefined = newIndexedFiles.find(
 				(e) =>
 					path.normalize(e.absolute_path) ==
 					path.normalize(fileAccessStat.uploaded_file.absolute_path)
 			);
-			await fileAccessStat.save();
+
+			// If a new uploaded file was not found then this means
+			// that the file does not physically exist anymore
+			// In that case we have 2 options:
+			// 1. Delete the file access stat
+			// 2. Soft delete the old Uploaded file reference
+			if (!uploaded_file_new) {
+				// Decided to go with Removing the file access stat
+				await fileAccessStat.remove();
+			} else {
+				fileAccessStat.uploaded_file = uploaded_file_new;
+				await fileAccessStat.save();
+			}
 		}
 
 		// Clear previous indexed files
