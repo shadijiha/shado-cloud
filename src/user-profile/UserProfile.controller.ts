@@ -111,6 +111,8 @@ export class UserProfileController {
 	@Patch("indexfiles")
 	@ApiResponse({ type: OperationStatusResponse })
 	public async indexFiles(@AuthUser() userId: number) {
-		return await this.profileService.indexFiles(userId);
+		return {
+			reindexCount: await this.profileService.indexFiles(userId),
+		};
 	}
 }

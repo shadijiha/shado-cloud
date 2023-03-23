@@ -141,6 +141,8 @@ export class UserProfileService {
 
 		// Clear previous indexed files
 		await UploadedFile.remove(currentIndexedFiles);
+
+		return newIndexedFiles.length;
 	}
 
 	private async verifyPassword(
