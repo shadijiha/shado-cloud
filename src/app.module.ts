@@ -39,7 +39,7 @@ import { ThrottlerModule } from "@nestjs/throttler";
 		}),
 		ThrottlerModule.forRoot({
 			ttl: 30,
-			limit: 100,
+			limit: 1000,
 		}),
 		FilesModule,
 		DirectoriesModule,
