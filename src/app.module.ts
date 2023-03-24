@@ -10,6 +10,7 @@ import { RequestContextModule } from "nestjs-request-context";
 import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
 import { Connection } from "typeorm";
+import { ThrottlerModule } from "@nestjs/throttler";
 
 @Module({
 	imports: [
@@ -35,6 +36,10 @@ import { Connection } from "typeorm";
 				},
 				alwaysEnabled: true,
 			},
+		}),
+		ThrottlerModule.forRoot({
+			ttl: 30,
+			limit: 100,
 		}),
 		FilesModule,
 		DirectoriesModule,
