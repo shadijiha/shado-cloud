@@ -114,7 +114,9 @@ export class FilesConstoller {
 			else {
 				res.writeHead(200, {
 					"Content-Type": fileInto.mime,
-					"Content-Disposition": `filename="${fileInto.name}"`,
+					"Content-Disposition":
+						(fileInto.is_image ? "inline;" : "") +
+						`filename="${fileInto.name}"`,
 					"Content-Length": fileInto.size,
 				});
 				const file = await this.fileService.asStream(
