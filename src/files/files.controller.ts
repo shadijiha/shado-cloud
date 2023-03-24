@@ -112,11 +112,8 @@ export class FilesConstoller {
 			}
 			// Otherwise for any other file just do a simple stream
 			else {
-				res.writeHead(202, {
+				res.writeHead(200, {
 					"Content-Type": fileInto.mime,
-					"Content-Disposition":
-						(fileInto.is_image ? "inline;" : "") +
-						`filename="${fileInto.name}"`,
 					"Content-Length": fileInto.size,
 				});
 				const file = await this.fileService.asStream(

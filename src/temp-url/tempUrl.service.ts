@@ -67,6 +67,7 @@ export class TempUrlService {
 		return {
 			stream: createReadStream(dir),
 			filename: path.basename(temp.filepath),
+			info: await this.fileService.info(temp.user.id, temp.filepath),
 		};
 	}
 

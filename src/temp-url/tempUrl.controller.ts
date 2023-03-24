@@ -64,6 +64,7 @@ export class TempUrlConstoller {
 			const file = await this.tempUrlService.asStream(tempUrl);
 			res.set({
 				"Content-Disposition": `filename="${file.filename}"`,
+				"Content-Type": file.info.mime,
 			});
 			file.stream.pipe(res);
 			return;
