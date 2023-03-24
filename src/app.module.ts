@@ -1,4 +1,4 @@
-import { Logger, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
@@ -9,8 +9,8 @@ import { TempUrlModule } from "./temp-url/temp-url.module";
 import { RequestContextModule } from "nestjs-request-context";
 import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
-import { Connection } from "typeorm";
-import { ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { APP_GUARD } from "@nestjs/core";
 
 @Module({
 	imports: [
@@ -48,7 +48,13 @@ import { ThrottlerModule } from "@nestjs/throttler";
 		UserProfileModule,
 	],
 	controllers: [AppController],
-	providers: [AppService],
+	providers: [
+		AppService,
+		{
+			provide: APP_GUARD,
+			useClass: ThrottlerGuard,
+		},
+	],
 })
 export class AppModule {}
 
