@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { createReadStream } from "fs";
+import { createReadStream, existsSync } from "fs";
 import path from "path";
 import { AuthService } from "src/auth/auth.service";
 import { FilesService } from "src/files/files.service";
@@ -58,6 +58,12 @@ export class TempUrlService {
 			temp.user.id,
 			temp.filepath
 		);
+
+		// Check if file still exists
+		if (!existsSync(dir)) {
+			throw new SoftException("File referenced by temp URL no longer exists");
+		}
+
 		return {
 			stream: createReadStream(dir),
 			filename: path.basename(temp.filepath),
@@ -86,6 +92,11 @@ export class TempUrlService {
 			temp.user.id,
 			temp.filepath
 		);
+
+		// Check if file still exists
+		if (!existsSync(dir)) {
+			throw new SoftException("File referenced by temp URL no longer exists");
+		}
 
 		if (append) {
 			fs.appendFileSync(dir, content);
