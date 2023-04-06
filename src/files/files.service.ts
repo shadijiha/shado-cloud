@@ -11,6 +11,7 @@ import { SoftException } from "src/util";
 import { FileAccessStat } from "src/models/stats/fileAccessStat";
 import { UsedData } from "src/user-profile/user-profile-types";
 import { DirectoriesService } from "src/directories/directories.service";
+import { infoLog } from "../logging";
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
@@ -509,11 +510,21 @@ export class FilesService {
 		const sanitizedRelative = path.relative(absolute_path, root);
 		// If we replace all "..\" and there is still and email in the path,
 		// then the user is trying to access a file outside of his root
-		return (
-			sanitizedRelative
-				.replace(/\.\./g, "")
-				.replace(/\\/g, "")
-				.replace(/\//, "").length == 0
-		);
+		const res = sanitizedRelative
+			.replace(/\.\./g, "")
+			.replace(/\\/g, "")
+			.replace(/\//, "");
+
+		const cond = res.length == 0;
+		if (!cond) {
+			infoLog(
+				new Error(
+					`Not owner of ${absolute_path}. Sanatized result: ${res}. Sanatized length: ${res.length}`
+				),
+				this.isOwner,
+				userId
+			);
+		}
+		return cond;
 	}
 }
