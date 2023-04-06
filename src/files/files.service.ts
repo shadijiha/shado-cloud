@@ -510,7 +510,10 @@ export class FilesService {
 		// If we replace all "..\" and there is still and email in the path,
 		// then the user is trying to access a file outside of his root
 		return (
-			sanitizedRelative.replace(/\.\./g, "").replace(/\\/g, "").length == 0
+			sanitizedRelative
+				.replace(/\.\./g, "")
+				.replace(/\\/g, "")
+				.replace(/\//, "").length == 0
 		);
 	}
 }
