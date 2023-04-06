@@ -26,6 +26,11 @@ export class DirectoriesService {
 
 	public async list(userId: number, relativePath: string) {
 		const dir = await this.fileService.absolutePath(userId, relativePath);
+
+		if (!(await this.fileService.isOwner(userId, dir))) {
+			throw new Error("You do not have access to this directory");
+		}
+
 		const files = fs.readdirSync(dir, { withFileTypes: true });
 		const result: (DirectoryInfo | FileInfo)[] = [];
 
@@ -62,6 +67,10 @@ export class DirectoriesService {
 	public async new(userId: number, name: string) {
 		const dir = await this.fileService.absolutePath(userId, name);
 
+		if (!(await this.fileService.isOwner(userId, dir))) {
+			throw new Error("You do not have access to this directory");
+		}
+
 		this.fileService.verifyFileName(dir);
 
 		fs.mkdirSync(dir, { recursive: true });
@@ -70,6 +79,10 @@ export class DirectoriesService {
 	public async delete(userId: number, relativePath: string) {
 		const root = await this.fileService.absolutePath(userId, "");
 		const dir = path.join(root, relativePath);
+
+		if (!(await this.fileService.isOwner(userId, dir))) {
+			throw new Error("You do not have permission to delete this directory");
+		}
 
 		// Get all files in that dir recusively, and for each
 		// delete the index from DB
@@ -97,6 +110,14 @@ export class DirectoriesService {
 	public async rename(userId: number, name: string, newName: string) {
 		const dir = await this.fileService.absolutePath(userId, name);
 		const newDir = await this.fileService.absolutePath(userId, newName);
+
+		if (
+			!(await this.fileService.isOwner(userId, dir)) ||
+			!(await this.fileService.isOwner(userId, newDir))
+		) {
+			throw new Error("You do not have permission to rename this directory");
+		}
+
 		this.fileService.verifyFileName(newDir);
 		fs.renameSync(dir, newDir);
 	}
@@ -134,6 +155,10 @@ export class DirectoriesService {
 	public async zip(userId: number, name: string) {
 		const dir = await this.fileService.absolutePath(userId, name);
 
+		if (!(await this.fileService.isOwner(userId, dir))) {
+			throw new Error("You do not have permission to zip this directory");
+		}
+
 		if (!fs.lstatSync(dir).isDirectory()) {
 			throw new Error("FIle to zip must be a directory");
 		}
@@ -155,6 +180,10 @@ export class DirectoriesService {
 		const fileName = path.parse(fileFullName).name;
 		const dirPath = path.dirname(dir);
 		const outputPath = path.join(dirPath, fileName);
+
+		if (!(await this.fileService.isOwner(userId, dir))) {
+			throw new Error("You do not have permission to unzip this directory");
+		}
 
 		await extract(dir, { dir: outputPath });
 

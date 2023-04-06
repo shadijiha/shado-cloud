@@ -37,6 +37,13 @@ export class FilesService {
 		if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
 		this.updateStats(userId, dir, user_agent);
+		const owns = await this.isOwner(userId, dir);
+
+		if (!owns) {
+			throw new Error(
+				"You don't have permission to access this file " + relativePath
+			);
+		}
 
 		return createReadStream(dir, options);
 	}
@@ -50,6 +57,7 @@ export class FilesService {
 			// Check if user has enough space to upload the file
 			const usedData = await this.getUsedData(userId);
 			const user = await this.userService.getById(userId);
+
 			if (usedData.total() + file.size > (await user.getMaxData())) {
 				return [false, "You don't have enough space to upload this file"];
 			}
@@ -60,6 +68,12 @@ export class FilesService {
 			);
 			const root = await this.getUserRootPath(userId);
 			const dir = await this.absolutePath(userId, cleanName);
+
+			const owns = await this.isOwner(userId, dir);
+			if (!owns) {
+				return [false, "You don't have permission to upload here"];
+			}
+
 			const relative = path.relative(root, dir);
 
 			fs.writeFileSync(dir, file.buffer);
@@ -81,6 +95,10 @@ export class FilesService {
 		const dir = path.join(root, name);
 		const relative = path.relative(root, dir);
 
+		if (!(await this.isOwner(userId, dir))) {
+			throw new Error("You don't have permission to create files here");
+		}
+
 		this.verifyFileName(dir);
 
 		fs.writeFileSync(dir, "");
@@ -101,6 +119,11 @@ export class FilesService {
 	): FileServiceResult {
 		try {
 			const dir = await this.absolutePath(userId, fileRelativePath);
+			const owns = await this.isOwner(userId, dir);
+			if (!owns) {
+				return [false, "You don't have permission to save here"];
+			}
+
 			if (!append || append == "false") {
 				fs.writeFileSync(dir, content);
 			} else {
@@ -117,6 +140,11 @@ export class FilesService {
 		try {
 			const root = await this.getUserRootPath(userId);
 			const dir = await this.absolutePath(userId, relativePath);
+
+			if (!(await this.isOwner(userId, dir))) {
+				return [false, "You don't have permission to delete this file"];
+			}
+
 			const relative = path.relative(root, dir);
 			fs.unlinkSync(dir);
 
@@ -149,6 +177,10 @@ export class FilesService {
 		const relative = path.relative(root, dir);
 		const relativeNew = path.relative(root, newDir);
 
+		if (!(await this.isOwner(userId, dir))) {
+			throw new Error("You don't have permission to rename this file");
+		}
+
 		this.verifyFileName(newDir);
 
 		fs.renameSync(dir, newDir);
@@ -178,6 +210,10 @@ export class FilesService {
 		const root = await this.getUserRootPath(userId);
 		const dir = await this.absolutePath(userId, relativePath);
 		const relative = path.relative(root, dir);
+
+		if (!(await this.isOwner(userId, dir))) {
+			throw new Error("You don't have permission to access this file");
+		}
 
 		const stats = fs.statSync(dir);
 		const file = await UploadedFile.findOne({
@@ -211,6 +247,11 @@ export class FilesService {
 	public async exists(userId: number, relativePath: string) {
 		const root = await this.getUserRootPath(userId);
 		const dir = await this.absolutePath(userId, relativePath);
+
+		if (!(await this.isOwner(userId, dir))) {
+			throw new Error("You don't have permission to access this file");
+		}
+
 		return fs.existsSync(dir);
 	}
 
@@ -222,6 +263,10 @@ export class FilesService {
 	) {
 		const dir = await this.absolutePath(userId, path_);
 		const mime = await FilesService.detectFile(dir);
+
+		if (!(await this.isOwner(userId, dir))) {
+			throw new Error("You don't have permission to access this file");
+		}
 
 		if (mime.includes("image")) {
 			if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
@@ -457,5 +502,15 @@ export class FilesService {
 
 		stat.count += 1;
 		await stat.save();
+	}
+
+	public async isOwner(userId: number, absolute_path: string) {
+		const root = await this.getUserRootPath(userId);
+		const sanitizedRelative = path.relative(absolute_path, root);
+		// If we replace all "..\" and there is still and email in the path,
+		// then the user is trying to access a file outside of his root
+		return (
+			sanitizedRelative.replace(/\.\./g, "").replace(/\\/g, "").length == 0
+		);
 	}
 }
