@@ -513,7 +513,7 @@ export class FilesService {
 		const res = sanitizedRelative
 			.replace(/\.\./g, "")
 			.replace(/\\/g, "")
-			.replace(/\//, "");
+			.replace(/\//g, "");
 
 		const cond = res.length == 0;
 		if (!cond) {
