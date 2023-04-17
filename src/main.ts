@@ -11,7 +11,11 @@ import helmet from "helmet";
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule, {
 		cors: {
-			origin: [process.env.FRONTEND_URL, "*.shadijiha.com"],
+			origin: [
+				process.env.FRONTEND_URL,
+				/\.shadijiha\.com$/,
+				"http://shadijiha.com",
+			],
 			credentials: true,
 		},
 	});

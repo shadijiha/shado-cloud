@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, RequestMethod } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
@@ -11,6 +11,7 @@ import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
+import { CORPMiddleware } from "./corp.middleware";
 
 @Module({
 	imports: [
@@ -56,7 +57,13 @@ import { APP_GUARD } from "@nestjs/core";
 		},
 	],
 })
-export class AppModule {}
+export class AppModule {
+	configure(consumer: MiddlewareConsumer) {
+		consumer
+			.apply(CORPMiddleware)
+			.forRoutes({ path: "*", method: RequestMethod.ALL });
+	}
+}
 
 function isDev() {
 	return process.env.ENV == "dev";
