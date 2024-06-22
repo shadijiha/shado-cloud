@@ -15,7 +15,7 @@ async function bootstrap() {
 				process.env.FRONTEND_URL,
 				/\.shadijiha\.com$/,
 				"http://shadijiha.com",
-				"https://shadijiha.com",
+				"https://cloud.shadijiha.com",
 			],
 			credentials: true,
 		},
