@@ -126,7 +126,7 @@ export class AuthController {
 				httpOnly: true,
 				domain: process.env.BACKEND_HOST_NAME, // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-				secure: process.env.BACKEND_HOST_NAME.startsWith("https"),
+				secure: process.env.BACKEND_HOST.startsWith("https"),
 				sameSite: "none",
 			})
 			.send({
