@@ -32,7 +32,7 @@ export class AuthController {
 		private authService: AuthService,
 		private directoryService: DirectoriesService,
 		private fileService: FilesService
-	) {}
+	) { }
 
 	@Post("login")
 	@UsePipes(new ValidationPipeline())
@@ -126,6 +126,8 @@ export class AuthController {
 				httpOnly: true,
 				domain: process.env.BACKEND_HOST_NAME, // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
+				secure: process.env.BACKEND_HOST_NAME.startsWith("https"),
+				sameSite: "none",
 			})
 			.send({
 				user: {
