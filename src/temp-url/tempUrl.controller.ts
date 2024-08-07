@@ -9,6 +9,7 @@ import {
 	Req,
 	Res,
 	UseGuards,
+	Headers,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiHeader, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -30,12 +31,13 @@ import {
 @Controller("temp")
 @ApiTags("Temporary URLs")
 export class TempUrlConstoller {
-	constructor(private readonly tempUrlService: TempUrlService) {}
+	constructor(private readonly tempUrlService: TempUrlService) { }
 
 	@Post("generate")
 	@UseGuards(AuthGuard("jwt"))
 	@ApiResponse({ type: TempURLGenerateResponse })
 	public async generate(
+		@Headers() headers: Headers,
 		@Req() request: Request,
 		@AuthUser() userId: number,
 		@Body() options: TempURLGenerateOptions
@@ -43,6 +45,7 @@ export class TempUrlConstoller {
 		try {
 			return {
 				url: await this.tempUrlService.generate(
+					headers,
 					userId,
 					options.filepath,
 					options.max_requests,
