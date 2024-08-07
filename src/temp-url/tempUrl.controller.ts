@@ -27,6 +27,7 @@ import {
 	TempURLGenerateResponse,
 	TempURLSaveRequest,
 } from "./tempUrlApiTypes";
+import { IncomingHttpHeaders } from "http";
 
 @Controller("temp")
 @ApiTags("Temporary URLs")
@@ -37,12 +38,13 @@ export class TempUrlConstoller {
 	@UseGuards(AuthGuard("jwt"))
 	@ApiResponse({ type: TempURLGenerateResponse })
 	public async generate(
-		@Headers() headers: Headers,
+		@Headers() headers: IncomingHttpHeaders,
 		@Req() request: Request,
 		@AuthUser() userId: number,
 		@Body() options: TempURLGenerateOptions
 	): Promise<TempURLGenerateResponse> {
 		try {
+			request.headers
 			return {
 				url: await this.tempUrlService.generate(
 					headers,

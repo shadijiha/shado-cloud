@@ -6,6 +6,7 @@ import { FilesService } from "src/files/files.service";
 import { TempUrl } from "src/models/tempUrl";
 import fs from "fs";
 import { SoftException } from "src/util";
+import { IncomingHttpHeaders } from "http";
 
 @Injectable()
 export class TempUrlService {
@@ -15,7 +16,7 @@ export class TempUrlService {
 	) { }
 
 	public async generate(
-		requestHeaders: Headers,
+		requestHeaders: IncomingHttpHeaders,
 		userId: number,
 		filepath: string,
 		max_requests: number,
@@ -33,7 +34,7 @@ export class TempUrlService {
 		tempUrl.is_readonly = is_readonly;
 		tempUrl.save();
 
-		return requestHeaders.get("origin") + "/temp/" + tempUrl.url + "/get";
+		return requestHeaders.origin + "/temp/" + tempUrl.url + "/get";
 	}
 
 	public async asStream(tempUrl: string) {

@@ -24,6 +24,7 @@ import { AuthUser } from "src/util";
 import { AuthService } from "./auth.service";
 import { LoginRequest, LoginResponse, RegisterRequest } from "./authApiTypes";
 import { ValidationPipeline } from "./ValidationPipeline";
+import { IncomingHttpHeaders } from "http";
 
 @Controller("auth")
 @ApiTags("Authentication")
@@ -38,7 +39,7 @@ export class AuthController {
 	@Post("login")
 	@UsePipes(new ValidationPipeline())
 	@ApiResponse({ type: LoginResponse })
-	async login(@Headers() headers: Headers, @Body() body: LoginRequest, @Res() response: Response) {
+	async login(@Headers() headers: IncomingHttpHeaders, @Body() body: LoginRequest, @Res() response: Response) {
 		// Check if user exists
 		const user = await this.authService.getByEmail(body.email);
 		if (user == null) {
@@ -70,7 +71,7 @@ export class AuthController {
 	@Post("register")
 	@UsePipes(new ValidationPipeline())
 	@ApiResponse({ type: LoginResponse })
-	async register(@Headers() headers: Headers, @Body() body: RegisterRequest, @Res() response: Response) {
+	async register(@Headers() headers: IncomingHttpHeaders, @Body() body: RegisterRequest, @Res() response: Response) {
 		// Check if user exists
 		let user = await this.authService.getByEmail(body.email);
 		if (user) {
@@ -92,11 +93,11 @@ export class AuthController {
 	}
 
 	@Put("logout")
-	async logout(@Headers() headers: Headers, @Res() response: Response) {
+	async logout(@Headers() headers: IncomingHttpHeaders, @Res() response: Response) {
 		response
 			.clearCookie(process.env.COOKIE_NAME, {
 				httpOnly: true,
-				domain: headers.get("host"), // your domain here!
+				domain: headers.host, // your domain here!
 			})
 			.send();
 	}
@@ -117,7 +118,7 @@ export class AuthController {
 		}
 	}
 
-	private async createAuthCookie(headers: Headers, user: User, response: Response) {
+	private async createAuthCookie(headers: IncomingHttpHeaders, user: User, response: Response) {
 		const userId = user.id;
 		const payload = { userId: userId };
 		const token = this.jwtService.sign(payload);
@@ -125,9 +126,9 @@ export class AuthController {
 		response
 			.cookie(process.env.COOKIE_NAME, token, {
 				httpOnly: true,
-				domain: headers.get("host"), // your domain here!
+				domain: headers.host, // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-				secure: headers.get("origin").startsWith("https"),
+				secure: headers.origin.startsWith("https"),
 				sameSite: "none",
 			})
 			.send({
