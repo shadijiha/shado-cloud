@@ -12,9 +12,10 @@ export class TempUrlService {
 	constructor(
 		private readonly fileService: FilesService,
 		private readonly userService: AuthService
-	) {}
+	) { }
 
 	public async generate(
+		requestHeaders: Headers,
 		userId: number,
 		filepath: string,
 		max_requests: number,
@@ -32,7 +33,7 @@ export class TempUrlService {
 		tempUrl.is_readonly = is_readonly;
 		tempUrl.save();
 
-		return process.env.BACKEND_HOST + "/temp/" + tempUrl.url + "/get";
+		return requestHeaders.get("origin") + "/temp/" + tempUrl.url + "/get";
 	}
 
 	public async asStream(tempUrl: string) {

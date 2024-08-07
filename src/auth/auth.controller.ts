@@ -9,6 +9,7 @@ import {
 	Res,
 	UseGuards,
 	UsePipes,
+	Headers
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
@@ -37,7 +38,7 @@ export class AuthController {
 	@Post("login")
 	@UsePipes(new ValidationPipeline())
 	@ApiResponse({ type: LoginResponse })
-	async login(@Body() body: LoginRequest, @Res() response: Response) {
+	async login(@Headers() headers: Headers, @Body() body: LoginRequest, @Res() response: Response) {
 		// Check if user exists
 		const user = await this.authService.getByEmail(body.email);
 		if (user == null) {
@@ -63,13 +64,13 @@ export class AuthController {
 		}
 
 		// Otherwise OK
-		this.createAuthCookie(user, response);
+		this.createAuthCookie(headers, user, response);
 	}
 
 	@Post("register")
 	@UsePipes(new ValidationPipeline())
 	@ApiResponse({ type: LoginResponse })
-	async register(@Body() body: RegisterRequest, @Res() response: Response) {
+	async register(@Headers() headers: Headers, @Body() body: RegisterRequest, @Res() response: Response) {
 		// Check if user exists
 		let user = await this.authService.getByEmail(body.email);
 		if (user) {
@@ -87,15 +88,15 @@ export class AuthController {
 		await this.directoryService.createNewUserDir(user);
 
 		// Otherwise OK
-		this.createAuthCookie(user, response);
+		this.createAuthCookie(headers, user, response);
 	}
 
 	@Put("logout")
-	async logout(@Res() response: Response) {
+	async logout(@Headers() headers: Headers, @Res() response: Response) {
 		response
 			.clearCookie(process.env.COOKIE_NAME, {
 				httpOnly: true,
-				domain: process.env.BACKEND_HOST_NAME, // your domain here!
+				domain: headers.get("host"), // your domain here!
 			})
 			.send();
 	}
@@ -116,7 +117,7 @@ export class AuthController {
 		}
 	}
 
-	private async createAuthCookie(user: User, response: Response) {
+	private async createAuthCookie(headers: Headers, user: User, response: Response) {
 		const userId = user.id;
 		const payload = { userId: userId };
 		const token = this.jwtService.sign(payload);
@@ -124,9 +125,9 @@ export class AuthController {
 		response
 			.cookie(process.env.COOKIE_NAME, token, {
 				httpOnly: true,
-				domain: process.env.BACKEND_HOST_NAME, // your domain here!
+				domain: headers.get("host"), // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-				secure: process.env.BACKEND_HOST.startsWith("https"),
+				secure: headers.get("origin").startsWith("https"),
 				sameSite: "none",
 			})
 			.send({

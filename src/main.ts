@@ -27,6 +27,7 @@ async function bootstrap() {
 		.setVersion("1.0")
 		.addTag("")
 		.addServer(process.env.BACKEND_HOST)
+		.addServer("https://cloud.shadijiha.com")
 		.build();
 	const document = SwaggerModule.createDocument(app, config);
 	SwaggerModule.setup("api", app, document);
