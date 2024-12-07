@@ -103,7 +103,7 @@ export class UserProfileService {
 		const user = await this.userService.getById(userId);
 
 		// Get current indexed files
-		const currentIndexedFiles = await UploadedFile.find({ where: { user: user } });
+		const currentIndexedFiles = await UploadedFile.find({ where: { user: {id: userId} } });
 
 		// Re-index all files
 		const files = await this.directoryService.listrecursive(user.id);

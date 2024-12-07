@@ -110,7 +110,7 @@ export class TempUrlService {
 
 	public async all(userId: number) {
 		const user = await this.userService.getById(userId);
-		return (await TempUrl.find({ where: { user } })).map((e) => {
+		return (await TempUrl.find({ where: { user: {id: userId} } })).map((e) => {
 			return {
 				...e,
 				is_valid: e.isValid(),

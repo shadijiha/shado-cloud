@@ -245,7 +245,7 @@ export class FilesService {
 		// Get temp url if exists and is active
 		const user = await this.userService.getById(userId);
 		const tempUrls = await TempUrl.find({
-			where: { user, filepath: relative },
+			where: { user: {id: userId}, filepath: relative },
 		});
 
 		// Get all cached thumbnails for this file
@@ -548,7 +548,7 @@ export class FilesService {
 
 		// Now see if the stat already exists
 		let stat = await FileAccessStat.findOne({
-			where: { user, uploaded_file: indexed, user_agent },
+			where: { user: {id: userId}, uploaded_file: indexed, user_agent },
 		});
 		if (!stat) {
 			stat = new FileAccessStat();
