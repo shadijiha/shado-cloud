@@ -12,15 +12,17 @@ import { ProfileCropData, ProfileStats } from "./user-profile-types";
 import sharp from "sharp";
 import { FileAccessStat } from "../models/stats/fileAccessStat";
 import { SearchStat } from "../models/stats/searchStat";
-import { getConnection, In } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { DirectoriesService } from "../directories/directories.service";
+import { InjectDataSource } from "@nestjs/typeorm";
 
 @Injectable()
 export class UserProfileService {
 	constructor(
 		private readonly userService: AuthService,
 		private readonly fileService: FilesService,
-		private readonly directoryService: DirectoriesService
+		private readonly directoryService: DirectoriesService,
+		@InjectDataSource() private readonly dataSource: DataSource,
 	) {}
 
 	public async changePassword(
@@ -57,9 +59,9 @@ export class UserProfileService {
 	}
 
 	public async getStats(userId: number, withDeleted: boolean = false) {
-		const fileAccesMeta = getConnection().getMetadata(FileAccessStat);
-		const uploadedFileMeta = getConnection().getMetadata(UploadedFile);
-		const userTbMeta = getConnection().getMetadata(User);
+		const fileAccesMeta = this.dataSource.getMetadata(FileAccessStat);
+		const uploadedFileMeta = this.dataSource.getMetadata(UploadedFile);
+		const userTbMeta = this.dataSource.getMetadata(User);
 
 		const most_accesed_files_raw = await FileAccessStat.query(`
 			SELECT SUM(T.count) AS Total, U.*
