@@ -5,6 +5,9 @@ import { FilesService } from "src/files/files.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthStrategy } from "./auth.strategy";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { User } from "./../models/user";
+import { UploadedFile } from "./../models/uploadedFile";
 
 @Module({
 	controllers: [AuthController],
@@ -15,7 +18,9 @@ import { AuthStrategy } from "./auth.strategy";
 				expiresIn: "24h",
 			},
 		}),
+		TypeOrmModule.forFeature([User, UploadedFile]),
 	],
 	providers: [AuthStrategy, AuthService, FilesService, DirectoriesService],
+	exports: [AuthService, TypeOrmModule.forFeature([User, UploadedFile])],
 })
 export class AuthModule {}

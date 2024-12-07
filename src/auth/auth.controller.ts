@@ -25,6 +25,7 @@ import { AuthService } from "./auth.service";
 import { LoginRequest, LoginResponse, RegisterRequest } from "./authApiTypes";
 import { ValidationPipeline } from "./ValidationPipeline";
 import { IncomingHttpHeaders } from "http";
+import { isDev } from "src/app.module";
 
 @Controller("auth")
 @ApiTags("Authentication")
@@ -97,7 +98,7 @@ export class AuthController {
 		response
 			.clearCookie(process.env.COOKIE_NAME, {
 				httpOnly: true,
-				domain: headers.host, // your domain here!
+				domain: this.getDomain(headers), // your domain here!
 			})
 			.send();
 	}
@@ -122,14 +123,14 @@ export class AuthController {
 		const userId = user.id;
 		const payload = { userId: userId };
 		const token = this.jwtService.sign(payload);
-
+		
 		response
 			.cookie(process.env.COOKIE_NAME, token, {
 				httpOnly: true,
-				domain: headers.host, // your domain here!
+				domain: this.getDomain(headers), // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-				secure: headers.origin.startsWith("https"),
-				sameSite: "none",
+				secure: isDev() ? false : headers.origin.startsWith("https"),
+				sameSite: isDev() ? "lax" : "none",
 			})
 			.send({
 				user: {
@@ -139,4 +140,13 @@ export class AuthController {
 				errors: [],
 			});
 	}
+
+	private getDomain(headers: IncomingHttpHeaders): string {
+		let domain = headers.host;
+		// Remove post number
+		if (domain.includes(":")) {
+			domain = domain.split(":")[0];
+		}
+		return domain;
+	} 
 }

@@ -10,14 +10,16 @@ import archiver from "archiver";
 import extract from "extract-zip";
 import { errorLog } from "src/logging";
 import { UploadedFile } from "src/models/uploadedFile";
-import { getRepository, Like } from "typeorm";
+import { Like, Repository } from "typeorm";
 import { SearchStat } from "src/models/stats/searchStat";
+import { InjectRepository } from "@nestjs/typeorm";
 
 @Injectable()
 export class DirectoriesService {
 	constructor(
 		private readonly userService: AuthService,
-		private readonly fileService: FilesService
+		private readonly fileService: FilesService,
+		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>
 	) {}
 
 	public async root(userId: number) {
@@ -139,7 +141,7 @@ export class DirectoriesService {
 	}
 
 	public async search(userId: number, searchText: string) {
-		const files = await getRepository(UploadedFile).find({
+		const files = await this.uploadedFileRepo.find({
 			where: [{ absolute_path: Like(`%${searchText}%`), user: { id: userId } }],
 		});
 
@@ -197,7 +199,7 @@ export class DirectoriesService {
 			const indexed = new UploadedFile();
 			indexed.user = user;
 			indexed.absolute_path = relativePath;
-			indexed.mime = await FilesService.detectFile(file.path);
+			indexed.mime = FilesService.detectFile(file.path);
 			indexed.save();
 		}
 	}

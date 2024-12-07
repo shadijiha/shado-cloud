@@ -2,7 +2,7 @@ declare global {
 	namespace NodeJS {
 		interface ProcessEnv {
 			COOKIE_NAME: string;
-			ENV: "dev" | "prod";
+			ENV: "dev" | "prod" | "development" | "production" | "staging";
 			JWT_SECRET: string;
 			FRONTEND_URL: string;
 			BACKEND_HOST: string;

@@ -3,7 +3,6 @@ import { AuthService } from "src/auth/auth.service";
 import fs, { createReadStream } from "fs";
 import path from "path";
 import { UploadedFile } from "src/models/uploadedFile";
-import mmmagic from "mmmagic";
 import { TempUrl } from "src/models/tempUrl";
 import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
@@ -12,20 +11,29 @@ import { FileAccessStat } from "src/models/stats/fileAccessStat";
 import { UsedData } from "src/user-profile/user-profile-types";
 import { DirectoriesService } from "src/directories/directories.service";
 import { infoLog } from "../logging";
+import mime from "mime-types";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
 export class FilesService {
 	public static readonly METADATA_FOLDER_NAME = ".metadata";
+	public static readonly THUMBNAILS_FOLDER_NAME = ".thumbnails";
 	private readonly dirService: DirectoriesService; // Not injected, because it would cause a circular dependency
+	private readonly logger: Logger
 
-	constructor(private userService: AuthService) {
-		this.dirService = new DirectoriesService(userService, this);
+	constructor(private userService: AuthService,
+				@InjectRepository(UploadedFile) uploadedFileRepo: Repository<UploadedFile>) {
+		this.dirService = new DirectoriesService(userService, this, uploadedFileRepo);
 
 		// Sharp cache
 		sharp.cache(true);
 		sharp.cache({ memory: 1024, items: 5000, files: 500 });
 		sharp.simd(true);
+
+		this.logger = new Logger(FilesService.name);
 	}
 
 	public async asStream(
@@ -152,14 +160,25 @@ export class FilesService {
 			// See if file is in DB, if yes, then delete it
 			const user = await this.userService.getById(userId);
 			const uploadedFile = await UploadedFile.findOne({
-				where: { absolute_path: relative, user },
+				where: { absolute_path: relative, user: {id: user.id} },
 			});
 			const accessData = await FileAccessStat.find({
 				where: { uploaded_file: uploadedFile },
 			});
 			if (accessData) await FileAccessStat.softRemove(accessData);
 
-			if (uploadedFile) await UploadedFile.softRemove(uploadedFile);
+			// Delete all thumbnails relate to that file
+			if (uploadedFile) {
+				const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME);
+				const files = fs.readdirSync(thumbnailFolder);
+				files.forEach((fileEntry) => {
+					if (fileEntry.startsWith(`${uploadedFile.id}_`)) {
+						fs.unlinkSync(path.join(thumbnailFolder, fileEntry));
+					}
+				});
+
+				await UploadedFile.softRemove(uploadedFile);
+			}
 
 			return [true, ""];
 		} catch (e) {
@@ -187,9 +206,8 @@ export class FilesService {
 		fs.renameSync(dir, newDir);
 
 		// Rename file in DB
-		const user = await this.userService.getById(userId);
 		const file = await UploadedFile.findOne({
-			where: { absolute_path: relative, user },
+			where: { absolute_path: relative, user: {id: userId} },
 		});
 
 		if (file) {
@@ -197,7 +215,8 @@ export class FilesService {
 			file.save();
 		} else {
 			// Else if it is not in DB then insert it
-			const mime = await FilesService.detectFile(newDir);
+			const mime = FilesService.detectFile(newDir);
+			const user = await this.userService.getById(userId);
 
 			const uploadedFile = new UploadedFile();
 			uploadedFile.user = user;
@@ -221,7 +240,7 @@ export class FilesService {
 			where: { absolute_path: relative },
 		});
 
-		const mime = file ? file.mime : await FilesService.detectFile(dir);
+		const fileMime = file ? file.mime : FilesService.detectFile(dir);
 
 		// Get temp url if exists and is active
 		const user = await this.userService.getById(userId);
@@ -229,19 +248,32 @@ export class FilesService {
 			where: { user, filepath: relative },
 		});
 
+		// Get all cached thumbnails for this file
+		const thumbails: string[] = [];
+		if (file) {
+			const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME);
+			const files = fs.readdirSync(thumbnailFolder);
+			files.forEach((fileEntry) => {
+				if (fileEntry.startsWith(`${file.id}_`)) {
+					thumbails.push(fileEntry);
+				}
+			});
+		}
+
 		return {
 			extension: path.extname(relativePath),
-			mime: mime,
+			mime: fileMime,
 			path: path.relative(await this.getUserRootPath(userId), dir),
 			name: path.basename(dir),
-			is_image: mime.includes("image"),
-			is_text: mime.includes("text") || mime == "application/x-empty",
-			is_video: mime.includes("video"),
-			is_audio: mime.includes("audio"),
-			is_pdf: mime.includes("pdf"),
+			is_image: fileMime.includes("image"),
+			is_text: fileMime.includes("text") || fileMime == "application/x-empty",
+			is_video: fileMime.includes("video"),
+			is_audio: fileMime.includes("audio"),
+			is_pdf: fileMime.includes("pdf"),
 			size: stats.size,
 			temp_url:
 				tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid())[0] : null,
+			thumbails,	
 		};
 	}
 
@@ -263,20 +295,44 @@ export class FilesService {
 		height: number | undefined = undefined
 	) {
 		const dir = await this.absolutePath(userId, path_);
-		const mime = await FilesService.detectFile(dir);
+		const fileMime = FilesService.detectFile(dir);
 
 		if (!(await this.isOwner(userId, dir))) {
 			throw new Error("You don't have permission to access this file");
 		}
 
-		if (mime.includes("image")) {
+		if (fileMime.includes("image")) {
 			if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
+			// Check if thumbnail already exists
+			const uploadedFile = await UploadedFile.findOne({
+				where: { absolute_path: path.normalize(path_), user: {id: userId} },
+			});
+			const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME); 
+			if (uploadedFile) {
+				const thumbnailPath = path.join(thumbnailFolder, `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`);
+
+				if (fs.existsSync(thumbnailPath)) {
+					return fs.createReadStream(thumbnailPath);
+				}
+			}
+			
 			const resized = sharp()
 				.resize(Number(width) || undefined, Number(height) || undefined)
 				.withMetadata();
+			const readStream = fs.createReadStream(dir).pipe(resized);
 
-			return fs.createReadStream(dir).pipe(resized);
+			// cache thumbnail for next time and return it
+			// Don't do it if we are inside the thumbnail folder (to avoid recursive thumbnail generation)
+			if (uploadedFile && 
+				path.normalize(dir).includes(path.normalize(FilesService.THUMBNAILS_FOLDER_NAME)) == false
+			) {
+				const thumbnailPath = path.join(thumbnailFolder, `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`);
+				await readStream.toFile(thumbnailPath);
+				return fs.createReadStream(thumbnailPath);
+			}
+			
+			return readStream;
 		} else {
 			// If it is a video generate thumbnail
 			const thumbnailPath = path.join(
@@ -296,6 +352,7 @@ export class FilesService {
 			});
 
 			// Delete that thumbnail after 1 second (request sent)
+			// TODO make this a job instead
 			setTimeout(() => {
 				fs.unlinkSync(thumbnailPath);
 			}, 1000);
@@ -322,14 +379,9 @@ export class FilesService {
 		return path.join(await this.getUserRootPath(userId), relativePath);
 	}
 
-	public static detectFile(filename: string): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const magic = new mmmagic.Magic(mmmagic.MAGIC_MIME_TYPE);
-			magic.detectFile(filename, function (err, result) {
-				if (err) reject(err);
-				resolve(result);
-			});
-		});
+	public static detectFile(filename: string): string {
+		const result = mime.lookup(filename);
+		return result == false ? "" : result;
 	}
 
 	public verifyFileName(fullpath: string) {
@@ -457,12 +509,18 @@ export class FilesService {
 		return used_data;
 	}
 
-	public async createMetaFolderIfNotExists(userId: number) {
+	public async createMetaFolderIfNotExists(userId: number): Promise<string> {
 		const dir = await this.absolutePath(
 			userId,
 			FilesService.METADATA_FOLDER_NAME
 		);
 		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+		// Create thumbails folder
+		if (!fs.existsSync(path.join(dir, FilesService.THUMBNAILS_FOLDER_NAME)))
+			fs.mkdirSync(path.join(dir, FilesService.THUMBNAILS_FOLDER_NAME), { recursive: true });
+
+		return dir;
 	}
 
 	private async updateStats(
@@ -476,7 +534,7 @@ export class FilesService {
 
 		// Check if file is indexed
 		let indexed = await UploadedFile.findOne({
-			where: { absolute_path: sanitizedRelative, user: user },
+			where: { absolute_path: sanitizedRelative, user: {id: userId} },
 		});
 
 		// If not index then created it
@@ -484,7 +542,7 @@ export class FilesService {
 			indexed = new UploadedFile();
 			indexed.absolute_path = sanitizedRelative;
 			indexed.user = user;
-			indexed.mime = await FilesService.detectFile(absolute_path);
+			indexed.mime = FilesService.detectFile(absolute_path);
 			await indexed.save();
 		}
 

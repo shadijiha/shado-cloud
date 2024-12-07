@@ -27,7 +27,8 @@ import { CORPMiddleware } from "./corp.middleware";
 			entities: ["dist/models/**/*{.ts,.js}"],
 			synchronize: isDev(),
 			logging: false,
-			cache: {
+			// Only define cache if REDIS_HOST is defined in env
+			cache: process.env.REDIS_HOST ? {
 				type: "redis",
 				duration: 1000, // 1 second
 				options: {
@@ -36,7 +37,7 @@ import { CORPMiddleware } from "./corp.middleware";
 					password: process.env.REDIS_PASSWORD,
 				},
 				alwaysEnabled: true,
-			},
+			} : undefined,
 		}),
 		ThrottlerModule.forRoot({
 			ttl: 30,
@@ -65,6 +66,6 @@ export class AppModule {
 	}
 }
 
-function isDev() {
-	return process.env.ENV == "dev";
+export function isDev() {
+	return process.env.ENV == "dev" || process.env.ENV == "development";
 }

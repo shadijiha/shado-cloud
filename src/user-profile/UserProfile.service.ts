@@ -101,7 +101,7 @@ export class UserProfileService {
 		const user = await this.userService.getById(userId);
 
 		// Get current indexed files
-		const currentIndexedFiles = await UploadedFile.find({ user: user });
+		const currentIndexedFiles = await UploadedFile.find({ where: { user: user } });
 
 		// Re-index all files
 		const files = await this.directoryService.listrecursive(user.id);
@@ -115,7 +115,7 @@ export class UserProfileService {
 				currentIndexedFiles.find(
 					(e) => path.normalize(e.absolute_path) == path.normalize(file)
 				)?.mime ??
-				(await FilesService.detectFile(
+				(FilesService.detectFile(
 					await this.fileService.absolutePath(userId, file)
 				));
 
