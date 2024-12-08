@@ -26,6 +26,7 @@ async function bootstrap() {
 		.setDescription("The Shado Cloud API description")
 		.setVersion("1.0")
 		.addTag("")
+		.addServer(`http://${process.env.BACKEND_HOST}/`)
 		.addServer(process.env.BACKEND_HOST)
 		.addServer("https://cloud.shadijiha.com/apinest")
 		.build();
