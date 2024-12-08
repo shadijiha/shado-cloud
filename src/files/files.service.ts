@@ -25,7 +25,7 @@ export class FilesService {
 	private readonly logger: Logger
 
 	constructor(private userService: AuthService,
-				@InjectRepository(UploadedFile) uploadedFileRepo: Repository<UploadedFile>) {
+		@InjectRepository(UploadedFile) uploadedFileRepo: Repository<UploadedFile>) {
 		this.dirService = new DirectoriesService(userService, this, uploadedFileRepo);
 
 		// Sharp cache
@@ -87,12 +87,20 @@ export class FilesService {
 
 			fs.writeFileSync(dir, file.buffer);
 
-			const fileDB = new UploadedFile();
-			fileDB.absolute_path = relative;
-			fileDB.user = await this.userService.getById(userId);
-			fileDB.mime = file.mimetype;
-			fileDB.save();
+			let fileDB = await UploadedFile.findOne({ where: { absolute_path: relative, user: { id: userId } } });
 
+			// if a file already exists with that name, then most likely we are replacing a file
+			// in this case, we'll invalidate old thumbnails
+			if (fileDB) {
+				await this.invalidateThumbnailsFor(userId, fileDB);
+			} else {
+				fileDB = new UploadedFile();
+				fileDB.absolute_path = relative;
+				fileDB.user = await this.userService.getById(userId);
+				fileDB.mime = file.mimetype;
+				fileDB.save();
+			}
+			
 			return [true, ""];
 		} catch (e) {
 			return [false, (<Error>e).message];
@@ -160,7 +168,7 @@ export class FilesService {
 			// See if file is in DB, if yes, then delete it
 			const user = await this.userService.getById(userId);
 			const uploadedFile = await UploadedFile.findOne({
-				where: { absolute_path: relative, user: {id: user.id} },
+				where: { absolute_path: relative, user: { id: user.id } },
 			});
 			const accessData = await FileAccessStat.find({
 				where: { uploaded_file: uploadedFile },
@@ -169,14 +177,7 @@ export class FilesService {
 
 			// Delete all thumbnails relate to that file
 			if (uploadedFile) {
-				const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME);
-				const files = fs.readdirSync(thumbnailFolder);
-				files.forEach((fileEntry) => {
-					if (fileEntry.startsWith(`${uploadedFile.id}_`)) {
-						fs.unlinkSync(path.join(thumbnailFolder, fileEntry));
-					}
-				});
-
+				await this.invalidateThumbnailsFor(userId, uploadedFile);
 				await UploadedFile.softRemove(uploadedFile);
 			}
 
@@ -207,7 +208,7 @@ export class FilesService {
 
 		// Rename file in DB
 		const file = await UploadedFile.findOne({
-			where: { absolute_path: relative, user: {id: userId} },
+			where: { absolute_path: relative, user: { id: userId } },
 		});
 
 		if (file) {
@@ -245,7 +246,7 @@ export class FilesService {
 		// Get temp url if exists and is active
 		const user = await this.userService.getById(userId);
 		const tempUrls = await TempUrl.find({
-			where: { user: {id: userId}, filepath: relative },
+			where: { user: { id: userId }, filepath: relative },
 		});
 
 		// Get all cached thumbnails for this file
@@ -273,7 +274,7 @@ export class FilesService {
 			size: stats.size,
 			temp_url:
 				tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid())[0] : null,
-			thumbails,	
+			thumbails,
 		};
 	}
 
@@ -306,9 +307,9 @@ export class FilesService {
 
 			// Check if thumbnail already exists
 			const uploadedFile = await UploadedFile.findOne({
-				where: { absolute_path: path.normalize(path_), user: {id: userId} },
+				where: { absolute_path: path.normalize(path_), user: { id: userId } },
 			});
-			const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME); 
+			const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME);
 			if (uploadedFile) {
 				const thumbnailPath = path.join(thumbnailFolder, `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`);
 
@@ -316,7 +317,7 @@ export class FilesService {
 					return fs.createReadStream(thumbnailPath);
 				}
 			}
-			
+
 			const resized = sharp()
 				.resize(Number(width) || undefined, Number(height) || undefined)
 				.withMetadata();
@@ -324,14 +325,14 @@ export class FilesService {
 
 			// cache thumbnail for next time and return it
 			// Don't do it if we are inside the thumbnail folder (to avoid recursive thumbnail generation)
-			if (uploadedFile && 
+			if (uploadedFile &&
 				path.normalize(dir).includes(path.normalize(FilesService.THUMBNAILS_FOLDER_NAME)) == false
 			) {
 				const thumbnailPath = path.join(thumbnailFolder, `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`);
 				await readStream.toFile(thumbnailPath);
 				return fs.createReadStream(thumbnailPath);
 			}
-			
+
 			return readStream;
 		} else {
 			// If it is a video generate thumbnail
@@ -534,7 +535,7 @@ export class FilesService {
 
 		// Check if file is indexed
 		let indexed = await UploadedFile.findOne({
-			where: { absolute_path: sanitizedRelative, user: {id: userId} },
+			where: { absolute_path: sanitizedRelative, user: { id: userId } },
 		});
 
 		// If not index then created it
@@ -548,7 +549,7 @@ export class FilesService {
 
 		// Now see if the stat already exists
 		let stat = await FileAccessStat.findOne({
-			where: { user: {id: userId}, uploaded_file: indexed, user_agent },
+			where: { user: { id: userId }, uploaded_file: indexed, user_agent },
 		});
 		if (!stat) {
 			stat = new FileAccessStat();
@@ -584,5 +585,15 @@ export class FilesService {
 			);
 		}
 		return cond;
+	}
+
+	private async invalidateThumbnailsFor(userId: number, uploadedFile: UploadedFile): Promise<void> {
+		const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME);
+		const files = fs.readdirSync(thumbnailFolder);
+		files.forEach((fileEntry) => {
+			if (fileEntry.startsWith(`${uploadedFile.id}_`)) {
+				fs.unlinkSync(path.join(thumbnailFolder, fileEntry));
+			}
+		});
 	}
 }
