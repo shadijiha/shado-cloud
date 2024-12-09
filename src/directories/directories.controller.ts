@@ -9,6 +9,7 @@ import {
 	Post,
 	Query,
 	UseGuards,
+	ValidationPipe,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -78,9 +79,12 @@ export class DirectoriesController {
 
 	@Get("listrecursive")
 	@ApiResponse({ type: [String] })
-	public async listrecursive(@AuthUser() userId: number) {
+	public async listrecursive(
+		@AuthUser() userId: number,
+		@Query("showHidden", new ValidationPipe({ transform: true })) showHidden: boolean,
+	) {
 		try {
-			return await this.directoriesService.listrecursive(userId);
+			return await this.directoriesService.listrecursive(userId, showHidden);
 		} catch (e) {
 			this.logger.logException(e);
 			return [];

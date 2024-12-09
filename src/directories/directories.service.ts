@@ -129,13 +129,17 @@ export class DirectoriesService {
 			fs.mkdirSync(path.join(process.env.CLOUD_DIR, user.email));
 	}
 
-	public async listrecursive(userId: number) {
+	public async listrecursive(userId: number, showHidden: boolean = false) {
 		const dir = await this.fileService.getUserRootPath(userId);
 		const files = this.getAllFiles(dir);
 
 		return files
 			.map((filedata) => {
 				return path.relative(dir, filedata.path);
+			})
+			.filter((file) => {
+				if (!showHidden && file.startsWith(".")) return false;
+				return true;
 			})
 			.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 	}
