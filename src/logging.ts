@@ -6,11 +6,16 @@ import { RequestContext } from "nestjs-request-context";
 import { Request } from "express";
 import { getUserIdFromRequest, SoftException } from "./util";
 import { OperationStatus, OperationStatusResponse } from "./files/filesApiTypes";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 
 @Injectable()
 export class LoggerToDb extends ConsoleLogger {
 
-	constructor(context: string) {
+	constructor(
+		context: string,
+		@InjectRepository(Log) private readonly logRepo: Repository<Log>,
+	) {
 		super(context);
 	}
 
@@ -76,7 +81,7 @@ export class LoggerToDb extends ConsoleLogger {
 			log.user = await User.findOne({ where: { id: userId } });
 		}
 
-		log.save();
+		this.logRepo.save(log);
 	}
 
 	private getIp(): string {

@@ -4,6 +4,7 @@ import {
 	ArgumentsHost,
 	HttpException,
 	UnauthorizedException,
+	Inject,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { LoggerToDb } from "./logging";
@@ -12,7 +13,7 @@ import { SoftException } from "./util";
 @Catch(Error)
 export class GlobalExceptionFilter implements ExceptionFilter {
 	public constructor(
-		private readonly logger: LoggerToDb = new LoggerToDb(GlobalExceptionFilter.name)
+		@Inject() private readonly logger: LoggerToDb,
 	) {}
 
 	catch(exception: Error, host: ArgumentsHost) {

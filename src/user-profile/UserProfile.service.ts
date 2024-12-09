@@ -12,9 +12,9 @@ import { ProfileCropData, ProfileStats } from "./user-profile-types";
 import sharp from "sharp";
 import { FileAccessStat } from "../models/stats/fileAccessStat";
 import { SearchStat } from "../models/stats/searchStat";
-import { DataSource, In } from "typeorm";
+import { DataSource, In, Repository } from "typeorm";
 import { DirectoriesService } from "../directories/directories.service";
-import { InjectDataSource } from "@nestjs/typeorm";
+import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
 
 @Injectable()
 export class UserProfileService {
@@ -22,7 +22,10 @@ export class UserProfileService {
 		private readonly userService: AuthService,
 		private readonly fileService: FilesService,
 		private readonly directoryService: DirectoriesService,
-		@InjectDataSource() private readonly dataSource: DataSource,
+		@InjectRepository(User) private readonly userRepo: Repository<User>,
+		@InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
+		@InjectRepository(SearchStat) private readonly searchStatRepo: Repository<SearchStat>,
+		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
 		@Inject() private readonly logger: LoggerToDb,
 	) {}
 
@@ -34,7 +37,7 @@ export class UserProfileService {
 		// Get the old password of the user
 		const user = await this.verifyPassword(userId, old_password);
 		user.password = await argon2.hash(new_password);
-		user.save();
+		this.userRepo.save(user);
 
 		this.logger.log("User changed their password");
 	}
@@ -42,7 +45,7 @@ export class UserProfileService {
 	public async changeName(userId: number, password: string, new_name: string) {
 		const user = await this.verifyPassword(userId, password);
 		user.name = new_name;
-		user.save();
+		this.userRepo.save(user);
 	}
 
 	public async changePicture(
@@ -56,26 +59,24 @@ export class UserProfileService {
 	}
 
 	public async getStats(userId: number, withDeleted: boolean = false) {
-		const fileAccesMeta = this.dataSource.getMetadata(FileAccessStat);
-		const uploadedFileMeta = this.dataSource.getMetadata(UploadedFile);
-		const userTbMeta = this.dataSource.getMetadata(User);
+		const fileAccesMeta = this.fileAccessStatRepo.metadata;
+		const uploadedFileMeta = this.uploadedFileRepo.metadata;
+		const userTbMeta = this.userRepo.metadata;
 
-		const most_accesed_files_raw = await FileAccessStat.query(`
+		const most_accesed_files_raw = await this.fileAccessStatRepo.query(`
 			SELECT SUM(T.count) AS Total, U.*
 			FROM ${fileAccesMeta.tableName} AS T
-			LEFT JOIN ${uploadedFileMeta.tableName} AS U ON T.${
-			uploadedFileMeta.name
-		}Id = U.id
-			WHERE T.${userTbMeta.name}Id = ${userId}
+			LEFT JOIN ${uploadedFileMeta.tableName} AS U ON T.${uploadedFileMeta.name}Id = U.id
+			WHERE T.${userTbMeta.name}Id = $1
 					${withDeleted ? "" : " AND T.deleted_at is null"}
 			GROUP BY U.id
 			ORDER BY Total DESC
 			LIMIT 6 	-- Needed to ignore the profile picture access
-		`);
+		`, [userId]);
 
-		const most_search_raw = await SearchStat.createQueryBuilder("search")
+		const most_search_raw = await this.searchStatRepo.createQueryBuilder("search")
 			.addSelect("count(search.text) AS Total")
-			.where(`search.${userTbMeta.name}Id = ${userId}`)
+			.where(`search.${userTbMeta.name}Id = :id`, {id: userId})
 			.groupBy("search.text")
 			.orderBy("Total", "DESC")
 			.limit(5)
@@ -100,7 +101,7 @@ export class UserProfileService {
 		const user = await this.userService.getById(userId);
 
 		// Get current indexed files
-		const currentIndexedFiles = await UploadedFile.find({ where: { user: {id: userId} } });
+		const currentIndexedFiles = await this.uploadedFileRepo.find({ where: { user: {id: userId} } });
 
 		// Re-index all files
 		const files = await this.directoryService.listrecursive(user.id);
@@ -119,7 +120,7 @@ export class UserProfileService {
 				));
 
 			newFile.mime = mime;
-			newIndexedFiles.push(await newFile.save());
+			newIndexedFiles.push(await this.uploadedFileRepo.save(newFile));
 		}
 
 		// Get all references to the uploaded files (can't delete yet because of foreign key constraints)
@@ -143,10 +144,10 @@ export class UserProfileService {
 			// 2. Soft delete the old Uploaded file reference
 			if (!uploaded_file_new) {
 				// Decided to go with Removing the file access stat
-				await fileAccessStat.remove();
+				await this.fileAccessStatRepo.remove(fileAccessStat);
 			} else {
 				fileAccessStat.uploaded_file = uploaded_file_new;
-				await fileAccessStat.save();
+				await this.fileAccessStatRepo.save(fileAccessStat);
 			}
 		}
 
@@ -202,13 +203,13 @@ export class UserProfileService {
 			}
 
 			// Remove previous metadata prof indexed file
-			await UploadedFile.delete({ user: user, absolute_path: relative });
+			await this.uploadedFileRepo.delete({ user: user, absolute_path: relative });
 
 			const fileDB = new UploadedFile();
 			fileDB.absolute_path = relative;
 			fileDB.user = user;
 			fileDB.mime = file.mimetype;
-			fileDB.save();
+			this.uploadedFileRepo.save(fileDB);
 
 			return [true, ""];
 		} catch (e) {

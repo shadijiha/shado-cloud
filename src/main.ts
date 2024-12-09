@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import { json, urlencoded } from "express";
 import { GlobalExceptionFilter } from "./global.filter";
 import helmet from "helmet";
+import { LoggerToDb } from "./logging";
 
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule, {
@@ -37,7 +38,7 @@ async function bootstrap() {
 	app.use(cookieParser());
 	app.use(json({ limit: "100mb" }));
 	app.use(urlencoded({ extended: true, limit: "100mb" }));
-	app.useGlobalFilters(new GlobalExceptionFilter());
+	app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb)));
 
 	await app.listen(9000);
 }

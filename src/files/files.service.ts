@@ -14,6 +14,7 @@ import { LoggerToDb } from "../logging";
 import mime from "mime-types";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { SearchStat } from "src/models/stats/searchStat";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -24,10 +25,13 @@ export class FilesService {
 	private readonly dirService: DirectoriesService; // Not injected, because it would cause a circular dependency
 
 	constructor(private userService: AuthService,
-		@InjectRepository(UploadedFile) uploadedFileRepo: Repository<UploadedFile>,
+		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
+		@InjectRepository(SearchStat) searchStateRepo: Repository<SearchStat>,
+		@InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
+		@InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
 		@Inject() private readonly logger: LoggerToDb
 	) {
-		this.dirService = new DirectoriesService(userService, this, uploadedFileRepo, logger);
+		this.dirService = new DirectoriesService(userService, this, uploadedFileRepo, searchStateRepo, logger);
 
 		// Sharp cache
 		sharp.cache(true);
@@ -86,7 +90,7 @@ export class FilesService {
 
 			fs.writeFileSync(dir, file.buffer);
 
-			let fileDB = await UploadedFile.findOne({ where: { absolute_path: relative, user: { id: userId } } });
+			let fileDB = await this.uploadedFileRepo.findOne({ where: { absolute_path: relative, user: { id: userId } } });
 
 			// if a file already exists with that name, then most likely we are replacing a file
 			// in this case, we'll invalidate old thumbnails
@@ -97,7 +101,7 @@ export class FilesService {
 				fileDB.absolute_path = relative;
 				fileDB.user = await this.userService.getById(userId);
 				fileDB.mime = file.mimetype;
-				fileDB.save();
+				this.uploadedFileRepo.save(fileDB);
 			}
 			
 			return [true, ""];
@@ -124,7 +128,7 @@ export class FilesService {
 		file.user = await this.userService.getById(userId);
 		file.absolute_path = relative;
 		file.mime = "text/plain";
-		file.save();
+		this.uploadedFileRepo.save(file);
 	}
 
 	public async save(
@@ -166,18 +170,18 @@ export class FilesService {
 
 			// See if file is in DB, if yes, then delete it
 			const user = await this.userService.getById(userId);
-			const uploadedFile = await UploadedFile.findOne({
+			const uploadedFile = await this.uploadedFileRepo.findOne({
 				where: { absolute_path: relative, user: { id: user.id } },
 			});
-			const accessData = await FileAccessStat.find({
+			const accessData = await this.fileAccessStatRepo.find({
 				where: { uploaded_file: uploadedFile },
 			});
-			if (accessData) await FileAccessStat.softRemove(accessData);
+			if (accessData) await this.fileAccessStatRepo.softRemove(accessData);
 
 			// Delete all thumbnails relate to that file
 			if (uploadedFile) {
 				await this.invalidateThumbnailsFor(userId, uploadedFile);
-				await UploadedFile.softRemove(uploadedFile);
+				await this.uploadedFileRepo.softRemove(uploadedFile);
 			}
 
 			return [true, ""];
@@ -206,13 +210,13 @@ export class FilesService {
 		fs.renameSync(dir, newDir);
 
 		// Rename file in DB
-		const file = await UploadedFile.findOne({
+		const file = await this.uploadedFileRepo.findOne({
 			where: { absolute_path: relative, user: { id: userId } },
 		});
 
 		if (file) {
 			file.absolute_path = relativeNew;
-			file.save();
+			this.uploadedFileRepo.save(file);
 		} else {
 			// Else if it is not in DB then insert it
 			const mime = FilesService.detectFile(newDir);
@@ -222,7 +226,7 @@ export class FilesService {
 			uploadedFile.user = user;
 			uploadedFile.absolute_path = relativeNew;
 			uploadedFile.mime = mime;
-			uploadedFile.save();
+			this.uploadedFileRepo.save(uploadedFile);
 		}
 	}
 
@@ -236,15 +240,14 @@ export class FilesService {
 		}
 
 		const stats = fs.statSync(dir);
-		const file = await UploadedFile.findOne({
+		const file = await this.uploadedFileRepo.findOne({
 			where: { absolute_path: relative },
 		});
 
 		const fileMime = file ? file.mime : FilesService.detectFile(dir);
 
 		// Get temp url if exists and is active
-		const user = await this.userService.getById(userId);
-		const tempUrls = await TempUrl.find({
+		const tempUrls = await this.tempUrlRepo.find({
 			where: { user: { id: userId }, filepath: relative },
 		});
 
@@ -278,7 +281,6 @@ export class FilesService {
 	}
 
 	public async exists(userId: number, relativePath: string) {
-		const root = await this.getUserRootPath(userId);
 		const dir = await this.absolutePath(userId, relativePath);
 
 		if (!(await this.isOwner(userId, dir))) {
@@ -305,7 +307,7 @@ export class FilesService {
 			if (!fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
 			// Check if thumbnail already exists
-			const uploadedFile = await UploadedFile.findOne({
+			const uploadedFile = await this.uploadedFileRepo.findOne({
 				where: { absolute_path: path.normalize(path_), user: { id: userId } },
 			});
 			const thumbnailFolder = path.join(await this.createMetaFolderIfNotExists(userId), FilesService.THUMBNAILS_FOLDER_NAME);
@@ -533,7 +535,7 @@ export class FilesService {
 		const user = await this.userService.getById(userId);
 
 		// Check if file is indexed
-		let indexed = await UploadedFile.findOne({
+		let indexed = await this.uploadedFileRepo.findOne({
 			where: { absolute_path: sanitizedRelative, user: { id: userId } },
 		});
 
@@ -543,11 +545,11 @@ export class FilesService {
 			indexed.absolute_path = sanitizedRelative;
 			indexed.user = user;
 			indexed.mime = FilesService.detectFile(absolute_path);
-			await indexed.save();
+			await this.uploadedFileRepo.save(indexed);
 		}
 
 		// Now see if the stat already exists
-		let stat = await FileAccessStat.findOne({
+		let stat = await this.fileAccessStatRepo.findOne({
 			where: { user: { id: userId }, uploaded_file: indexed, user_agent },
 		});
 		if (!stat) {
@@ -556,11 +558,11 @@ export class FilesService {
 			stat.user = user;
 			stat.count = 0;
 			stat.user_agent = user_agent;
-			await stat.save();
+			await this.fileAccessStatRepo.save(stat);
 		}
 
 		stat.count += 1;
-		await stat.save();
+		await this.fileAccessStatRepo.save(stat);
 	}
 
 	public async isOwner(userId: number, absolute_path: string) {

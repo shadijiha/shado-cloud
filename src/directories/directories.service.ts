@@ -10,7 +10,7 @@ import archiver from "archiver";
 import extract from "extract-zip";
 import { LoggerToDb } from "./../logging";
 import { UploadedFile } from "src/models/uploadedFile";
-import { Like, Repository } from "typeorm";
+import { In, Like, Repository } from "typeorm";
 import { SearchStat } from "src/models/stats/searchStat";
 import { InjectRepository } from "@nestjs/typeorm";
 
@@ -20,6 +20,7 @@ export class DirectoriesService {
 		private readonly userService: AuthService,
 		private readonly fileService: FilesService,
 		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
+		@InjectRepository(SearchStat) private readonly searchStatRepo: Repository<SearchStat>,
 		@Inject() private readonly logger: LoggerToDb
 	) {}
 
@@ -92,7 +93,7 @@ export class DirectoriesService {
 		for (const file of this.getAllFiles(dir)) {
 			const relative = path.relative(root, file.path);
 			try {
-				UploadedFile.delete({
+				this.uploadedFileRepo.delete({
 					absolute_path: relative,
 					user: { id: userId },
 				});
@@ -148,7 +149,7 @@ export class DirectoriesService {
 		const stat = new SearchStat();
 		stat.text = searchText;
 		stat.user = await this.userService.getById(userId);
-		stat.save();
+		this.searchStatRepo.save(stat);
 
 		return files ?? [];
 	}
@@ -199,7 +200,7 @@ export class DirectoriesService {
 			indexed.user = user;
 			indexed.absolute_path = relativePath;
 			indexed.mime = FilesService.detectFile(file.path);
-			indexed.save();
+			this.uploadedFileRepo.save(indexed);
 		}
 	}
 

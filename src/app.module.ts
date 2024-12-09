@@ -13,6 +13,8 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD, INQUIRER } from "@nestjs/core";
 import { CORPMiddleware } from "./corp.middleware";
 import { LoggerToDb } from "./logging";
+import { Log } from "./models/log";
+import { DataSource } from "typeorm";
 
 @Global()
 @Module({
@@ -20,8 +22,10 @@ import { LoggerToDb } from "./logging";
 		{
 			provide: LoggerToDb,
 			scope: Scope.TRANSIENT,
-			inject: [INQUIRER],
-			useFactory: (parentClass: object) => new LoggerToDb(parentClass.constructor.name),
+			inject: [DataSource, INQUIRER],
+			useFactory: (dataSource: DataSource, parentClass: object) => {
+				return new LoggerToDb(parentClass?.constructor.name ?? "UnknownSource", dataSource.getRepository(Log));
+			},
 		}
 	],
 	exports: [LoggerToDb],

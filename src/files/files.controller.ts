@@ -3,6 +3,7 @@ import {
 	Controller,
 	Delete,
 	Get,
+	Inject,
 	Logger,
 	Param,
 	Patch,
@@ -43,7 +44,7 @@ import {
 export class FilesConstoller {
 	constructor(
 		private fileService: FilesService,
-		private logger: LoggerToDb = new LoggerToDb(FilesConstoller.name)
+		@Inject() private readonly logger: LoggerToDb,
 	) {}
 
 	@Get(":path")

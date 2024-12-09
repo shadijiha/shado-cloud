@@ -85,7 +85,7 @@ export class PasswordsVaultService {
 			);
 		}
 
-		EncryptedPassword.delete(vault.id);
+		this.encrtyptedPasswordRepo.delete(vault.id);
 	}
 
 	/**
@@ -130,7 +130,7 @@ export class PasswordsVaultService {
 		passwordVault.username = username;
 		passwordVault.user = user;
 		passwordVault.website = website.origin;
-		passwordVault.save();
+		this.encrtyptedPasswordRepo.save(passwordVault);
 
 		delete passwordVault.user.password;
 

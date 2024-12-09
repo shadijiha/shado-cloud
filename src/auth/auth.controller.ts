@@ -9,7 +9,8 @@ import {
 	Res,
 	UseGuards,
 	UsePipes,
-	Headers
+	Headers,
+	Inject
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
@@ -34,7 +35,7 @@ export class AuthController {
 		private authService: AuthService,
 		private directoryService: DirectoriesService,
 		private fileService: FilesService,
-		private logger: LoggerToDb = new LoggerToDb(AuthController.name)
+		@Inject() private readonly logger: LoggerToDb,
 	) { }
 
 	@Post("login")

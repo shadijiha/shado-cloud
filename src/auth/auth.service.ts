@@ -12,7 +12,7 @@ export class AuthService {
 	}
 
 	public async getByEmail(email: string): Promise<User | null> {
-		return await User.findOne({ where: { email } });
+		return await this.userRepo.findOne({ where: { email } });
 	}
 
 	public async new(name: string, email: string, password: string) {
@@ -20,11 +20,11 @@ export class AuthService {
 		user.email = email;
 		user.password = await argon2.hash(password);
 		user.name = name;
-		return await user.save();
+		return await this.userRepo.save(user);
 	}
 
 	public async getById(userId: number) {
-		return User.findOne({ where: { id: userId } });
+		return this.userRepo.findOne({ where: { id: userId } });
 	}
 
 	public async passwordMatch(userId: number, password: string) {
