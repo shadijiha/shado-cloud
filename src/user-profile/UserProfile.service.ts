@@ -1,9 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import argon2 from "argon2";
 import path from "path";
 import { AuthService } from "../auth/auth.service";
 import { FilesService } from "../files/files.service";
-import { infoLog } from "../logging";
+import { LoggerToDb } from "../logging";
 import { User } from "../models/user";
 import { SoftException } from "../util";
 import fs from "fs";
@@ -23,6 +23,7 @@ export class UserProfileService {
 		private readonly fileService: FilesService,
 		private readonly directoryService: DirectoriesService,
 		@InjectDataSource() private readonly dataSource: DataSource,
+		@Inject() private readonly logger: LoggerToDb,
 	) {}
 
 	public async changePassword(
@@ -35,11 +36,7 @@ export class UserProfileService {
 		user.password = await argon2.hash(new_password);
 		user.save();
 
-		infoLog(
-			new Error("User changed their password"),
-			UserProfileService,
-			userId
-		);
+		this.logger.log("User changed their password");
 	}
 
 	public async changeName(userId: number, password: string, new_name: string) {

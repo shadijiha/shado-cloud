@@ -25,6 +25,10 @@ export class Log extends BaseEntity {
 
 	@Column({ nullable: true })
 	@ApiProperty()
+	stack: string;
+
+	@Column({ nullable: true })
+	@ApiProperty()
 	route: string;
 
 	@Column()

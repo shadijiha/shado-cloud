@@ -13,19 +13,18 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response, Request } from "express";
-import { use } from "passport";
-import { DirectoriesService } from "src/directories/directories.service";
-import { FilesService } from "src/files/files.service";
-import { errorLog } from "src/logging";
-import { User } from "src/models/user";
-import { AuthUser } from "src/util";
+import { DirectoriesService } from "./../directories/directories.service";
+import { FilesService } from "./../files/files.service";
+import { LoggerToDb } from "./../logging";
+import { User } from "./../models/user";
+import { AuthUser } from "./../util";
 import { AuthService } from "./auth.service";
 import { LoginRequest, LoginResponse, RegisterRequest } from "./authApiTypes";
 import { ValidationPipeline } from "./ValidationPipeline";
 import { IncomingHttpHeaders } from "http";
-import { isDev } from "src/app.module";
+import { isDev } from "./../app.module";
 
 @Controller("auth")
 @ApiTags("Authentication")
@@ -34,7 +33,8 @@ export class AuthController {
 		private jwtService: JwtService,
 		private authService: AuthService,
 		private directoryService: DirectoriesService,
-		private fileService: FilesService
+		private fileService: FilesService,
+		private logger: LoggerToDb = new LoggerToDb(AuthController.name)
 	) { }
 
 	@Post("login")
@@ -114,7 +114,7 @@ export class AuthController {
 				profPic: await this.fileService.profilePictureInfo(userId),
 			};
 		} catch (e) {
-			errorLog(e, AuthController, userId);
+			this.logger.logException(e);
 			return null;
 		}
 	}

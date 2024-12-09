@@ -3,16 +3,18 @@ import {
 	Catch,
 	ArgumentsHost,
 	HttpException,
-	Logger,
 	UnauthorizedException,
 } from "@nestjs/common";
 import { Request, Response } from "express";
-import { CookiePayload } from "./auth/authApiTypes";
-import { errorLog } from "./logging";
-import { parseJwt, SoftException } from "./util";
+import { LoggerToDb } from "./logging";
+import { SoftException } from "./util";
 
 @Catch(Error)
 export class GlobalExceptionFilter implements ExceptionFilter {
+	public constructor(
+		private readonly logger: LoggerToDb = new LoggerToDb(GlobalExceptionFilter.name)
+	) {}
+
 	catch(exception: Error, host: ArgumentsHost) {
 		const ctx = host.switchToHttp();
 		const response = ctx.getResponse<Response>();
@@ -29,10 +31,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 				exception instanceof SoftException
 			)
 		) {
-			const userId = (<CookiePayload>(
-				parseJwt(request.cookies[process.env.COOKIE_NAME])
-			))?.userId;
-			errorLog(exception, GlobalExceptionFilter, userId);
+			this.logger.logException(exception);
 		}
 		response.status(status).json({
 			statusCode: status,

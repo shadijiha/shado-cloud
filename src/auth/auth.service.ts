@@ -6,7 +6,9 @@ import { InjectRepository } from "@nestjs/typeorm";
 
 @Injectable()
 export class AuthService {
-	constructor(@InjectRepository(User) private readonly userRepo: Repository<User>) {
+	constructor(
+		@InjectRepository(User) private readonly userRepo: Repository<User>
+	) {
 	}
 
 	public async getByEmail(email: string): Promise<User | null> {

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { AuthService } from "src/auth/auth.service";
 import { FilesService } from "src/files/files.service";
 import fs from "fs";
@@ -8,7 +8,7 @@ import path from "path";
 import { User } from "src/models/user";
 import archiver from "archiver";
 import extract from "extract-zip";
-import { errorLog } from "src/logging";
+import { LoggerToDb } from "./../logging";
 import { UploadedFile } from "src/models/uploadedFile";
 import { Like, Repository } from "typeorm";
 import { SearchStat } from "src/models/stats/searchStat";
@@ -19,7 +19,8 @@ export class DirectoriesService {
 	constructor(
 		private readonly userService: AuthService,
 		private readonly fileService: FilesService,
-		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>
+		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
+		@Inject() private readonly logger: LoggerToDb
 	) {}
 
 	public async root(userId: number) {
@@ -96,12 +97,10 @@ export class DirectoriesService {
 					user: { id: userId },
 				});
 			} catch (e) {
-				errorLog(
+				this.logger.logException(
 					new Error(
 						"Unable to delete file " + relative + ". " + (<Error>e).message
-					),
-					DirectoriesService,
-					userId
+					)
 				);
 			}
 		}
@@ -169,7 +168,7 @@ export class DirectoriesService {
 		const archive = archiver("zip");
 
 		archive.on("error", function (err) {
-			errorLog(err, DirectoriesService, userId);
+			this.logger.logException(err);
 		});
 		archive.pipe(output);
 		archive.directory(dir, false);

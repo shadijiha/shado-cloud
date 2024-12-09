@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, RequestMethod } from "@nestjs/common";
+import { Global, MiddlewareConsumer, Module, RequestMethod, Scope } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
@@ -10,11 +10,27 @@ import { RequestContextModule } from "nestjs-request-context";
 import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, INQUIRER } from "@nestjs/core";
 import { CORPMiddleware } from "./corp.middleware";
+import { LoggerToDb } from "./logging";
+
+@Global()
+@Module({
+	providers: [
+		{
+			provide: LoggerToDb,
+			scope: Scope.TRANSIENT,
+			inject: [INQUIRER],
+			useFactory: (parentClass: object) => new LoggerToDb(parentClass.constructor.name),
+		}
+	],
+	exports: [LoggerToDb],
+})
+export class GlobalLoggingModule {}
 
 @Module({
 	imports: [
+		GlobalLoggingModule,
 		RequestContextModule,
 		AuthModule,
 		TypeOrmModule.forRoot({
@@ -55,7 +71,7 @@ import { CORPMiddleware } from "./corp.middleware";
 		{
 			provide: APP_GUARD,
 			useClass: ThrottlerGuard,
-		},
+		}
 	],
 })
 export class AppModule {

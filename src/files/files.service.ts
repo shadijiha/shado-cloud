@@ -1,4 +1,4 @@
-import { HttpException, Injectable, Logger } from "@nestjs/common";
+import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
 import { AuthService } from "src/auth/auth.service";
 import fs, { createReadStream } from "fs";
 import path from "path";
@@ -10,7 +10,7 @@ import { SoftException } from "src/util";
 import { FileAccessStat } from "src/models/stats/fileAccessStat";
 import { UsedData } from "src/user-profile/user-profile-types";
 import { DirectoriesService } from "src/directories/directories.service";
-import { infoLog } from "../logging";
+import { LoggerToDb } from "../logging";
 import mime from "mime-types";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -22,18 +22,17 @@ export class FilesService {
 	public static readonly METADATA_FOLDER_NAME = ".metadata";
 	public static readonly THUMBNAILS_FOLDER_NAME = ".thumbnails";
 	private readonly dirService: DirectoriesService; // Not injected, because it would cause a circular dependency
-	private readonly logger: Logger
 
 	constructor(private userService: AuthService,
-		@InjectRepository(UploadedFile) uploadedFileRepo: Repository<UploadedFile>) {
-		this.dirService = new DirectoriesService(userService, this, uploadedFileRepo);
+		@InjectRepository(UploadedFile) uploadedFileRepo: Repository<UploadedFile>,
+		@Inject() private readonly logger: LoggerToDb
+	) {
+		this.dirService = new DirectoriesService(userService, this, uploadedFileRepo, logger);
 
 		// Sharp cache
 		sharp.cache(true);
 		sharp.cache({ memory: 1024, items: 5000, files: 500 });
 		sharp.simd(true);
-
-		this.logger = new Logger(FilesService.name);
 	}
 
 	public async asStream(
@@ -576,12 +575,8 @@ export class FilesService {
 
 		const cond = res.length == 0;
 		if (!cond) {
-			infoLog(
-				new Error(
-					`Not owner of ${absolute_path}. Sanatized result: ${res}. Sanatized length: ${res.length}`
-				),
-				this.isOwner,
-				userId
+			this.logger.log(
+				`Not owner of ${absolute_path}. Sanatized result: ${res}. Sanatized length: ${res.length}`
 			);
 		}
 		return cond;

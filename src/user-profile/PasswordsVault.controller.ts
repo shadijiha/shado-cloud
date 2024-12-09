@@ -3,18 +3,19 @@ import {
 	Controller,
 	Delete,
 	Get,
+	Inject,
 	Param,
 	Post,
 	UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Paginate, Paginated, PaginateQuery } from "nestjs-paginate";
 import {
 	OperationStatus,
 	OperationStatusResponse,
 } from "src/files/filesApiTypes";
-import { errorWrapper } from "src/logging";
+import { LoggerToDb } from "src/logging";
 import { EncryptedPassword } from "src/models/EncryptedPassword";
 import { AuthUser } from "src/util";
 import { PasswordsVaultService } from "./PasswordsVaultService.service";
@@ -22,14 +23,16 @@ import {
 	AddToVaultRequest,
 	AddToVaultResponse,
 	AllPasswordsResponse,
-	PasswordsVaultAllResponse,
 } from "./user-profile-types";
 
 @Controller("profile/vault")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("User profile settings")
 export class PasswordsVaultController {
-	constructor(private readonly passwordVaultService: PasswordsVaultService) {}
+	constructor(
+		private readonly passwordVaultService: PasswordsVaultService,
+		@Inject() private readonly logger: LoggerToDb,
+	) {}
 
 	@Get("all")
 	@ApiQuery({ name: "search", type: String })
@@ -38,7 +41,7 @@ export class PasswordsVaultController {
 		@AuthUser() userId: number,
 		@Paginate() query: PaginateQuery
 	): Promise<Paginated<EncryptedPassword>> {
-		return await errorWrapper(
+		return await this.logger.errorWrapper(
 			async () => {
 				const result = await this.passwordVaultService.all(userId, query);
 
@@ -53,9 +56,7 @@ export class PasswordsVaultController {
 				result.links.previous = resolveLink(result.links.previous);
 
 				return result;
-			},
-			PasswordsVaultController,
-			userId
+			}
 		);
 	}
 
@@ -65,12 +66,10 @@ export class PasswordsVaultController {
 		@AuthUser() userId: number,
 		@Param("encryption_id") encryption_id: number
 	) {
-		return await errorWrapper(
+		return await this.logger.errorWrapper(
 			async () => {
 				return await this.passwordVaultService.get(userId, encryption_id);
-			},
-			PasswordsVaultController,
-			userId
+			}
 		);
 	}
 
@@ -80,7 +79,7 @@ export class PasswordsVaultController {
 		@AuthUser() userId: number,
 		@Body() body: AddToVaultRequest
 	): Promise<AddToVaultResponse> {
-		return await errorWrapper(
+		return await this.logger.errorWrapper(
 			async () => {
 				const result: EncryptedPassword[] = [];
 				const errors = [];
@@ -103,9 +102,7 @@ export class PasswordsVaultController {
 					status: OperationStatus[OperationStatus.SUCCESS],
 					errors,
 				};
-			},
-			PasswordsVaultController,
-			userId
+			}
 		);
 	}
 
@@ -115,12 +112,10 @@ export class PasswordsVaultController {
 		@AuthUser() userId: number,
 		@Param("encryption_id") encryption_id: number
 	) {
-		return await errorWrapper(
+		return await this.logger.errorWrapper(
 			async () => {
 				await this.passwordVaultService.delete(userId, encryption_id);
-			},
-			PasswordsVaultController,
-			userId
+			}
 		);
 	}
 }

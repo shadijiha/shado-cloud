@@ -1,120 +1,100 @@
 import "reflect-metadata";
-import { Logger } from "@nestjs/common";
+import { ConsoleLogger, Injectable } from "@nestjs/common";
 import { Log } from "./models/log";
 import { User } from "./models/user";
 import { RequestContext } from "nestjs-request-context";
 import { Request } from "express";
-import { SoftException } from "./util";
-import { OperationStatus } from "./files/filesApiTypes";
+import { getUserIdFromRequest, SoftException } from "./util";
+import { OperationStatus, OperationStatusResponse } from "./files/filesApiTypes";
 
-export async function errorWrapper(
-	func: () => any,
-	controller: Function,
-	userId?: number
-) {
-	try {
-		const data = await func();
-		return (
-			data || {
-				status: OperationStatus[OperationStatus.SUCCESS],
-				errors: [],
-			}
-		);
-	} catch (e) {
-		errorLog(e, controller, userId);
-		return {
-			status: OperationStatus[OperationStatus.FAILED],
-			errors: [{ field: "", message: (<Error>e).message }],
-		};
-	}
-}
+@Injectable()
+export class LoggerToDb extends ConsoleLogger {
 
-export function errorLog(e: Error | any, source: Function, userId?: number) {
-	logHelper(e, source, "error", userId);
-}
-
-export function warnLog(e: Error | any, source: Function, userId?: number) {
-	logHelper(e, source, "warn", userId);
-}
-
-export function infoLog(e: Error | any, source: Function, userId?: number) {
-	logHelper(e, source, "info", userId);
-}
-
-async function logHelper(
-	e: Error,
-	source: Function,
-	type: "error" | "info" | "warn",
-	userId?: number
-) {
-	// IF it is a softexception, don't log it
-	if (e instanceof SoftException) return;
-
-	const ctx = RequestContext.currentContext;
-	switch (type) {
-		case "error":
-			Logger.error(e.message, e.stack, ctx);
-			break;
-		case "info":
-			Logger.log(e.message, e.stack, ctx);
-			break;
-		case "warn":
-			Logger.warn(e.message, e.stack, ctx);
-			break;
-	}
-	const log = new Log();
-	log.message = e.message;
-	log.controller = source.name;
-	log.route = getRoute();
-	log.type = type;
-	log.userAgent = getUserAgent();
-	log.ipAddress = getIp() || "localhost";
-
-	// Get user
-	if (userId) {
-		const user = await User.findOne({ where: { id: userId } });
-		if (user) {
-			log.user = user;
-		}
+	constructor(context: string) {
+		super(context);
 	}
 
-	log.save();
-}
-
-function getRoute() {
-	try {
-		const req: Request = RequestContext.currentContext.req;
-		let routePath = req.originalUrl;
-		return routePath;
-	} catch (e) {
-		Logger.debug((e as Error).message);
-	}
-}
-
-function getUserAgent() {
-	try {
-		const req: Request = RequestContext.currentContext.req;
-		return req.headers["user-agent"];
-	} catch (e) {
-		Logger.debug((e as Error).message);
-	}
-}
-
-function getIp() {
-	try {
-		const req: Request = RequestContext.currentContext.req;
-
-		if (
-			req.ip.includes("127.0.0.1") ||
-			req.ip.includes("localhost") ||
-			req.ip == "::1"
-		) {
-			const ips = req.headers["x-forwarded-for"];
-			return ips instanceof Array ? (<Array<string>>ips).join(",") : ips;
+	public logException(e: Error): void {
+		if (e instanceof SoftException) {
+			return;
 		} else {
-			return req.ip;
+			this.error(e.message, e.stack);
 		}
-	} catch (e) {
-		Logger.debug((e as Error).message);
+	}
+
+	public async errorWrapper(
+		func: () => any
+	): Promise<any | OperationStatusResponse> {
+		try {
+			const data = await func();
+			return (
+				data || {
+					status: OperationStatus[OperationStatus.SUCCESS],
+					errors: [],
+				}
+			);
+		} catch (e) {
+			this.logException(e);
+			return {
+				status: OperationStatus[OperationStatus.FAILED],
+				errors: [{ field: "", message: (<Error>e).message }],
+			};
+		}
+	}
+
+	public error(message: any, stack?: string): void {
+		super.error(message, stack);
+		this.logToDb(message, "error", stack);
+	}
+
+	public log(message: any): void {
+		super.log(message, this.context);
+		this.logToDb(message, "info", undefined);
+	}
+
+	public warn(message: any): void {
+		super.warn(message, this.context);
+		this.logToDb(message, "warn", undefined);
+	}
+
+	private async logToDb(message: any, logType: Log["type"], stack?: string): Promise<void> {
+		const ctx = RequestContext.currentContext;
+		const req: Request = ctx.req;
+
+		const log = new Log();
+		log.message = message;
+		log.controller = this.context;
+		log.route = req.originalUrl;
+		log.type = logType;
+		log.userAgent = "user-agent" in req.headers ? req.headers["user-agent"] : "unknown";
+		log.ipAddress = this.getIp() || "localhost";
+		log.stack = stack;
+
+		// Get user
+		const userId = getUserIdFromRequest(req);
+		if (userId != -1) {
+			log.user = await User.findOne({ where: { id: userId } });
+		}
+
+		log.save();
+	}
+
+	private getIp(): string {
+		try {
+			const req: Request = RequestContext.currentContext.req;
+	
+			if (
+				req.ip.includes("127.0.0.1") ||
+				req.ip.includes("localhost") ||
+				req.ip == "::1"
+			) {
+				const ips = req.headers["x-forwarded-for"];
+				return ips instanceof Array ? (<Array<string>>ips).join(",") : ips;
+			} else {
+				return req.ip;
+			}
+		} catch (e) {
+			super.debug((e as Error).message);
+		}
 	}
 }

@@ -8,6 +8,7 @@ import { AuthStrategy } from "./auth.strategy";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "./../models/user";
 import { UploadedFile } from "./../models/uploadedFile";
+import { LoggerToDb } from "src/logging";
 
 @Module({
 	controllers: [AuthController],
@@ -23,4 +24,4 @@ import { UploadedFile } from "./../models/uploadedFile";
 	providers: [AuthStrategy, AuthService, FilesService, DirectoriesService],
 	exports: [AuthService, TypeOrmModule.forFeature([User, UploadedFile])],
 })
-export class AuthModule {}
+export class AuthModule { }
