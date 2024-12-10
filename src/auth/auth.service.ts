@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { User } from "src/models/user";
+import { User } from "./../models/user";
 import { Repository } from "typeorm";
 import argon2 from "argon2";
 import { InjectRepository } from "@nestjs/typeorm";

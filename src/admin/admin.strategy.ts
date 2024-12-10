@@ -20,8 +20,11 @@ export class AdminGuard implements CanActivate {
 			parseJwt(request.cookies[process.env.COOKIE_NAME])
 		);
 
-		const user = await this.userRepo.findOne({ where: { id: payload.userId } });
+		if (!payload || !payload.userId) {
+			return false;
+		}
 
+		const user = await this.userRepo.findOne({ where: { id: payload.userId } });
 		if (user) {
 			return user.is_admin;
 		}

@@ -1,20 +1,20 @@
 import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
-import { AuthService } from "src/auth/auth.service";
+import { AuthService } from "./../auth/auth.service";
 import fs, { createReadStream } from "fs";
 import path from "path";
-import { UploadedFile } from "src/models/uploadedFile";
-import { TempUrl } from "src/models/tempUrl";
+import { UploadedFile } from "./../models/uploadedFile";
+import { TempUrl } from "./../models/tempUrl";
 import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
-import { SoftException } from "src/util";
-import { FileAccessStat } from "src/models/stats/fileAccessStat";
-import { UsedData } from "src/user-profile/user-profile-types";
-import { DirectoriesService } from "src/directories/directories.service";
+import { SoftException } from "./../util";
+import { FileAccessStat } from "./../models/stats/fileAccessStat";
+import { UsedData } from "./../user-profile/user-profile-types";
+import { DirectoriesService } from "./../directories/directories.service";
 import { LoggerToDb } from "../logging";
 import mime from "mime-types";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { SearchStat } from "src/models/stats/searchStat";
+import { SearchStat } from "./../models/stats/searchStat";
 
 type FileServiceResult = Promise<[boolean, string]>;
 

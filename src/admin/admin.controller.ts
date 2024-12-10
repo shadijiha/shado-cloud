@@ -2,6 +2,8 @@ import {
 	Controller,
 	Delete,
 	Get,
+	HttpException,
+	HttpStatus,
 	Inject,
 	Param,
 	Post,
@@ -21,7 +23,7 @@ export class AdminController {
 	constructor(
 		private readonly adminService: AdminService,
 		@Inject() private readonly logger: LoggerToDb
-	) {}
+	) { }
 
 	@Get("logs")
 	@ApiResponse({ type: [Log] })
@@ -51,23 +53,20 @@ export class AdminController {
 
 		// See if prameter is a number
 		const data = decodeURIComponent(id);
-
 		if (data.includes("[")) {
-			let buffer = data.replace("[", "").replace("]", "").split(",");
-
-			try {
-				buffer.forEach((e) => {
-					ids.push(parseInt(e));
-				});
-			} catch (e) {
-				this.logger.logException(e);
-			}
+			let buffer = data.replace(/\[/g, "").replace(/\]/g, "").split(",");
+			buffer.forEach((e) => {
+				const int = parseInt(e);
+				if (!isNaN(int)) ids.push(int);
+			});
 		} else {
-			try {
-				ids = [parseInt(data)];
-			} catch (e) {
-				this.logger.logException(e);
+			const int = parseInt(data);
+			if (isNaN(int)) {
+				const message = "Invalid ID: " + data;
+				this.logger.error(message);
+				throw new HttpException(message, HttpStatus.BAD_REQUEST);
 			}
+			ids = [parseInt(data)];
 		}
 
 		this.adminService

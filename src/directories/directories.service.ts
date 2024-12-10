@@ -1,17 +1,17 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { AuthService } from "src/auth/auth.service";
-import { FilesService } from "src/files/files.service";
+import { AuthService } from "./../auth/auth.service";
+import { FilesService } from "./../files/files.service";
 import fs from "fs";
 import { DirectoryInfo } from "./directoriesApiTypes";
-import { FileInfo } from "src/files/filesApiTypes";
+import { FileInfo } from "./../files/filesApiTypes";
 import path from "path";
-import { User } from "src/models/user";
+import { User } from "./../models/user";
 import archiver from "archiver";
 import extract from "extract-zip";
 import { LoggerToDb } from "./../logging";
-import { UploadedFile } from "src/models/uploadedFile";
+import { UploadedFile } from "./../models/uploadedFile";
 import { In, Like, Repository } from "typeorm";
-import { SearchStat } from "src/models/stats/searchStat";
+import { SearchStat } from "./../models/stats/searchStat";
 import { InjectRepository } from "@nestjs/typeorm";
 
 @Injectable()
