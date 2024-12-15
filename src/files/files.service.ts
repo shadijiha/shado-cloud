@@ -103,7 +103,7 @@ export class FilesService {
 				fileDB.mime = file.mimetype;
 				this.uploadedFileRepo.save(fileDB);
 			}
-			
+
 			return [true, ""];
 		} catch (e) {
 			return [false, (<Error>e).message];
@@ -342,6 +342,8 @@ export class FilesService {
 				".videometa." + path.basename(dir) + ".png"
 			);
 
+			// TOOD: CHange this library because it is hard to test
+			// instead of returning errors it prints them to the console
 			const thumbGen = new ThumbnailGenerator({
 				verbose: false, // Whether to print out warning/errors
 				size: [width ?? "?", height ?? "?"], // Default size, either a single number of an array of two numbers - [width, height].
