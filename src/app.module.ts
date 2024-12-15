@@ -15,6 +15,9 @@ import { CORPMiddleware } from "./corp.middleware";
 import { LoggerToDb } from "./logging";
 import { Log } from "./models/log";
 import { DataSource } from "typeorm";
+import { CacheModule } from "@nestjs/cache-manager";
+import redisStore from 'cache-manager-redis-store';
+
 
 @Global()
 @Module({
@@ -30,7 +33,7 @@ import { DataSource } from "typeorm";
 	],
 	exports: [LoggerToDb],
 })
-export class GlobalLoggingModule {}
+export class GlobalLoggingModule { }
 
 @Module({
 	imports: [
@@ -68,6 +71,14 @@ export class GlobalLoggingModule {}
 		TempUrlModule,
 		AdminModule,
 		UserProfileModule,
+		CacheModule.register({
+			store: redisStore as any,
+			host: process.env.REDIS_HOST,
+			port: Number(process.env.REDIS_PORT),
+			password: process.env.REDIS_PASSWORD,
+			isGlobal: true,
+			ttl: 1000 * 20, // 20 seconds
+		}),
 	],
 	controllers: [AppController],
 	providers: [

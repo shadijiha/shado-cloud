@@ -38,6 +38,7 @@ import {
 	RenameFileRequest,
 	SaveFileRequest,
 } from "./filesApiTypes";
+import { CacheInterceptor } from "@nestjs/cache-manager";
 @Controller("file")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Files")
@@ -45,7 +46,7 @@ export class FilesConstoller {
 	constructor(
 		private fileService: FilesService,
 		@Inject() private readonly logger: LoggerToDb,
-	) {}
+	) { }
 
 	@Get(":path")
 	@ApiResponse({ description: "Returns a stream of the requested file" })
@@ -272,6 +273,7 @@ export class FilesConstoller {
 	}
 
 	@Get("thumbnail/:path")
+	@UseInterceptors(CacheInterceptor)
 	@ApiResponse({
 		description: "Returns a thumnail stream of the requested file",
 	})
