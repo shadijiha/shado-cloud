@@ -1,21 +1,26 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
 import { exec, ExecException } from "child_process";
 import { Log } from "src/models/log";
-import { In } from "typeorm";
+import { In, Repository } from "typeorm";
 
 @Injectable()
 export class AdminService {
+
+	public constructor(
+		@InjectRepository(Log) private readonly logRepo: Repository<Log>
+	) {}
+
 	public async all() {
 		return await (
-			await Log.find({ relations: ["user"] })
+			await this.logRepo.find({ relations: ["user"] })
 		).sort((a, b) => {
 			return b.created_at.getTime() - a.created_at.getTime();
 		});
 	}
 
 	public async deleteByIds(ids: number[]) {
-		Logger.debug(typeof ids[0]);
-		await Log.delete(ids);
+		await this.logRepo.delete(ids);
 	}
 
 	public async redeploy() {

@@ -5,18 +5,20 @@ import { User } from "src/models/user";
 import { createCipheriv, createDecipheriv, randomBytes, scrypt } from "crypto";
 import { promisify } from "util";
 import { SoftException } from "src/util";
-import { getConnection, getRepository } from "typeorm";
+import { Repository } from "typeorm";
 import { paginate, Paginated, PaginateQuery } from "nestjs-paginate";
+import { InjectRepository } from "@nestjs/typeorm";
 
 @Injectable()
 export class PasswordsVaultService {
-	public constructor(private readonly userService: AuthService) {}
+	public constructor(private readonly userService: AuthService,
+		 @InjectRepository(EncryptedPassword) private readonly encrtyptedPasswordRepo: Repository<EncryptedPassword>) {}
 
 	public async all(
 		userId: number,
 		query: PaginateQuery
 	): Promise<Paginated<EncryptedPassword>> {
-		const builder = getRepository(EncryptedPassword)
+		const builder = this.encrtyptedPasswordRepo
 			.createQueryBuilder("pass")
 			.leftJoinAndSelect("pass.user", "user")
 			.where("pass.user = :userId", { userId });
@@ -59,14 +61,13 @@ export class PasswordsVaultService {
 	}
 
 	public async delete(userId: number, encryption_id: number) {
-		const query = getConnection().createQueryBuilder();
+		const query = this.encrtyptedPasswordRepo.createQueryBuilder("vault");
 		const vault = await query
 			.select("vault.encryption_key")
 			.addSelect("vault.iv")
 			.addSelect("vault.password")
 			.addSelect("vault")
 			.addSelect("vault.userId")
-			.from(EncryptedPassword, "vault")
 			.leftJoinAndSelect("vault.user", "user")
 			.where("vault.id = :encryption_id", {
 				encryption_id,
@@ -84,7 +85,7 @@ export class PasswordsVaultService {
 			);
 		}
 
-		EncryptedPassword.delete(vault.id);
+		this.encrtyptedPasswordRepo.delete(vault.id);
 	}
 
 	/**
@@ -129,7 +130,7 @@ export class PasswordsVaultService {
 		passwordVault.username = username;
 		passwordVault.user = user;
 		passwordVault.website = website.origin;
-		passwordVault.save();
+		this.encrtyptedPasswordRepo.save(passwordVault);
 
 		delete passwordVault.user.password;
 
@@ -140,14 +141,13 @@ export class PasswordsVaultService {
 		userId: number,
 		encryptionId: number
 	): Promise<{ vault: EncryptedPassword; decryptedPassword: string }> {
-		const query = getConnection().createQueryBuilder();
+		const query = this.encrtyptedPasswordRepo.createQueryBuilder("vault");
 		const vault = await query
 			.select("vault.encryption_key")
 			.addSelect("vault.iv")
 			.addSelect("vault.password")
 			.addSelect("vault")
 			.addSelect("vault.userId")
-			.from(EncryptedPassword, "vault")
 			.leftJoinAndSelect("vault.user", "user")
 			.where("vault.id = :encryptionId", {
 				encryptionId,

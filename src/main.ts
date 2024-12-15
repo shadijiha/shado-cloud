@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import { json, urlencoded } from "express";
 import { GlobalExceptionFilter } from "./global.filter";
 import helmet from "helmet";
+import { LoggerToDb } from "./logging";
 
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule, {
@@ -26,7 +27,9 @@ async function bootstrap() {
 		.setDescription("The Shado Cloud API description")
 		.setVersion("1.0")
 		.addTag("")
-		.addServer(process.env.BACKEND_HOST)
+		.addServer(
+			process.env.BACKEND_HOST?.startsWith("http") ?
+				process.env.BACKEND_HOST : `http://${process.env.BACKEND_HOST}/`)
 		.addServer("https://cloud.shadijiha.com/apinest")
 		.build();
 	const document = SwaggerModule.createDocument(app, config);
@@ -36,7 +39,7 @@ async function bootstrap() {
 	app.use(cookieParser());
 	app.use(json({ limit: "100mb" }));
 	app.use(urlencoded({ extended: true, limit: "100mb" }));
-	app.useGlobalFilters(new GlobalExceptionFilter());
+	app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb)));
 
 	await app.listen(9000);
 }

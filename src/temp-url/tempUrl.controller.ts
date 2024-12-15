@@ -10,17 +10,18 @@ import {
 	Res,
 	UseGuards,
 	Headers,
+	Inject,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiHeader, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import {
 	OperationStatus,
 	OperationStatusResponse,
-} from "src/files/filesApiTypes";
-import { errorLog, warnLog } from "src/logging";
-import { TempUrl } from "src/models/tempUrl";
-import { AuthUser } from "src/util";
+} from "./../files/filesApiTypes";
+import { LoggerToDb } from "./../logging";
+import { TempUrl } from "./../models/tempUrl";
+import { AuthUser } from "./../util";
 import { TempUrlService } from "./tempUrl.service";
 import {
 	TempURLGenerateOptions,
@@ -32,7 +33,10 @@ import { IncomingHttpHeaders } from "http";
 @Controller("temp")
 @ApiTags("Temporary URLs")
 export class TempUrlConstoller {
-	constructor(private readonly tempUrlService: TempUrlService) { }
+	constructor(
+		private readonly tempUrlService: TempUrlService,
+		@Inject() private readonly logger: LoggerToDb
+	) { }
 
 	@Post("generate")
 	@UseGuards(AuthGuard("jwt"))
@@ -56,7 +60,7 @@ export class TempUrlConstoller {
 				),
 			};
 		} catch (e) {
-			errorLog(e, TempUrlConstoller, userId);
+			this.logger.logException(e);
 			return {
 				url: "",
 			};
@@ -74,7 +78,7 @@ export class TempUrlConstoller {
 			file.stream.pipe(res);
 			return;
 		} catch (e) {
-			warnLog(e, TempUrlConstoller);
+			this.logger.logException(e);
 			res.send({
 				errors: [{ field: "url", message: (<Error>e).message }],
 			});
@@ -94,7 +98,7 @@ export class TempUrlConstoller {
 				errors: [],
 			};
 		} catch (e) {
-			warnLog(e, TempUrlConstoller);
+			this.logger.warn(e.message);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "url", message: (<Error>e).message }],
@@ -109,7 +113,7 @@ export class TempUrlConstoller {
 		try {
 			return await this.tempUrlService.all(userId);
 		} catch (e) {
-			errorLog(e, TempUrlConstoller, userId);
+			this.logger.logException(e);
 			return [];
 		}
 	}
@@ -129,7 +133,7 @@ export class TempUrlConstoller {
 				errors: [],
 			};
 		} catch (e) {
-			errorLog(e, TempUrlConstoller, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],

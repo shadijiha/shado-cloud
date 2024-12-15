@@ -1,23 +1,27 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { AuthService } from "src/auth/auth.service";
-import { FilesService } from "src/files/files.service";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { AuthService } from "./../auth/auth.service";
+import { FilesService } from "./../files/files.service";
 import fs from "fs";
 import { DirectoryInfo } from "./directoriesApiTypes";
-import { FileInfo } from "src/files/filesApiTypes";
+import { FileInfo } from "./../files/filesApiTypes";
 import path from "path";
-import { User } from "src/models/user";
+import { User } from "./../models/user";
 import archiver from "archiver";
 import extract from "extract-zip";
-import { errorLog } from "src/logging";
-import { UploadedFile } from "src/models/uploadedFile";
-import { getRepository, Like } from "typeorm";
-import { SearchStat } from "src/models/stats/searchStat";
+import { LoggerToDb } from "./../logging";
+import { UploadedFile } from "./../models/uploadedFile";
+import { In, Like, Repository } from "typeorm";
+import { SearchStat } from "./../models/stats/searchStat";
+import { InjectRepository } from "@nestjs/typeorm";
 
 @Injectable()
 export class DirectoriesService {
 	constructor(
 		private readonly userService: AuthService,
-		private readonly fileService: FilesService
+		private readonly fileService: FilesService,
+		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
+		@InjectRepository(SearchStat) private readonly searchStatRepo: Repository<SearchStat>,
+		@Inject() private readonly logger: LoggerToDb
 	) {}
 
 	public async root(userId: number) {
@@ -89,17 +93,15 @@ export class DirectoriesService {
 		for (const file of this.getAllFiles(dir)) {
 			const relative = path.relative(root, file.path);
 			try {
-				UploadedFile.delete({
+				this.uploadedFileRepo.delete({
 					absolute_path: relative,
 					user: { id: userId },
 				});
 			} catch (e) {
-				errorLog(
+				this.logger.logException(
 					new Error(
 						"Unable to delete file " + relative + ". " + (<Error>e).message
-					),
-					DirectoriesService,
-					userId
+					)
 				);
 			}
 		}
@@ -127,7 +129,7 @@ export class DirectoriesService {
 			fs.mkdirSync(path.join(process.env.CLOUD_DIR, user.email));
 	}
 
-	public async listrecursive(userId: number) {
+	public async listrecursive(userId: number, showHidden: boolean = false) {
 		const dir = await this.fileService.getUserRootPath(userId);
 		const files = this.getAllFiles(dir);
 
@@ -135,11 +137,15 @@ export class DirectoriesService {
 			.map((filedata) => {
 				return path.relative(dir, filedata.path);
 			})
+			.filter((file) => {
+				if (!showHidden && file.startsWith(".")) return false;
+				return true;
+			})
 			.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 	}
 
 	public async search(userId: number, searchText: string) {
-		const files = await getRepository(UploadedFile).find({
+		const files = await this.uploadedFileRepo.find({
 			where: [{ absolute_path: Like(`%${searchText}%`), user: { id: userId } }],
 		});
 
@@ -147,7 +153,7 @@ export class DirectoriesService {
 		const stat = new SearchStat();
 		stat.text = searchText;
 		stat.user = await this.userService.getById(userId);
-		stat.save();
+		this.searchStatRepo.save(stat);
 
 		return files ?? [];
 	}
@@ -167,7 +173,7 @@ export class DirectoriesService {
 		const archive = archiver("zip");
 
 		archive.on("error", function (err) {
-			errorLog(err, DirectoriesService, userId);
+			this.logger.logException(err);
 		});
 		archive.pipe(output);
 		archive.directory(dir, false);
@@ -197,8 +203,8 @@ export class DirectoriesService {
 			const indexed = new UploadedFile();
 			indexed.user = user;
 			indexed.absolute_path = relativePath;
-			indexed.mime = await FilesService.detectFile(file.path);
-			indexed.save();
+			indexed.mime = FilesService.detectFile(file.path);
+			this.uploadedFileRepo.save(indexed);
 		}
 	}
 

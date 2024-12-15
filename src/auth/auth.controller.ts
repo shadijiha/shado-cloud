@@ -9,22 +9,23 @@ import {
 	Res,
 	UseGuards,
 	UsePipes,
-	Headers
+	Headers,
+	Inject
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response, Request } from "express";
-import { use } from "passport";
-import { DirectoriesService } from "src/directories/directories.service";
-import { FilesService } from "src/files/files.service";
-import { errorLog } from "src/logging";
-import { User } from "src/models/user";
-import { AuthUser } from "src/util";
+import { DirectoriesService } from "./../directories/directories.service";
+import { FilesService } from "./../files/files.service";
+import { LoggerToDb } from "./../logging";
+import { User } from "./../models/user";
+import { AuthUser } from "./../util";
 import { AuthService } from "./auth.service";
 import { LoginRequest, LoginResponse, RegisterRequest } from "./authApiTypes";
 import { ValidationPipeline } from "./ValidationPipeline";
 import { IncomingHttpHeaders } from "http";
+import { isDev } from "./../app.module";
 
 @Controller("auth")
 @ApiTags("Authentication")
@@ -33,7 +34,8 @@ export class AuthController {
 		private jwtService: JwtService,
 		private authService: AuthService,
 		private directoryService: DirectoriesService,
-		private fileService: FilesService
+		private fileService: FilesService,
+		@Inject() private readonly logger: LoggerToDb,
 	) { }
 
 	@Post("login")
@@ -97,7 +99,7 @@ export class AuthController {
 		response
 			.clearCookie(process.env.COOKIE_NAME, {
 				httpOnly: true,
-				domain: headers.host, // your domain here!
+				domain: this.getDomain(headers), // your domain here!
 			})
 			.send();
 	}
@@ -113,7 +115,7 @@ export class AuthController {
 				profPic: await this.fileService.profilePictureInfo(userId),
 			};
 		} catch (e) {
-			errorLog(e, AuthController, userId);
+			this.logger.logException(e);
 			return null;
 		}
 	}
@@ -122,14 +124,14 @@ export class AuthController {
 		const userId = user.id;
 		const payload = { userId: userId };
 		const token = this.jwtService.sign(payload);
-
+		
 		response
 			.cookie(process.env.COOKIE_NAME, token, {
 				httpOnly: true,
-				domain: headers.host, // your domain here!
+				domain: this.getDomain(headers), // your domain here!
 				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-				secure: headers.origin.startsWith("https"),
-				sameSite: "none",
+				secure: isDev() ? false : headers.origin.startsWith("https"),
+				sameSite: isDev() ? "lax" : "none",
 			})
 			.send({
 				user: {
@@ -139,4 +141,13 @@ export class AuthController {
 				errors: [],
 			});
 	}
+
+	private getDomain(headers: IncomingHttpHeaders): string {
+		let domain = headers.host;
+		// Remove post number
+		if (domain.includes(":")) {
+			domain = domain.split(":")[0];
+		}
+		return domain;
+	} 
 }

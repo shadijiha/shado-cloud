@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, RequestMethod } from "@nestjs/common";
+import { Global, MiddlewareConsumer, Module, RequestMethod, Scope } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
@@ -10,11 +10,34 @@ import { RequestContextModule } from "nestjs-request-context";
 import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, INQUIRER } from "@nestjs/core";
 import { CORPMiddleware } from "./corp.middleware";
+import { LoggerToDb } from "./logging";
+import { Log } from "./models/log";
+import { DataSource } from "typeorm";
+import { CacheModule } from "@nestjs/cache-manager";
+import redisStore from 'cache-manager-redis-store';
+
+
+@Global()
+@Module({
+	providers: [
+		{
+			provide: LoggerToDb,
+			scope: Scope.TRANSIENT,
+			inject: [DataSource, INQUIRER],
+			useFactory: (dataSource: DataSource, parentClass: object) => {
+				return new LoggerToDb(parentClass?.constructor.name ?? "UnknownSource", dataSource.getRepository(Log));
+			},
+		}
+	],
+	exports: [LoggerToDb],
+})
+export class GlobalLoggingModule { }
 
 @Module({
 	imports: [
+		GlobalLoggingModule,
 		RequestContextModule,
 		AuthModule,
 		TypeOrmModule.forRoot({
@@ -27,7 +50,8 @@ import { CORPMiddleware } from "./corp.middleware";
 			entities: ["dist/models/**/*{.ts,.js}"],
 			synchronize: isDev(),
 			logging: false,
-			cache: {
+			// Only define cache if REDIS_HOST is defined in env
+			cache: process.env.REDIS_HOST ? {
 				type: "redis",
 				duration: 1000, // 1 second
 				options: {
@@ -36,7 +60,7 @@ import { CORPMiddleware } from "./corp.middleware";
 					password: process.env.REDIS_PASSWORD,
 				},
 				alwaysEnabled: true,
-			},
+			} : undefined,
 		}),
 		ThrottlerModule.forRoot({
 			ttl: 30,
@@ -47,6 +71,14 @@ import { CORPMiddleware } from "./corp.middleware";
 		TempUrlModule,
 		AdminModule,
 		UserProfileModule,
+		CacheModule.register({
+			store: redisStore as any,
+			host: process.env.REDIS_HOST,
+			port: Number(process.env.REDIS_PORT),
+			password: process.env.REDIS_PASSWORD,
+			isGlobal: true,
+			ttl: 1000 * 20, // 20 seconds
+		}),
 	],
 	controllers: [AppController],
 	providers: [
@@ -54,7 +86,7 @@ import { CORPMiddleware } from "./corp.middleware";
 		{
 			provide: APP_GUARD,
 			useClass: ThrottlerGuard,
-		},
+		}
 	],
 })
 export class AppModule {
@@ -65,6 +97,6 @@ export class AppModule {
 	}
 }
 
-function isDev() {
-	return process.env.ENV == "dev";
+export function isDev() {
+	return process.env.ENV == "dev" || process.env.ENV == "development";
 }

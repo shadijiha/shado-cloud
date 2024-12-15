@@ -1,11 +1,14 @@
 import { Module } from "@nestjs/common";
-import { AuthService } from "src/auth/auth.service";
-import { DirectoriesService } from "src/directories/directories.service";
 import { FilesConstoller } from "./files.controller";
 import { FilesService } from "./files.service";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { AuthModule } from "src/auth/auth.module";
+import { SearchStat } from "src/models/stats/searchStat";
 
 @Module({
+	imports: [TypeOrmModule.forFeature([SearchStat]), AuthModule],
 	controllers: [FilesConstoller],
-	providers: [FilesService, AuthService],
+	providers: [FilesService],
+	exports: [FilesService],
 })
 export class FilesModule {}

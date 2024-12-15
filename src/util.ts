@@ -20,6 +20,12 @@ export const AuthUser = createParamDecorator(
 	}
 );
 
+export function getUserIdFromRequest(request: Request): number | -1 {
+	const token = parseJwt(request.cookies[process.env.COOKIE_NAME]);
+	const payload = <CookiePayload>(token == null ? { userId: -1 } : token);
+	return payload.userId;
+}
+
 export const ApiFile =
 	(fileName: string = "file"): MethodDecorator =>
 	(target: any, propertyKey: string, descriptor: PropertyDescriptor) => {

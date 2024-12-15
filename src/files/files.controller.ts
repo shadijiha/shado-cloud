@@ -3,6 +3,7 @@ import {
 	Controller,
 	Delete,
 	Get,
+	Inject,
 	Logger,
 	Param,
 	Patch,
@@ -25,7 +26,7 @@ import {
 	ApiTags,
 } from "@nestjs/swagger";
 import { Request, Response } from "express";
-import { errorLog, errorWrapper } from "src/logging";
+import { LoggerToDb } from "./../logging";
 import { ApiFile, AuthUser } from "src/util";
 import { FilesService } from "./files.service";
 import {
@@ -37,11 +38,15 @@ import {
 	RenameFileRequest,
 	SaveFileRequest,
 } from "./filesApiTypes";
+import { CacheInterceptor } from "@nestjs/cache-manager";
 @Controller("file")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Files")
 export class FilesConstoller {
-	constructor(private fileService: FilesService) {}
+	constructor(
+		private fileService: FilesService,
+		@Inject() private readonly logger: LoggerToDb,
+	) { }
 
 	@Get(":path")
 	@ApiResponse({ description: "Returns a stream of the requested file" })
@@ -124,7 +129,7 @@ export class FilesConstoller {
 				file.pipe(res);
 			}
 		} catch (e) {
-			errorLog(e, FilesConstoller, userId);
+			this.logger.logException(e);
 			res.status(400).send({
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "path", message: (<Error>e).message }],
@@ -142,12 +147,10 @@ export class FilesConstoller {
 		@UploadedFile() file: Express.Multer.File,
 		@Body() body: { dest: string }
 	) {
-		return await errorWrapper(
+		return await this.logger.errorWrapper(
 			async () => {
 				await this.fileService.upload(userId, file, body.dest);
-			},
-			FilesConstoller,
-			userId
+			}
 		);
 	}
 
@@ -157,12 +160,10 @@ export class FilesConstoller {
 		@Body() body: NewFileRequest,
 		@AuthUser() userId: number
 	): Promise<OperationStatusResponse> {
-		return await errorWrapper(
+		return await this.logger.errorWrapper(
 			async () => {
 				await this.fileService.new(userId, body.name);
-			},
-			FilesConstoller,
-			userId
+			}
 		);
 	}
 
@@ -184,7 +185,7 @@ export class FilesConstoller {
 				errors: [],
 			};
 		} else {
-			errorLog(new Error(message), FilesConstoller, userId);
+			this.logger.logException(new Error(message));
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message }],
@@ -205,7 +206,7 @@ export class FilesConstoller {
 				errors: [],
 			};
 		} else {
-			errorLog(new Error(message), FilesConstoller, userId);
+			this.logger.logException(new Error(message));
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message }],
@@ -219,12 +220,10 @@ export class FilesConstoller {
 		@Body() body: RenameFileRequest,
 		@AuthUser() userId: number
 	) {
-		return await errorWrapper(
+		return this.logger.errorWrapper(
 			async () => {
 				await this.fileService.rename(userId, body.name, body.newName);
-			},
-			FilesConstoller,
-			userId
+			}
 		);
 	}
 
@@ -243,7 +242,7 @@ export class FilesConstoller {
 				errors: [],
 			};
 		} catch (e) {
-			errorLog(e, FilesConstoller, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				data: null,
@@ -264,7 +263,7 @@ export class FilesConstoller {
 				errors: [],
 			};
 		} catch (e) {
-			errorLog(e, FilesConstoller, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				data: null,
@@ -274,6 +273,7 @@ export class FilesConstoller {
 	}
 
 	@Get("thumbnail/:path")
+	@UseInterceptors(CacheInterceptor)
 	@ApiResponse({
 		description: "Returns a thumnail stream of the requested file",
 	})
@@ -298,7 +298,7 @@ export class FilesConstoller {
 			);
 			stream.pipe(res);
 		} catch (e) {
-			errorLog(e, FilesConstoller, userId);
+			this.logger.logException(e);
 			res.send({
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "path", message: (<Error>e).message }],

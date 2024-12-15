@@ -1,12 +1,18 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { User } from "src/models/user";
-import { getConnection } from "typeorm";
+import { User } from "./../models/user";
+import { Repository } from "typeorm";
 import argon2 from "argon2";
+import { InjectRepository } from "@nestjs/typeorm";
 
 @Injectable()
 export class AuthService {
+	constructor(
+		@InjectRepository(User) private readonly userRepo: Repository<User>
+	) {
+	}
+
 	public async getByEmail(email: string): Promise<User | null> {
-		return await User.findOne({ where: { email } });
+		return await this.userRepo.findOne({ where: { email } });
 	}
 
 	public async new(name: string, email: string, password: string) {
@@ -14,18 +20,17 @@ export class AuthService {
 		user.email = email;
 		user.password = await argon2.hash(password);
 		user.name = name;
-		return await user.save();
+		return await this.userRepo.save(user);
 	}
 
 	public async getById(userId: number) {
-		return User.findOne({ where: { id: userId } });
+		return this.userRepo.findOne({ where: { id: userId } });
 	}
 
 	public async passwordMatch(userId: number, password: string) {
-		const query = getConnection().createQueryBuilder();
+		const query = this.userRepo.createQueryBuilder("user");
 		const user = await query
 			.select("user.password")
-			.from(User, "user")
 			.where("id = :id", {
 				id: userId,
 			})
@@ -34,11 +39,10 @@ export class AuthService {
 	}
 
 	public async getWithPassword(userId: number) {
-		const query = getConnection().createQueryBuilder();
+		const query = this.userRepo.createQueryBuilder("user");
 		const user = await query
 			.select("user.password")
 			.addSelect("user")
-			.from(User, "user")
 			.where("id = :id", {
 				id: userId,
 			})

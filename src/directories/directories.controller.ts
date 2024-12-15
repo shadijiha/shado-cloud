@@ -3,24 +3,25 @@ import {
 	Controller,
 	Delete,
 	Get,
+	Inject,
 	Param,
 	Patch,
 	Post,
 	Query,
 	UseGuards,
+	ValidationPipe,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import {
 	OperationStatus,
 	OperationStatusResponse,
-} from "src/files/filesApiTypes";
-import { errorLog } from "src/logging";
-import { UploadedFile } from "src/models/uploadedFile";
-import { AuthUser } from "src/util";
+} from "./../files/filesApiTypes";
+import { LoggerToDb } from "./../logging";
+import { UploadedFile } from "./../models/uploadedFile";
+import { AuthUser } from "./../util";
 import { DirectoriesService } from "./directories.service";
 import {
-	DirectoryInfo,
 	DirListResponse,
 	NewDirRequest,
 	RenameDirRequest,
@@ -30,7 +31,10 @@ import {
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Directories")
 export class DirectoriesController {
-	constructor(private readonly directoriesService: DirectoriesService) {}
+	constructor(
+		private readonly directoriesService: DirectoriesService,
+		@Inject() private readonly logger: LoggerToDb
+	) {}
 
 	@Get("root")
 	public async root(@AuthUser() userId: number) {
@@ -39,7 +43,7 @@ export class DirectoriesController {
 				rootDir: await this.directoriesService.root(userId),
 			};
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return {
 				rootDir: "",
 			};
@@ -63,7 +67,7 @@ export class DirectoriesController {
 				errors: [],
 			};
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				data: null,
@@ -75,11 +79,14 @@ export class DirectoriesController {
 
 	@Get("listrecursive")
 	@ApiResponse({ type: [String] })
-	public async listrecursive(@AuthUser() userId: number) {
+	public async listrecursive(
+		@AuthUser() userId: number,
+		@Query("showHidden", new ValidationPipe({ transform: true })) showHidden: boolean,
+	) {
 		try {
-			return await this.directoriesService.listrecursive(userId);
+			return await this.directoriesService.listrecursive(userId, showHidden);
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return [];
 		}
 	}
@@ -97,7 +104,7 @@ export class DirectoriesController {
 				errors: [],
 			};
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "path", message: (<Error>e).message }],
@@ -114,7 +121,7 @@ export class DirectoriesController {
 				status: OperationStatus[OperationStatus.SUCCESS],
 			};
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],
@@ -134,7 +141,7 @@ export class DirectoriesController {
 				status: OperationStatus[OperationStatus.SUCCESS],
 			};
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],
@@ -152,7 +159,7 @@ export class DirectoriesController {
 		try {
 			return await this.directoriesService.search(userId, searchText);
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return [];
 		}
 	}
@@ -166,13 +173,13 @@ export class DirectoriesController {
 		try {
 			this.directoriesService
 				.zip(userId, body.name)
-				.catch((e) => errorLog(e, DirectoriesController, userId));
+				.catch((e) => this.logger.logException(e));
 			return {
 				status: OperationStatus[OperationStatus.ONGOING],
 				errors: [],
 			};
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],
@@ -186,14 +193,14 @@ export class DirectoriesController {
 		try {
 			this.directoriesService
 				.unzip(userId, body.name)
-				.catch((e) => errorLog(e, DirectoriesController, userId));
+				.catch((e) => this.logger.logException(e));
 
 			return {
 				status: OperationStatus[OperationStatus.ONGOING],
 				errors: [],
 			};
 		} catch (e) {
-			errorLog(e, DirectoriesController, userId);
+			this.logger.logException(e);
 			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "", message: (<Error>e).message }],

@@ -2,16 +2,17 @@ import {
 	Controller,
 	Delete,
 	Get,
-	Logger,
+	HttpException,
+	HttpStatus,
+	Inject,
 	Param,
 	Post,
 	UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { errorLog, infoLog } from "src/logging";
+import { LoggerToDb } from "src/logging";
 import { Log } from "src/models/log";
-import { AuthUser } from "src/util";
 import { AdminService } from "./admin.service";
 import { AdminGuard } from "./admin.strategy";
 
@@ -19,25 +20,26 @@ import { AdminGuard } from "./admin.strategy";
 @ApiTags("admin")
 @UseGuards(AuthGuard("jwt"), AdminGuard)
 export class AdminController {
-	constructor(private readonly adminService: AdminService) {}
+	constructor(
+		private readonly adminService: AdminService,
+		@Inject() private readonly logger: LoggerToDb
+	) { }
 
 	@Get("logs")
 	@ApiResponse({ type: [Log] })
-	async logs(@AuthUser() userId: number) {
+	async logs() {
 		try {
 			return await this.adminService.all();
 		} catch (e) {
-			errorLog(e, AdminController, userId);
+			this.logger.logException(e);
 			return [];
 		}
 	}
 
 	@Get("logInfo")
-	async logInfo(@AuthUser() userId: number) {
-		await infoLog(
-			new Error("This is a debug log to test logging"),
-			AdminController,
-			userId
+	async logInfo() {
+		this.logger.log(
+			"This is a debug log to test logging"
 		);
 	}
 
@@ -46,33 +48,30 @@ export class AdminController {
 		name: "id",
 		description: "An ID or array of ids of the logs you want to delete",
 	})
-	async delete(@AuthUser() userId: number, @Param("id") id: string) {
+	async delete(@Param("id") id: string) {
 		let ids: number[] = [];
 
 		// See if prameter is a number
 		const data = decodeURIComponent(id);
-
 		if (data.includes("[")) {
-			let buffer = data.replace("[", "").replace("]", "").split(",");
-
-			try {
-				buffer.forEach((e) => {
-					ids.push(parseInt(e));
-				});
-			} catch (e) {
-				errorLog(e, AdminController, userId);
-			}
+			let buffer = data.replace(/\[/g, "").replace(/\]/g, "").split(",");
+			buffer.forEach((e) => {
+				const int = parseInt(e);
+				if (!isNaN(int)) ids.push(int);
+			});
 		} else {
-			try {
-				ids = [parseInt(data)];
-			} catch (e) {
-				errorLog(e, AdminController, userId);
+			const int = parseInt(data);
+			if (isNaN(int)) {
+				const message = "Invalid ID: " + data;
+				this.logger.error(message);
+				throw new HttpException(message, HttpStatus.BAD_REQUEST);
 			}
+			ids = [parseInt(data)];
 		}
 
 		this.adminService
 			.deleteByIds(ids)
-			.catch((e) => errorLog(e, AdminController, userId));
+			.catch((e) => this.logger.logException(e));
 	}
 
 	@Post("redeploy")

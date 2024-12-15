@@ -7,12 +7,15 @@ import { TempUrl } from "src/models/tempUrl";
 import fs from "fs";
 import { SoftException } from "src/util";
 import { IncomingHttpHeaders } from "http";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 
 @Injectable()
 export class TempUrlService {
 	constructor(
 		private readonly fileService: FilesService,
-		private readonly userService: AuthService
+		private readonly userService: AuthService,
+		@InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
 	) { }
 
 	public async generate(
@@ -32,14 +35,14 @@ export class TempUrlService {
 		tempUrl.expires_at = expires_at;
 		tempUrl.filepath = filepath;
 		tempUrl.is_readonly = is_readonly;
-		tempUrl.save();
+		this.tempUrlRepo.save(tempUrl);
 
 		return requestHeaders.origin + "/temp/" + tempUrl.url + "/get";
 	}
 
 	public async asStream(tempUrl: string) {
 		// Get temp url
-		const temp = await TempUrl.findOne({
+		const temp = await this.tempUrlRepo.findOne({
 			where: { url: tempUrl },
 			relations: ["user"],
 		});
@@ -54,7 +57,7 @@ export class TempUrlService {
 		}
 
 		temp.requests += 1;
-		temp.save();
+		this.tempUrlRepo.save(temp);
 
 		const dir = await this.fileService.absolutePath(
 			temp.user.id,
@@ -75,7 +78,7 @@ export class TempUrlService {
 
 	public async save(tempUrl: string, content: string, append: boolean = false) {
 		// Get temp url
-		const temp = await TempUrl.findOne({
+		const temp = await this.tempUrlRepo.findOne({
 			where: { url: tempUrl },
 			relations: ["user"],
 		});
@@ -90,7 +93,7 @@ export class TempUrlService {
 		}
 
 		temp.requests += 1;
-		temp.save();
+		this.tempUrlRepo.save(temp);
 		const dir = await this.fileService.absolutePath(
 			temp.user.id,
 			temp.filepath
@@ -109,8 +112,7 @@ export class TempUrlService {
 	}
 
 	public async all(userId: number) {
-		const user = await this.userService.getById(userId);
-		return (await TempUrl.find({ where: { user } })).map((e) => {
+		return (await this.tempUrlRepo.find({ where: { user: {id: userId} } })).map((e) => {
 			return {
 				...e,
 				is_valid: e.isValid(),
@@ -120,7 +122,7 @@ export class TempUrlService {
 
 	public async delete(userId: number, key: any) {
 		const user = await this.userService.getById(userId);
-		const tempUrl = await TempUrl.findOne({
+		const tempUrl = await this.tempUrlRepo.findOne({
 			where: { url: key },
 			relations: ["user"],
 		});
@@ -135,7 +137,7 @@ export class TempUrlService {
 		}
 
 		// Otherwise delete
-		TempUrl.delete(tempUrl.id);
+		this.tempUrlRepo.delete(tempUrl.id);
 	}
 
 	private verifyUrlConditions(tempUrl: TempUrl, readAndWrite: boolean = false) {
