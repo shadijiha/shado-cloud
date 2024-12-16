@@ -16,7 +16,7 @@ import { LoggerToDb } from "./logging";
 import { Log } from "./models/log";
 import { DataSource } from "typeorm";
 import { CacheModule } from "@nestjs/cache-manager";
-import redisStore from 'cache-manager-redis-store';
+import redisStore from 'cache-manager-ioredis';
 
 
 @Global()
@@ -72,7 +72,7 @@ export class GlobalLoggingModule { }
 		AdminModule,
 		UserProfileModule,
 		CacheModule.register({
-			store: redisStore as any,
+			store: redisStore,
 			host: process.env.REDIS_HOST,
 			port: Number(process.env.REDIS_PORT),
 			password: process.env.REDIS_PASSWORD,

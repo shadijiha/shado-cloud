@@ -19,11 +19,11 @@ export class Log extends BaseEntity {
 	@ApiProperty()
 	type: "error" | "warn" | "info";
 
-	@Column()
+	@Column({ type: "varchar" })
 	@ApiProperty()
 	message: string;
 
-	@Column({ nullable: true })
+	@Column({ nullable: true, type: "varchar", length: 512 })
 	@ApiProperty()
 	stack: string;
 

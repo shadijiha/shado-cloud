@@ -11,6 +11,7 @@ import {
 	Query,
 	Req,
 	Res,
+	StreamableFile,
 	UploadedFile,
 	UseGuards,
 	UseInterceptors,
@@ -38,7 +39,10 @@ import {
 	RenameFileRequest,
 	SaveFileRequest,
 } from "./filesApiTypes";
-import { CacheInterceptor } from "@nestjs/cache-manager";
+import fs from 'fs';
+import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
+
+
 @Controller("file")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Files")
@@ -273,7 +277,7 @@ export class FilesConstoller {
 	}
 
 	@Get("thumbnail/:path")
-	@UseInterceptors(CacheInterceptor)
+	@UseInterceptors(ThumbnailCacheInterceptor)
 	@ApiResponse({
 		description: "Returns a thumnail stream of the requested file",
 	})
@@ -285,7 +289,6 @@ export class FilesConstoller {
 	public async thumbnail(
 		@Param("path") path: string,
 		@AuthUser() userId: number,
-		@Res() res: Response,
 		@Query("width") width: number | undefined,
 		@Query("height") height: number | undefined
 	) {
@@ -296,13 +299,14 @@ export class FilesConstoller {
 				width,
 				height
 			);
-			stream.pipe(res);
+
+			return new StreamableFile(stream);
 		} catch (e) {
 			this.logger.logException(e);
-			res.send({
+			return {
 				status: OperationStatus[OperationStatus.FAILED],
 				errors: [{ field: "path", message: (<Error>e).message }],
-			});
+			};
 		}
 	}
 }

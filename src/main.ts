@@ -1,8 +1,8 @@
 import "reflect-metadata";
-require("dotenv-safe").config({ allowEmptyValues: true });
+require("dotenv-safe").config({ allowEmptyValues: true, path: ".env.local" });
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { AppModule } from "./app.module";
+import { AppModule, isDev } from "./app.module";
 import cookieParser from "cookie-parser";
 import { json, urlencoded } from "express";
 import { GlobalExceptionFilter } from "./global.filter";
@@ -20,6 +20,7 @@ async function bootstrap() {
 			],
 			credentials: true,
 		},
+		logger: isDev() ? ['log', 'debug', 'error', 'verbose', 'warn'] : ['error', 'warn', 'log'],
 	});
 
 	const config = new DocumentBuilder()

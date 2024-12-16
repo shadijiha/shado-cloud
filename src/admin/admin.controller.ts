@@ -15,6 +15,7 @@ import { LoggerToDb } from "src/logging";
 import { Log } from "src/models/log";
 import { AdminService } from "./admin.service";
 import { AdminGuard } from "./admin.strategy";
+import { AppMetricsService } from "./app-metrics.service";
 
 @Controller("admin")
 @ApiTags("admin")
@@ -22,6 +23,7 @@ import { AdminGuard } from "./admin.strategy";
 export class AdminController {
 	constructor(
 		private readonly adminService: AdminService,
+		private readonly metrics: AppMetricsService,
 		@Inject() private readonly logger: LoggerToDb
 	) { }
 
@@ -77,5 +79,19 @@ export class AdminController {
 	@Post("redeploy")
 	async redeploy() {
 		return await this.adminService.redeploy();
+	}
+
+	@Get("redis/info/:section")
+	@ApiParam({
+		name: "section",
+		description: "Redis info section name",
+	})
+	public redisInfo(@Param("section") section: string | undefined) {
+		return this.metrics.redisInfo(section);
+	}
+
+	@Get("redis/dump")
+	public redisDumb() {
+		return this.metrics.dumpRedisCache();
 	}
 }

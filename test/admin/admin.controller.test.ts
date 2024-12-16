@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { AdminController } from 'src/admin/admin.controller';
 import { AdminService } from 'src/admin/admin.service';
 import { AdminGuard } from 'src/admin/admin.strategy';
+import { AppMetricsService } from 'src/admin/app-metrics.service';
 import { LoggerToDb } from 'src/logging';
 import { Log } from 'src/models/log';
 import { User } from 'src/models/user';
@@ -22,7 +23,7 @@ describe('AdminController', () => {
                     provide: AdminService,
                     useValue: {
                         all: jest.fn(),
-                        deleteByIds: jest.fn(async () => {}),
+                        deleteByIds: jest.fn(async () => { }),
                         redeploy: jest.fn(),
                     },
                 },
@@ -45,6 +46,12 @@ describe('AdminController', () => {
                     useValue: {
                         findOne: jest.fn(),
                     },
+                },
+                {
+                    provide: AppMetricsService,
+                    useValue: {
+
+                    }
                 }
             ],
         }).compile();
@@ -61,7 +68,7 @@ describe('AdminController', () => {
     describe('logs', () => {
         it('should return a list of logs', async () => {
             const mockLogs: Log[] = [
-                { id: 1, message: 'Test log'} as Log
+                { id: 1, message: 'Test log' } as Log
             ];
             jest.spyOn(adminService, 'all').mockResolvedValue(mockLogs);
 
@@ -114,7 +121,7 @@ describe('AdminController', () => {
 
         it('should ignore invalid integers and flatten array in input array', async () => {
             const id = '[1, 2, ni, 4, [5, 6]]';
-            
+
             await adminController.delete(id);
             expect(adminService.deleteByIds).toHaveBeenCalledWith([1, 2, 4, 5, 6]);
         });
@@ -122,7 +129,7 @@ describe('AdminController', () => {
         it('should log an error and throw if invalid ids are provided', async () => {
             const id = 'invalid';
             jest.spyOn(logger, 'logException').mockImplementation();
-            
+
             await expect(adminController.delete(id)).rejects.toThrow(HttpException);
             expect(logger.error).toHaveBeenCalled();
             expect(adminService.deleteByIds).not.toHaveBeenCalled();

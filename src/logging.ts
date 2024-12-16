@@ -73,7 +73,7 @@ export class LoggerToDb extends ConsoleLogger {
 		log.type = logType;
 		log.userAgent = "user-agent" in req.headers ? req.headers["user-agent"] : "unknown";
 		log.ipAddress = this.getIp() || "localhost";
-		log.stack = stack;
+		log.stack = stack?.substring(0, 512);
 
 		// Get user
 		const userId = getUserIdFromRequest(req);
@@ -87,7 +87,7 @@ export class LoggerToDb extends ConsoleLogger {
 	private getIp(): string {
 		try {
 			const req: Request = RequestContext.currentContext.req;
-	
+
 			if (
 				req.ip.includes("127.0.0.1") ||
 				req.ip.includes("localhost") ||

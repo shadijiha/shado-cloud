@@ -124,7 +124,7 @@ export class AuthController {
 		const userId = user.id;
 		const payload = { userId: userId };
 		const token = this.jwtService.sign(payload);
-		
+
 		response
 			.cookie(process.env.COOKIE_NAME, token, {
 				httpOnly: true,
@@ -149,5 +149,5 @@ export class AuthController {
 			domain = domain.split(":")[0];
 		}
 		return domain;
-	} 
+	}
 }

@@ -15,6 +15,9 @@ import mime from "mime-types";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import Redis from "ioredis";
+import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -29,7 +32,8 @@ export class FilesService {
 		@InjectRepository(SearchStat) searchStateRepo: Repository<SearchStat>,
 		@InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
 		@InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
-		@Inject() private readonly logger: LoggerToDb
+		@Inject() private readonly logger: LoggerToDb,
+		@Inject(CACHE_MANAGER) private readonly cache: Cache & { store: { getClient: () => Redis } },
 	) {
 		this.dirService = new DirectoriesService(userService, this, uploadedFileRepo, searchStateRepo, logger);
 
@@ -594,5 +598,22 @@ export class FilesService {
 				fs.unlinkSync(path.join(thumbnailFolder, fileEntry));
 			}
 		});
+
+		// Invalidate cache
+		const cacheKey = ThumbnailCacheInterceptor.getCacheKey(userId, uploadedFile.absolute_path, 0, 0, false);
+		const pattern = `${cacheKey}*`;
+		const redis = this.cache.store.getClient();
+
+		let cursor = '0';
+		do {
+			// SCAN command to get keys matching the pattern
+			const [newCursor, keys] = await redis.scan(cursor, 'MATCH', pattern);
+			cursor = newCursor;
+
+			if (keys.length > 0) {
+				await redis.del(...keys); // Delete matching keys
+				this.logger.debug(`Deleted keys: ${keys.join(', ')}`);
+			}
+		} while (cursor !== '0');
 	}
 }
