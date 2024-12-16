@@ -27,7 +27,7 @@ export class UserProfileService {
 		@InjectRepository(SearchStat) private readonly searchStatRepo: Repository<SearchStat>,
 		@InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
 		@Inject() private readonly logger: LoggerToDb,
-	) {}
+	) { }
 
 	public async changePassword(
 		userId: number,
@@ -67,7 +67,7 @@ export class UserProfileService {
 			SELECT SUM(T.count) AS Total, U.*
 			FROM ${fileAccesMeta.tableName} AS T
 			LEFT JOIN ${uploadedFileMeta.tableName} AS U ON T.${uploadedFileMeta.name}Id = U.id
-			WHERE T.${userTbMeta.name}Id = $1
+			WHERE T.${userTbMeta.name}Id = ?
 					${withDeleted ? "" : " AND T.deleted_at is null"}
 			GROUP BY U.id
 			ORDER BY Total DESC
@@ -76,7 +76,7 @@ export class UserProfileService {
 
 		const most_search_raw = await this.searchStatRepo.createQueryBuilder("search")
 			.addSelect("count(search.text) AS Total")
-			.where(`search.${userTbMeta.name}Id = :id`, {id: userId})
+			.where(`search.${userTbMeta.name}Id = :id`, { id: userId })
 			.groupBy("search.text")
 			.orderBy("Total", "DESC")
 			.limit(5)
@@ -101,7 +101,7 @@ export class UserProfileService {
 		const user = await this.userService.getById(userId);
 
 		// Get current indexed files
-		const currentIndexedFiles = await this.uploadedFileRepo.find({ where: { user: {id: userId} } });
+		const currentIndexedFiles = await this.uploadedFileRepo.find({ where: { user: { id: userId } } });
 
 		// Re-index all files
 		const files = await this.directoryService.listrecursive(user.id);
