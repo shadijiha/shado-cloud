@@ -9,7 +9,7 @@ import helmet from 'helmet'
 import { LoggerToDb } from './logging'
 require('dotenv-safe').config({ allowEmptyValues: true, path: '.env.local' })
 
-async function bootstrap () {
+async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     cors: {
       origin: [

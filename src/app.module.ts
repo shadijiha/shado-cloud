@@ -38,36 +38,40 @@ import { NodeFileSystemService } from './file-system/file-system.service'
   ],
   exports: [LoggerToDb, AbstractFileSystem]
 })
-export class GlobalUtilityModule {}
+export class GlobalUtilityModule { }
 
 @Module({
   imports: [
     GlobalUtilityModule,
     RequestContextModule,
     AuthModule,
-    TypeOrmModule.forRoot({
-      type: process.env.DB_TYPE as any,
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT),
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      entities: ['dist/models/**/*{.ts,.js}'],
-      synchronize: isDev(),
-      logging: false,
-      // Only define cache if REDIS_HOST is defined in env
-      cache: process.env.REDIS_HOST
-        ? {
-            type: 'redis',
-            duration: 1000, // 1 second
-            options: {
-              host: process.env.REDIS_HOST,
-              port: Number(process.env.REDIS_PORT),
-              password: process.env.REDIS_PASSWORD
-            },
-            alwaysEnabled: true
-          }
-        : undefined
+    TypeOrmModule.forRootAsync({
+      useFactory: () => {
+        return {
+          type: process.env.DB_TYPE as any,
+          host: process.env.DB_HOST,
+          port: Number(process.env.DB_PORT),
+          username: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_NAME,
+          entities: ['dist/models/**/*{.ts,.js}'],
+          synchronize: isDev(),
+          logging: false,
+          // Only define cache if REDIS_HOST is defined in env
+          cache: process.env.REDIS_HOST
+            ? {
+              type: 'redis',
+              duration: 1000, // 1 second
+              options: {
+                host: process.env.REDIS_HOST,
+                port: Number(process.env.REDIS_PORT),
+                password: process.env.REDIS_PASSWORD
+              },
+              alwaysEnabled: true
+            }
+            : undefined
+        };
+      },
     }),
     ThrottlerModule.forRoot({
       ttl: 30,
@@ -78,13 +82,18 @@ export class GlobalUtilityModule {}
     TempUrlModule,
     AdminModule,
     UserProfileModule,
-    CacheModule.register({
-      store: redisStore,
-      host: process.env.REDIS_HOST,
-      port: Number(process.env.REDIS_PORT),
-      password: process.env.REDIS_PASSWORD,
-      isGlobal: true,
-      ttl: 1000 * 20 // 20 seconds
+    CacheModule.registerAsync({
+      useFactory: () => {
+        return {
+          store: redisStore,
+          host: process.env.REDIS_HOST,
+          port: Number(process.env.REDIS_PORT),
+          password: process.env.REDIS_PASSWORD,
+          isGlobal: true,
+          ttl: 1000 * 20 // 20 seconds
+        };
+      },
+      isGlobal: true
     })
   ],
   controllers: [AppController],
@@ -97,11 +106,11 @@ export class GlobalUtilityModule {}
   ]
 })
 export class AppModule {
-  configure (consumer: MiddlewareConsumer) {
+  configure(consumer: MiddlewareConsumer) {
     consumer.apply(CORPMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL })
   }
 }
 
-export function isDev () {
+export function isDev() {
   return process.env.ENV == 'dev' || process.env.ENV == 'development'
 }
