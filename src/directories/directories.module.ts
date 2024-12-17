@@ -5,9 +5,9 @@ import { FilesModule } from "src/files/files.module";
 import { AuthModule } from "src/auth/auth.module";
 
 @Module({
-	imports: [FilesModule, AuthModule],
-	controllers: [DirectoriesController],
-	providers: [DirectoriesService],
-	exports: [DirectoriesService],
+    imports: [FilesModule, AuthModule],
+    controllers: [DirectoriesController],
+    providers: [DirectoriesService],
+    exports: [DirectoriesService],
 })
 export class DirectoriesModule {}

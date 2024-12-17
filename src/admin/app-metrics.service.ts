@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import Redis from 'ioredis';
-
+import Redis from "ioredis";
 
 @Injectable()
 export class AppMetricsService {
@@ -9,8 +8,7 @@ export class AppMetricsService {
     // Max length of string values to dump
     private readonly maxLength = 200; // You can change this to whatever suits your needs
 
-    constructor(
-    ) {
+    constructor() {
         this.redis = new Redis({
             host: process.env.REDIS_HOST,
             port: Number(process.env.REDIS_PORT),
@@ -55,19 +53,18 @@ export class AppMetricsService {
             }
         }
         return keyValuePairs; // You can log it, return it, or store it as needed.
-
     }
 
     // Helper method to fetch all keys using SCAN to avoid blocking the Redis server
     private async getAllKeys(): Promise<string[]> {
-        let cursor = '0';
+        let cursor = "0";
         let allKeys: string[] = [];
 
         do {
             const result = await this.redis.scan(cursor);
             cursor = result[0];
             allKeys = allKeys.concat(result[1]);
-        } while (cursor !== '0'); // Continue until all keys are retrieved
+        } while (cursor !== "0"); // Continue until all keys are retrieved
 
         return allKeys;
     }
@@ -75,7 +72,7 @@ export class AppMetricsService {
     // Helper method to trim long string values
     private trimString(value: string): string {
         if (value.length > this.maxLength) {
-            return value.slice(0, this.maxLength) + '...'; // Truncate and add ellipsis
+            return value.slice(0, this.maxLength) + "..."; // Truncate and add ellipsis
         }
         return value; // Return the string as-is if it's shorter than maxLength
     }

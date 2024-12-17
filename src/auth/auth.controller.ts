@@ -1,16 +1,16 @@
 import {
-	Body,
-	Controller,
-	Get,
-	Logger,
-	Post,
-	Put,
-	Req,
-	Res,
-	UseGuards,
-	UsePipes,
-	Headers,
-	Inject
+    Body,
+    Controller,
+    Get,
+    Logger,
+    Post,
+    Put,
+    Req,
+    Res,
+    UseGuards,
+    UsePipes,
+    Headers,
+    Inject,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
@@ -30,124 +30,121 @@ import { isDev } from "./../app.module";
 @Controller("auth")
 @ApiTags("Authentication")
 export class AuthController {
-	constructor(
-		private jwtService: JwtService,
-		private authService: AuthService,
-		private directoryService: DirectoriesService,
-		private fileService: FilesService,
-		@Inject() private readonly logger: LoggerToDb,
-	) { }
+    constructor(
+        private jwtService: JwtService,
+        private authService: AuthService,
+        private directoryService: DirectoriesService,
+        private fileService: FilesService,
+        @Inject() private readonly logger: LoggerToDb,
+    ) {}
 
-	@Post("login")
-	@UsePipes(new ValidationPipeline())
-	@ApiResponse({ type: LoginResponse })
-	async login(@Headers() headers: IncomingHttpHeaders, @Body() body: LoginRequest, @Res() response: Response) {
-		// Check if user exists
-		const user = await this.authService.getByEmail(body.email);
-		if (user == null) {
-			response.send({
-				user: null,
-				errors: [{ field: "email", message: "Invalid email" }],
-			});
-			return;
-		}
+    @Post("login")
+    @UsePipes(new ValidationPipeline())
+    @ApiResponse({ type: LoginResponse })
+    async login(@Headers() headers: IncomingHttpHeaders, @Body() body: LoginRequest, @Res() response: Response) {
+        // Check if user exists
+        const user = await this.authService.getByEmail(body.email);
+        if (user == null) {
+            response.send({
+                user: null,
+                errors: [{ field: "email", message: "Invalid email" }],
+            });
+            return;
+        }
 
-		// Check if password maches
-		const passwordResult = await this.authService.passwordMatch(
-			user.id,
-			body.password
-		);
+        // Check if password maches
+        const passwordResult = await this.authService.passwordMatch(user.id, body.password);
 
-		if (!passwordResult) {
-			response.send({
-				user: null,
-				errors: [{ field: "password", message: "Invalid credentials" }],
-			});
-			return;
-		}
+        if (!passwordResult) {
+            response.send({
+                user: null,
+                errors: [{ field: "password", message: "Invalid credentials" }],
+            });
+            return;
+        }
 
-		// Otherwise OK
-		this.createAuthCookie(headers, user, response);
-	}
+        // Otherwise OK
+        this.createAuthCookie(headers, user, response);
+    }
 
-	@Post("register")
-	@UsePipes(new ValidationPipeline())
-	@ApiResponse({ type: LoginResponse })
-	async register(@Headers() headers: IncomingHttpHeaders, @Body() body: RegisterRequest, @Res() response: Response) {
-		// Check if user exists
-		let user = await this.authService.getByEmail(body.email);
-		if (user) {
-			response.send({
-				user: null,
-				errors: [{ field: "email", message: "email is taken" }],
-			});
-			return;
-		}
+    @Post("register")
+    @UsePipes(new ValidationPipeline())
+    @ApiResponse({ type: LoginResponse })
+    async register(@Headers() headers: IncomingHttpHeaders, @Body() body: RegisterRequest, @Res() response: Response) {
+        // Check if user exists
+        let user = await this.authService.getByEmail(body.email);
+        if (user) {
+            response.send({
+                user: null,
+                errors: [{ field: "email", message: "email is taken" }],
+            });
+            return;
+        }
 
-		// Create user
-		user = await this.authService.new(body.name, body.email, body.password);
+        // Create user
+        user = await this.authService.new(body.name, body.email, body.password);
 
-		// Create his directory
-		await this.directoryService.createNewUserDir(user);
+        // Create his directory
+        await this.directoryService.createNewUserDir(user);
 
-		// Otherwise OK
-		this.createAuthCookie(headers, user, response);
-	}
+        // Otherwise OK
+        this.createAuthCookie(headers, user, response);
+    }
 
-	@Put("logout")
-	async logout(@Headers() headers: IncomingHttpHeaders, @Res() response: Response) {
-		response
-			.clearCookie(process.env.COOKIE_NAME, {
-				httpOnly: true,
-				domain: this.getDomain(headers), // your domain here!
-			})
-			.send();
-	}
+    @Put("logout")
+    async logout(@Headers() headers: IncomingHttpHeaders, @Res() response: Response) {
+        response
+            .clearCookie(process.env.COOKIE_NAME, {
+                httpOnly: true,
+                domain: this.getDomain(headers), // your domain here!
+            })
+            .send();
+    }
 
-	@Get("me")
-	@UseGuards(AuthGuard("jwt"))
-	@ApiResponse({ type: User })
-	async me(@AuthUser() userId: number, @Req() request: Request) {
-		try {
-			const user = await this.authService.getById(userId);
-			return {
-				...user,
-				profPic: await this.fileService.profilePictureInfo(userId),
-			};
-		} catch (e) {
-			this.logger.logException(e);
-			return null;
-		}
-	}
+    @Get("me")
+    @UseGuards(AuthGuard("jwt"))
+    @ApiResponse({ type: User })
+    async me(@AuthUser() userId: number, @Req() request: Request) {
+        try {
+            const user = await this.authService.getById(userId);
+            return {
+                ...user,
+                profPic: await this.fileService.profilePictureInfo(userId),
+            };
+        } catch (e) {
+            this.logger.logException(e);
+            return null;
+        }
+    }
 
-	private async createAuthCookie(headers: IncomingHttpHeaders, user: User, response: Response) {
-		const userId = user.id;
-		const payload = { userId: userId };
-		const token = this.jwtService.sign(payload);
+    private async createAuthCookie(headers: IncomingHttpHeaders, user: User, response: Response) {
+        const userId = user.id;
+        const payload = { userId: userId };
+        const token = this.jwtService.sign(payload);
 
-		response
-			.cookie(process.env.COOKIE_NAME, token, {
-				httpOnly: true,
-				domain: this.getDomain(headers), // your domain here!
-				expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
-				secure: isDev() ? false : headers.origin.startsWith("https"),
-				sameSite: isDev() ? "lax" : "none",
-			})
-			.send({
-				user: {
-					...user,
-					profPic: await this.fileService.profilePictureInfo(userId),
-				},
-				errors: [],
-			});
-	}
+        response
+            .cookie(process.env.COOKIE_NAME, token, {
+                httpOnly: true,
+                domain: this.getDomain(headers), // your domain here!
+                expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
+                secure: isDev() ? false : headers.origin.startsWith("https"),
+                sameSite: isDev() ? "lax" : "none",
+            })
+            .send({
+                user: {
+                    ...user,
+                    profPic: await this.fileService.profilePictureInfo(userId),
+                },
+                errors: [],
+            });
+    }
 
-	private getDomain(headers: IncomingHttpHeaders): string {
-		let domain = headers.host;
-		// Remove post number
-		if (domain.includes(":")) {
-			domain = domain.split(":")[0];
-		}
-		return domain;
-	}
+    private getDomain(headers: IncomingHttpHeaders): string {
+        let domain = headers.host;
+        // Remove post number
+        if (domain.includes(":")) {
+            domain = domain.split(":")[0];
+        }
+        return domain;
+    }
 }

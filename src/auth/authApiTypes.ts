@@ -6,48 +6,48 @@ import { IsEmail, IsNotEmpty } from "class-validator";
 import { User } from "src/models/user";
 
 class FieldError {
-	@ApiProperty()
-	field: string;
+    @ApiProperty()
+    field: string;
 
-	@ApiProperty()
-	message: string;
+    @ApiProperty()
+    message: string;
 }
 
 export class ErrorProne {
-	@ApiProperty({ type: [FieldError] })
-	errors: FieldError[] = [];
+    @ApiProperty({ type: [FieldError] })
+    errors: FieldError[] = [];
 }
 
 // Login
 export class LoginRequest {
-	@ApiProperty()
-	@IsEmail()
-	email: string;
+    @ApiProperty()
+    @IsEmail()
+    email: string;
 
-	@ApiProperty()
-	@IsNotEmpty()
-	password: string;
+    @ApiProperty()
+    @IsNotEmpty()
+    password: string;
 }
 
 export class LoginResponse extends ErrorProne {
-	@ApiProperty()
-	user: User;
+    @ApiProperty()
+    user: User;
 }
 
 // Register
 export class RegisterRequest {
-	@ApiProperty()
-	@IsNotEmpty()
-	name: string;
-	@ApiProperty()
-	@IsEmail()
-	email: string;
-	@ApiProperty()
-	@IsNotEmpty()
-	password: string;
+    @ApiProperty()
+    @IsNotEmpty()
+    name: string;
+    @ApiProperty()
+    @IsEmail()
+    email: string;
+    @ApiProperty()
+    @IsNotEmpty()
+    password: string;
 }
 
 // Cookie
 export type CookiePayload = {
-	userId: number;
+    userId: number;
 };

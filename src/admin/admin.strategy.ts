@@ -9,25 +9,20 @@ import { Repository } from "typeorm";
 
 @Injectable()
 export class AdminGuard implements CanActivate {
+    public constructor(@InjectRepository(User) private readonly userRepo: Repository<User>) {}
 
-	public constructor(
-		@InjectRepository(User) private readonly userRepo: Repository<User>
-	) {}
+    async canActivate(ctx: ExecutionContext): Promise<boolean> {
+        const request = <Request>ctx.switchToHttp().getRequest();
+        const payload = <CookiePayload>parseJwt(request.cookies[process.env.COOKIE_NAME]);
 
-	async canActivate(ctx: ExecutionContext): Promise<boolean> {
-		const request = <Request>ctx.switchToHttp().getRequest();
-		const payload = <CookiePayload>(
-			parseJwt(request.cookies[process.env.COOKIE_NAME])
-		);
+        if (!payload || !payload.userId) {
+            return false;
+        }
 
-		if (!payload || !payload.userId) {
-			return false;
-		}
-
-		const user = await this.userRepo.findOne({ where: { id: payload.userId } });
-		if (user) {
-			return user.is_admin;
-		}
-		return false;
-	}
+        const user = await this.userRepo.findOne({ where: { id: payload.userId } });
+        if (user) {
+            return user.is_admin;
+        }
+        return false;
+    }
 }

@@ -7,8 +7,8 @@ import { AuthModule } from "src/auth/auth.module";
 import { FilesModule } from "src/files/files.module";
 
 @Module({
-	imports: [AuthModule, FilesModule],
-	controllers: [TempUrlConstoller],
-	providers: [TempUrlService],
+    imports: [AuthModule, FilesModule],
+    controllers: [TempUrlConstoller],
+    providers: [TempUrlService],
 })
 export class TempUrlModule {}

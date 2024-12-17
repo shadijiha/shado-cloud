@@ -7,9 +7,9 @@ import { SearchStat } from "src/models/stats/searchStat";
 import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 
 @Module({
-	imports: [TypeOrmModule.forFeature([SearchStat]), AuthModule],
-	controllers: [FilesConstoller],
-	providers: [FilesService, ThumbnailCacheInterceptor],
-	exports: [FilesService],
+    imports: [TypeOrmModule.forFeature([SearchStat]), AuthModule],
+    controllers: [FilesConstoller],
+    providers: [FilesService, ThumbnailCacheInterceptor],
+    exports: [FilesService],
 })
-export class FilesModule { }
+export class FilesModule {}

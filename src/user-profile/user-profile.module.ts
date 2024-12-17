@@ -10,11 +10,8 @@ import { FilesModule } from "src/files/files.module";
 import { DirectoriesModule } from "src/directories/directories.module";
 
 @Module({
-	imports: [TypeOrmModule.forFeature([EncryptedPassword]), AuthModule, FilesModule, DirectoriesModule],
-	controllers: [UserProfileController, PasswordsVaultController],
-	providers: [
-		UserProfileService,
-		PasswordsVaultService,
-	],
+    imports: [TypeOrmModule.forFeature([EncryptedPassword]), AuthModule, FilesModule, DirectoriesModule],
+    controllers: [UserProfileController, PasswordsVaultController],
+    providers: [UserProfileService, PasswordsVaultService],
 })
 export class UserProfileModule {}

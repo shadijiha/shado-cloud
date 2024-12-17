@@ -14,17 +14,17 @@ import { FileAccessStat } from "./../models/stats/fileAccessStat";
 import { TempUrl } from "./../models/tempUrl";
 
 @Module({
-	controllers: [AuthController],
-	imports: [
-		JwtModule.register({
-			secret: process.env.JWT_SECRET,
-			signOptions: {
-				expiresIn: "24h",
-			},
-		}),
-		TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl]),
-	],
-	providers: [AuthStrategy, AuthService, FilesService, DirectoriesService],
-	exports: [AuthService, TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl])],
+    controllers: [AuthController],
+    imports: [
+        JwtModule.register({
+            secret: process.env.JWT_SECRET,
+            signOptions: {
+                expiresIn: "24h",
+            },
+        }),
+        TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl]),
+    ],
+    providers: [AuthStrategy, AuthService, FilesService, DirectoriesService],
+    exports: [AuthService, TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl])],
 })
-export class AuthModule { }
+export class AuthModule {}

@@ -7,9 +7,9 @@ import { User } from "./../models/user";
 import { AppMetricsService } from "./app-metrics.service";
 
 @Module({
-	controllers: [AdminController],
-	imports: [TypeOrmModule.forFeature([Log, User])],
-	providers: [AdminService, AppMetricsService],
-	exports: [AdminService],
+    controllers: [AdminController],
+    imports: [TypeOrmModule.forFeature([Log, User])],
+    providers: [AdminService, AppMetricsService],
+    exports: [AdminService],
 })
-export class AdminModule { }
+export class AdminModule {}

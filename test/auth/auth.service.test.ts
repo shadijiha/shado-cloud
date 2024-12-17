@@ -1,14 +1,14 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { AuthService } from 'src/auth/auth.service';
-import { User } from 'src/models/user';
-import { Repository } from 'typeorm';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Logger } from '@nestjs/common';
-import argon2 from 'argon2';
+import { Test, TestingModule } from "@nestjs/testing";
+import { AuthService } from "src/auth/auth.service";
+import { User } from "src/models/user";
+import { Repository } from "typeorm";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { Logger } from "@nestjs/common";
+import argon2 from "argon2";
 
-jest.mock('argon2');
+jest.mock("argon2");
 
-describe('AuthService', () => {
+describe("AuthService", () => {
     let service: AuthService;
     let userRepo: Repository<User>;
 
@@ -31,15 +31,15 @@ describe('AuthService', () => {
         userRepo = module.get<Repository<User>>(getRepositoryToken(User));
     });
 
-    it('should be defined', () => {
+    it("should be defined", () => {
         expect(service).toBeDefined();
     });
 
-    describe('getByEmail', () => {
-        it('should return a user by email', async () => {
-            const email = 'test@example.com';
-            const mockUser = { id: 1, name: 'Test User', email } as User;
-            jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser);
+    describe("getByEmail", () => {
+        it("should return a user by email", async () => {
+            const email = "test@example.com";
+            const mockUser = { id: 1, name: "Test User", email } as User;
+            jest.spyOn(userRepo, "findOne").mockResolvedValue(mockUser);
 
             const result = await service.getByEmail(email);
 
@@ -47,9 +47,9 @@ describe('AuthService', () => {
             expect(userRepo.findOne).toHaveBeenCalledWith({ where: { email } });
         });
 
-        it('should return null if user is not found', async () => {
-            const email = 'nonexistent@example.com';
-            jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
+        it("should return null if user is not found", async () => {
+            const email = "nonexistent@example.com";
+            jest.spyOn(userRepo, "findOne").mockResolvedValue(null);
 
             const result = await service.getByEmail(email);
 
@@ -57,23 +57,22 @@ describe('AuthService', () => {
         });
     });
 
-
-    describe('new', () => {
-        it('should create and return a new user', async () => {
-            const name = 'New User';
-            const email = 'new@example.com';
-            const password = 'password123';
-            const hashedPassword = 'hashedPassword';
+    describe("new", () => {
+        it("should create and return a new user", async () => {
+            const name = "New User";
+            const email = "new@example.com";
+            const password = "password123";
+            const hashedPassword = "hashedPassword";
 
             // Mock argon2.hash to return a fake hash
-            jest.spyOn(argon2, 'hash').mockResolvedValue(hashedPassword);
+            jest.spyOn(argon2, "hash").mockResolvedValue(hashedPassword);
 
             const mockUser = new User();
             mockUser.name = name;
             mockUser.email = email;
             mockUser.password = hashedPassword;
 
-            jest.spyOn(userRepo, 'save').mockResolvedValue(mockUser);
+            jest.spyOn(userRepo, "save").mockResolvedValue(mockUser);
 
             const result = await service.new(name, email, password);
 
@@ -83,11 +82,11 @@ describe('AuthService', () => {
         });
     });
 
-    describe('getById', () => {
-        it('should return a user by id', async () => {
+    describe("getById", () => {
+        it("should return a user by id", async () => {
             const userId = 1;
-            const mockUser = { id: userId, name: 'Test User', email: 'test@example.com' } as User;
-            jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser);
+            const mockUser = { id: userId, name: "Test User", email: "test@example.com" } as User;
+            jest.spyOn(userRepo, "findOne").mockResolvedValue(mockUser);
 
             const result = await service.getById(userId);
 
@@ -95,9 +94,9 @@ describe('AuthService', () => {
             expect(userRepo.findOne).toHaveBeenCalledWith({ where: { id: userId } });
         });
 
-        it('should return null if user is not found', async () => {
+        it("should return null if user is not found", async () => {
             const userId = 1;
-            jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
+            jest.spyOn(userRepo, "findOne").mockResolvedValue(null);
 
             const result = await service.getById(userId);
 
@@ -105,20 +104,20 @@ describe('AuthService', () => {
         });
     });
 
-    describe('passwordMatch', () => {
-        it('should return true if the password matches', async () => {
+    describe("passwordMatch", () => {
+        it("should return true if the password matches", async () => {
             const userId = 1;
-            const password = 'password123';
-            const mockUser = { id: userId, password: 'hashedPassword' };
+            const password = "password123";
+            const mockUser = { id: userId, password: "hashedPassword" };
 
             // Mock the repository and argon2.verify
-            jest.spyOn(userRepo, 'createQueryBuilder').mockReturnValue({
+            jest.spyOn(userRepo, "createQueryBuilder").mockReturnValue({
                 select: jest.fn().mockReturnThis(),
                 where: jest.fn().mockReturnThis(),
                 getOne: jest.fn().mockResolvedValue(mockUser),
             } as any);
 
-            jest.spyOn(argon2, 'verify').mockResolvedValue(true);
+            jest.spyOn(argon2, "verify").mockResolvedValue(true);
 
             const result = await service.passwordMatch(userId, password);
 
@@ -126,18 +125,18 @@ describe('AuthService', () => {
             expect(argon2.verify).toHaveBeenCalledWith(mockUser.password, password);
         });
 
-        it('should return false if the password does not match', async () => {
+        it("should return false if the password does not match", async () => {
             const userId = 1;
-            const password = 'wrongPassword';
-            const mockUser = { id: userId, password: 'hashedPassword' };
+            const password = "wrongPassword";
+            const mockUser = { id: userId, password: "hashedPassword" };
 
-            jest.spyOn(userRepo, 'createQueryBuilder').mockReturnValue({
+            jest.spyOn(userRepo, "createQueryBuilder").mockReturnValue({
                 select: jest.fn().mockReturnThis(),
                 where: jest.fn().mockReturnThis(),
                 getOne: jest.fn().mockResolvedValue(mockUser),
             } as any);
 
-            jest.spyOn(argon2, 'verify').mockResolvedValue(false);
+            jest.spyOn(argon2, "verify").mockResolvedValue(false);
 
             const result = await service.passwordMatch(userId, password);
 
@@ -145,12 +144,12 @@ describe('AuthService', () => {
         });
     });
 
-    describe('getWithPassword', () => {
-        it('should return a user with password', async () => {
+    describe("getWithPassword", () => {
+        it("should return a user with password", async () => {
             const userId = 1;
-            const mockUser = { id: userId, name: 'Test User', email: 'test@example.com', password: 'hashedPassword' };
+            const mockUser = { id: userId, name: "Test User", email: "test@example.com", password: "hashedPassword" };
 
-            jest.spyOn(userRepo, 'createQueryBuilder').mockReturnValue({
+            jest.spyOn(userRepo, "createQueryBuilder").mockReturnValue({
                 select: jest.fn().mockReturnThis(),
                 addSelect: jest.fn().mockReturnThis(),
                 where: jest.fn().mockReturnThis(),
