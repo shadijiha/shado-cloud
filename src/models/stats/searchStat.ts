@@ -1,22 +1,22 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { BaseEntity, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
-import { User } from "../user";
+import { ApiProperty } from '@nestjs/swagger'
+import { BaseEntity, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm'
+import { User } from '../user'
 
-@Entity({ name: "search_stats" })
+@Entity({ name: 'search_stats' })
 export class SearchStat extends BaseEntity {
-    @PrimaryGeneratedColumn()
-    @ApiProperty()
-    id: number;
+  @PrimaryGeneratedColumn()
+  @ApiProperty()
+    id: number
 
-    @Column()
-    @ApiProperty()
-    text: string;
+  @Column()
+  @ApiProperty()
+    text: string
 
-    @ManyToOne(() => User)
-    @ApiProperty({ type: () => User })
-    user: User;
+  @ManyToOne(() => User)
+  @ApiProperty({ type: () => User })
+    user: User
 
-    @CreateDateColumn()
-    @ApiProperty()
-    created_at: Date;
+  @CreateDateColumn()
+  @ApiProperty()
+    created_at: Date
 }
