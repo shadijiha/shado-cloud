@@ -47,7 +47,7 @@ export class GlobalUtilityModule {}
    imports: [
       GlobalUtilityModule,
       ConfigModule.forRoot({
-         envFilePath: [".env.local"],
+         envFilePath: [".env"],
          expandVariables: true,
          isGlobal: true,
          validate: validate,
