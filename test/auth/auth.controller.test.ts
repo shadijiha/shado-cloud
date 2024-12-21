@@ -10,8 +10,9 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { User } from "src/models/user";
 import { AuthGuard } from "@nestjs/passport";
 import { type IncomingHttpHeaders } from "http";
-import { ConfigService } from "@nestjs/config";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
+import { ValidationPipe } from "@nestjs/common";
 
 jest.mock("argon2"); // Mock argon2 (password hashing)
 jest.mock("sharp", () => {
@@ -59,11 +60,21 @@ describe("AuthController", () => {
                useValue: {
                   get: jest
                      .fn()
-                     .mockImplementation((key: string) => (key == "COOKIE_NAME" ? "shado_cloud_prod" : undefined)),
+                     .mockImplementation((key: string) => (key == "COOKIE_NAME" ? "shado_cloud_prod" : null)),
                },
             },
          ],
-      }).compile();
+      })
+         .overrideProvider(ValidationPipe) // Override the ValidationPipe
+         .useValue(
+            new ValidationPipe({
+               whitelist: false, // Disable whitelist
+               forbidNonWhitelisted: false, // Disable forbidding non-whitelisted
+               transform: false, // Disable transformation of DTOs
+               skipMissingProperties: true, // Skip missing properties if needed
+            }),
+         )
+         .compile();
 
       authController = module.get<AuthController>(AuthController);
       authService = module.get<AuthService>(AuthService);

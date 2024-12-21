@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { AppModule, isDev } from "./app.module";
+import { AppModule } from "./app.module";
 import cookieParser from "cookie-parser";
 import { json, urlencoded } from "express";
 import { GlobalExceptionFilter } from "./global.filter";
@@ -10,6 +10,7 @@ import { LoggerToDb } from "./logging";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ConfigServiceInterceptor } from "./config/config.interceptor";
 import { EnvVariables } from "./config/config.validator";
+import { isDev } from "./util";
 
 async function bootstrap() {
    const app = await NestFactory.create(AppModule);

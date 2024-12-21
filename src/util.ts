@@ -91,3 +91,12 @@ export class SoftException extends Error {
       super(message);
    }
 }
+
+/**
+ * Returns true if the current enviroment is set to development
+ * @param config
+ * @returns
+ */
+export function isDev(config: ConfigService<EnvVariables>) {
+   return config.get("ENV") == "dev" || config.get("ENV") == "development";
+}

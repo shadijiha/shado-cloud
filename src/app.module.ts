@@ -21,6 +21,7 @@ import { AbstractFileSystem } from "./file-system/abstract-file-system.interface
 import { NodeFileSystemService } from "./file-system/file-system.service";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables, validate } from "./config/config.validator";
+import { isDev } from "./util";
 
 @Global()
 @Module({
@@ -117,8 +118,4 @@ export class AppModule {
    configure(consumer: MiddlewareConsumer) {
       consumer.apply(CORPMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL });
    }
-}
-
-export function isDev(config: ConfigService<EnvVariables>) {
-   return config.get("ENV") == "dev" || config.get("ENV") == "development";
 }

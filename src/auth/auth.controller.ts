@@ -20,12 +20,11 @@ import { DirectoriesService } from "./../directories/directories.service";
 import { FilesService } from "./../files/files.service";
 import { LoggerToDb } from "./../logging";
 import { User } from "./../models/user";
-import { AuthUser } from "./../util";
+import { AuthUser, isDev } from "./../util";
 import { AuthService } from "./auth.service";
 import { LoginRequest, LoginResponse, RegisterRequest } from "./authApiTypes";
 import { ValidationPipeline } from "./ValidationPipeline";
 import { IncomingHttpHeaders } from "http";
-import { isDev } from "./../app.module";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 

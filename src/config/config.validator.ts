@@ -41,7 +41,7 @@ class ContainsReferenceValueConstraint implements ValidatorConstraintInterface {
       const object = args.object as any; // Get the full object (DTO)
 
       // Check if the `value` (current property) contains the `relatedProperty` (reference value)
-      return value.includes(object[relatedProperty]);
+      return value?.includes(object[relatedProperty]);
    }
 
    defaultMessage(args: ValidationArguments): string {
