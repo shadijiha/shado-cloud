@@ -55,6 +55,9 @@ export class User extends BaseEntity {
    @UpdateDateColumn()
    updated_at: Date;
 
+   /**
+    * @returns Returns the maximum allows data a user can store on Shado Cloud in bytes
+    */
    public getMaxData(): number {
       return 5 * 1024 * 1024 * 1024; // 5 GB
    }

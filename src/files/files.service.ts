@@ -5,7 +5,7 @@ import { UploadedFile } from "./../models/uploadedFile";
 import { TempUrl } from "./../models/tempUrl";
 import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
-import { SoftException } from "./../util";
+import { RedisCache, SoftException } from "./../util";
 import { FileAccessStat } from "./../models/stats/fileAccessStat";
 import { UsedData } from "./../user-profile/user-profile-types";
 import { DirectoriesService } from "./../directories/directories.service";
@@ -20,6 +20,7 @@ import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
+import { User } from "src/models/user";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -36,7 +37,7 @@ export class FilesService {
       @InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
       @InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
       @Inject() private readonly logger: LoggerToDb,
-      @Inject(CACHE_MANAGER) private readonly cache: Cache & { store: { getClient: () => Redis } },
+      @Inject(CACHE_MANAGER) private readonly cache: RedisCache,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
    ) {

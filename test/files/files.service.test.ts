@@ -18,6 +18,7 @@ import { ThumbnailCacheInterceptor } from "src/files/thumbnail-cache.interceptor
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
+import { RedisCache } from "src/util";
 
 // Mocking external dependencies
 jest.mock("sharp", () => {
@@ -44,7 +45,7 @@ describe("FilesService", () => {
    let fileAccessStatRepo: Repository<FileAccessStat>;
    let userService: AuthService;
    let logger: LoggerToDb;
-   let cache: Cache & { store: { getClient: () => Redis } };
+   let cache: RedisCache;
    let fs: AbstractFileSystem;
    let config: ConfigService<Pick<EnvVariables, "CLOUD_DIR">>;
 

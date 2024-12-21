@@ -5,6 +5,7 @@ import { type Repository } from "typeorm";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Logger } from "@nestjs/common";
 import argon2 from "argon2";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
 
 jest.mock("argon2");
 
@@ -22,6 +23,13 @@ describe("AuthService", () => {
                   findOne: jest.fn(),
                   save: jest.fn(),
                   createQueryBuilder: jest.fn(),
+               },
+            },
+            {
+               provide: CACHE_MANAGER,
+               useValue: {
+                  get: jest.fn().mockReturnValue(null),
+                  set: jest.fn(),
                },
             },
          ],

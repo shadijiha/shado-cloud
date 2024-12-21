@@ -235,7 +235,7 @@ describe("AuthController", () => {
          authService.getById = jest.fn().mockResolvedValue(mockUser);
          filesService.profilePictureInfo = jest.fn().mockResolvedValue("mocked-prof-pic");
 
-         const result = await authController.me(userId, {} as any);
+         const result = await authController.me(userId);
 
          expect(result).toEqual({ ...mockUser, profPic: "mocked-prof-pic" });
          expect(authService.getById).toHaveBeenCalledWith(userId);

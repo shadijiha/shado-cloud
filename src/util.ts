@@ -7,6 +7,10 @@ import { type Request } from "express";
 import { type CookiePayload } from "./auth/authApiTypes";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "./config/config.validator";
+import { type Cache } from "cache-manager";
+import type Redis from "ioredis";
+
+export type RedisCache = Cache & { store: { getClient: () => Redis } };
 
 /**
  * @example Use this function as decorator on top of controller functions
@@ -22,7 +26,7 @@ export const AuthUser = createParamDecorator((data: unknown, ctx: ExecutionConte
 });
 
 export function getUserIdFromRequest(request: Request & { configService: ConfigService<EnvVariables> }): number | -1 {
-   const token = parseJwt(request.cookies[request.configService.get("COOKIE_NAME")]);
+   const token = parseJwt(request.cookies[request.configService?.get("COOKIE_NAME")]);
    const payload = token == null ? { userId: -1 } : (token as CookiePayload);
    return payload.userId;
 }

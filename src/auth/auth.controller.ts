@@ -106,7 +106,7 @@ export class AuthController {
    @Get("me")
    @UseGuards(AuthGuard("jwt"))
    @ApiResponse({ type: User })
-   async me(@AuthUser() userId: number, @Req() request: Request) {
+   async me(@AuthUser() userId: number) {
       try {
          const user = await this.authService.getById(userId);
          return {
