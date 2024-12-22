@@ -3,16 +3,22 @@ import { AdminService } from "src/admin/admin.service";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Log } from "src/models/log";
 import { type Repository } from "typeorm";
+import { LoggerToDb } from "src/logging";
+import { ConfigService } from "@nestjs/config";
 import { exec } from "child_process";
-import { mocked } from "ts-jest/utils";
+import nodemailer from "nodemailer";
 
 jest.mock("child_process", () => ({
    exec: jest.fn(),
 }));
+jest.mock("nodemailer");
 
 describe("AdminService", () => {
    let service: AdminService;
    let logRepo: Repository<Log>;
+   let logger: LoggerToDb;
+
+   const sendMailMock = jest.fn();
 
    beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
@@ -25,11 +31,36 @@ describe("AdminService", () => {
                   delete: jest.fn(),
                },
             },
+            {
+               provide: LoggerToDb,
+               useValue: {
+                  log: jest.fn(),
+                  error: jest.fn(),
+                  warn: jest.fn(),
+               },
+            },
+            {
+               provide: ConfigService,
+               useValue: {
+                  get: jest.fn().mockImplementation((key: string) => {
+                     if (key === "EMAIL_USER") return "test@example.com";
+                     if (key === "EMAIL_APP_PASSWORD") return "app-password";
+                     return undefined;
+                  }),
+               },
+            },
          ],
       }).compile();
 
       service = module.get<AdminService>(AdminService);
       logRepo = module.get<Repository<Log>>(getRepositoryToken(Log));
+      logger = module.get<LoggerToDb>(LoggerToDb);
+
+      nodemailer.createTransport.mockReturnValue({ sendMail: sendMailMock });
+   });
+
+   afterEach(() => {
+      jest.clearAllMocks();
    });
 
    describe("all", () => {
@@ -67,6 +98,107 @@ describe("AdminService", () => {
    });
 
    describe("redeploy", () => {
-      expect(true).toBe(true);
+      it("should send deployment start email", async () => {
+         // Mock exec to simulate the deployment script
+         const mockExec = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn(),
+         };
+         (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+
+         // Call the redeploy function
+         await service.redeploy();
+
+         // Verify that the start email is sent
+         expect(sendMailMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+               subject: "Shado Cloud - deployment start",
+               text: "Deployment was triggered for Shado Cloud nestjs app",
+            }),
+         );
+      });
+
+      it("should send success email if deployment script exits successfully", async () => {
+         // Mock exec to simulate the deployment script
+         const mockExec = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn().mockImplementation((event, callback) => {
+               if (event === "close") callback(0); // Simulate success (exit code 0)
+            }),
+         };
+         (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+
+         // Call the redeploy function
+         await service.redeploy();
+
+         // Verify that the success email is sent
+         expect(sendMailMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+               subject: "Shado Cloud - Successful deployment",
+               html: expect.stringContaining("Shado cloud nestjs app has succesfully deployed!"),
+            }),
+         );
+      });
+
+      it("should send failure email if deployment script exits with error", async () => {
+         // Mock exec to simulate the deployment script
+         const mockExec = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn().mockImplementation((event, callback) => {
+               if (event === "close") callback(1); // Simulate failure (exit code 1)
+            }),
+         };
+         (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+
+         // Call the redeploy function
+         await service.redeploy();
+
+         // Verify that the failure email is sent
+         expect(sendMailMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+               subject: "Shado Cloud - Failed deployment",
+               html: expect.stringContaining("Shado cloud nestjs app has failed"),
+            }),
+         );
+      });
+
+      it("should log deployment success", async () => {
+         // Mock exec to simulate the deployment script
+         const mockExec = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn().mockImplementation((event, callback) => {
+               if (event === "close") callback(0); // Simulate success (exit code 0)
+            }),
+         };
+         (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+
+         // Call the redeploy function
+         await service.redeploy();
+
+         // Verify the logger.log was called for successful deployment
+         expect(logger.log).toHaveBeenCalledWith("./deploy.sh exited successfully");
+      });
+
+      it("should log deployment failure", async () => {
+         // Mock exec to simulate the deployment script
+         const mockExec = {
+            stdout: { on: jest.fn() },
+            stderr: { on: jest.fn() },
+            on: jest.fn().mockImplementation((event, callback) => {
+               if (event === "close") callback(1); // Simulate failure (exit code 1)
+            }),
+         };
+         (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+
+         // Call the redeploy function
+         await service.redeploy();
+
+         // Verify the logger.error was called for failed deployment
+         expect(logger.error).toHaveBeenCalledWith(new Error("./deploy.sh exited with code 1"));
+      });
    });
 });

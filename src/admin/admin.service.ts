@@ -1,12 +1,40 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { exec, type ExecException } from "child_process";
-import { Log } from "src/models/log";
-import { In, Repository } from "typeorm";
+import { exec } from "child_process";
+import { LoggerToDb } from "../logging";
+import { Log } from "../models/log";
+import { Repository } from "typeorm";
+import nodemailer from "nodemailer";
+import { ConfigService } from "@nestjs/config";
+import { EnvVariables } from "../config/config.validator";
 
 @Injectable()
 export class AdminService {
-   public constructor(@InjectRepository(Log) private readonly logRepo: Repository<Log>) {}
+   private transporter: nodemailer.Transporter | undefined;
+
+   public constructor(
+      @InjectRepository(Log) private readonly logRepo: Repository<Log>,
+      @Inject() private readonly logger: LoggerToDb,
+      @Inject() private readonly config: ConfigService<EnvVariables>,
+   ) {
+      const email = this.config.get<string | undefined>("EMAIL_USER");
+      const password = this.config.get<string | undefined>("EMAIL_APP_PASSWORD");
+
+      // We only want to send emails if credentials are defined in the env
+      if (email && password) {
+         this.transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+               user: config.get("EMAIL_USER"), // Your email address
+               pass: config.get("EMAIL_APP_PASSWORD"), // Your email password (or app-specific password)
+            },
+         });
+      } else {
+         this.logger.warn(
+            "Emails won't be sent because .env email or password are either undefined or not escaped properly",
+         );
+      }
+   }
 
    public async all() {
       return (await this.logRepo.find({ relations: ["user"] })).sort((a, b) => {
@@ -19,22 +47,63 @@ export class AdminService {
    }
 
    public async redeploy() {
-      const result = await cmd("./deploy");
-      return { result };
-   }
-}
+      // We can't have a promise that resolves / rejects because github webhooks have a 10 second timeout
+      // there for we'll only acknowladge to github webhooks. If there's an error, it will be logged only
+      // Github won't know about it
 
-// Helper
-async function cmd(command: string): Promise<ExecException | string> {
-   return await new Promise((resolve, reject) => {
-      exec(command, (err, stdout, stderr) => {
-         if (err) {
-            reject(err);
-            return;
-         }
-
-         // the *entire* stdout and stderr (buffered)
-         resolve(stdout);
+      // Send email for deployment start
+      this.sendEmail({
+         subject: "Shado Cloud - deployment start",
+         text: "Deployment was triggered for Shado Cloud nestjs app",
       });
-   });
+
+      const result = exec("./deploy.sh");
+      result.stdout.on("data", (data) => {
+         this.logger.log(data);
+      });
+      result.stderr.on("data", (data) => {
+         this.logger.error(data);
+      });
+
+      const exitFn = async (code) => {
+         if (code == 0) {
+            this.logger.log("./deploy.sh exited successfully");
+            await this.sendEmail({
+               subject: "Shado Cloud - Successful deployment",
+               html: "<h2>Shado cloud nestjs app has succesfully deployed!</h2>",
+            });
+         } else {
+            this.logger.error(new Error(`./deploy.sh exited with code ${code}`));
+            await this.sendEmail({
+               subject: "Shado Cloud - Failed deployment",
+               html: `
+               <h2>Shado cloud nestjs app has failed</h2>
+               <code>
+                  ./deploy.sh exited with code ${code}
+               </code>
+               `,
+            });
+         }
+      };
+
+      result.on("close", exitFn);
+      result.on("exit", exitFn);
+      result.on("disconnect", exitFn);
+   }
+
+   private async sendEmail(options: { subject: string; text?: string; html?: string }) {
+      if (this.transporter) {
+         try {
+            await this.transporter.sendMail({
+               from: this.config.get<string>("EMAIL_USER"), // Sender address
+               to: this.config.get<string>("EMAIL_USER"), // Receiver's address
+               subject: options.subject, // Subject line
+               text: options.text, // Plain text body
+               html: options.html,
+            });
+         } catch (e) {
+            this.logger.warn("Unable to send deployment email " + e.message);
+         }
+      }
+   }
 }

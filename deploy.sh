@@ -1,8 +1,7 @@
-pm2 stop "shado-cloud-backend"
 git pull
 npm install
 npm run build
-npm run typeorm:generate -- -n "hehexd".
+npm run typeorm:generate -- "hehexd" -d ormconfig.js
 npm run build
-npm run typeorm:migrate
-pm2 restart "shado-cloud-backend"
+npm run typeorm:migrate -- -d ormconfig.js
+#pm2 restart "shado-cloud-backend"

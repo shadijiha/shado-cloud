@@ -1,4 +1,4 @@
-import { HttpException } from "@nestjs/common";
+import { HttpException, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
@@ -9,12 +9,18 @@ import { AppMetricsService } from "src/admin/app-metrics.service";
 import { LoggerToDb } from "src/logging";
 import { type Log } from "src/models/log";
 import { User } from "src/models/user";
-import { Repository } from "typeorm";
+import crypto from "crypto";
 
 describe("AdminController", () => {
    let adminController: AdminController;
    let adminService: AdminService;
    let logger: LoggerToDb;
+   let configService: ConfigService;
+
+   const mockPayload = { ref: "refs/heads/nest-js-backend" }; // example payload for main branch
+   const invalidPayload = { ref: "refs/heads/other-branch" }; // example payload for non-main branch
+   const validSignature = "sha256=validsignature"; // Mocked valid signature
+   const invalidSignature = "sha256=invalidsignature"; // Mocked invalid signature
 
    beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
@@ -33,6 +39,7 @@ describe("AdminController", () => {
                useValue: {
                   logException: jest.fn(),
                   log: jest.fn(),
+                  warn: jest.fn(),
                   error: jest.fn(),
                },
             },
@@ -64,6 +71,7 @@ describe("AdminController", () => {
       adminController = module.get<AdminController>(AdminController);
       adminService = module.get<AdminService>(AdminService);
       logger = module.get<LoggerToDb>(LoggerToDb);
+      configService = module.get<ConfigService>(ConfigService);
    });
 
    afterEach(() => {
@@ -140,8 +148,78 @@ describe("AdminController", () => {
    });
 
    describe("redeploy", () => {
-      it("should call redeploy", async () => {
-         expect(true).toBe(true);
+      it("should successfully trigger redeployment with valid GitHub signature", async () => {
+         // Mocking the signature verification and redeploy process
+         const hmacMock = jest.spyOn(crypto, "createHmac").mockReturnValue({
+            update: jest.fn().mockReturnThis(),
+            digest: jest.fn().mockReturnValue("validsignature"),
+         } as any);
+
+         const redeployMock = jest.spyOn(adminService, "redeploy").mockResolvedValue();
+         configService.get = jest.fn().mockReturnValue("githubsecret"); // Return secret
+
+         // Call the redeploy method
+         const result = await adminController.redeploy(mockPayload, validSignature);
+
+         // Assertions
+         expect(hmacMock).toHaveBeenCalledWith("sha256", "githubsecret");
+         expect(redeployMock).toHaveBeenCalled();
+         expect(result.message).toBe("Deployment triggered successfully");
+         expect(logger.log).toHaveBeenCalledWith("Received webhook payload");
+         expect(logger.log).toHaveBeenCalledWith("Starting redeployment...");
+      });
+
+      it("should throw UnauthorizedException for invalid GitHub signature", async () => {
+         const hmacMock = jest.spyOn(crypto, "createHmac").mockReturnValue({
+            update: jest.fn().mockReturnThis(),
+            digest: jest.fn().mockReturnValue("invalidsignature"),
+         } as any);
+
+         configService.get = jest.fn().mockReturnValue("githubsecret"); // Return secret
+
+         try {
+            // Call the redeploy method with an invalid signature
+            await adminController.redeploy(mockPayload, invalidSignature);
+         } catch (error) {
+            // Assertions
+            expect(error).toBeInstanceOf(UnauthorizedException);
+            expect(logger.warn).toHaveBeenCalledWith("Invalid signature");
+            expect(hmacMock).toHaveBeenCalledWith("sha256", "githubsecret");
+         }
+      });
+
+      it("should return error message if redeploy fails", async () => {
+         const errorMessage = "Deployment failed";
+
+         // Mocking the signature verification and redeploy process
+         const hmacMock = jest.spyOn(crypto, "createHmac").mockReturnValue({
+            update: jest.fn().mockReturnThis(),
+            digest: jest.fn().mockReturnValue("validsignature"),
+         } as any);
+
+         const redeployMock = jest.spyOn(adminService, "redeploy").mockRejectedValue(new Error(errorMessage));
+         configService.get = jest.fn().mockReturnValue("githubsecret"); // Return secret
+
+         // Call the redeploy method
+         const result = await adminController.redeploy(mockPayload, validSignature);
+
+         // Assertions
+         expect(result.message).toBe(errorMessage);
+         expect(logger.error).toHaveBeenCalledWith("Deployment failed " + errorMessage, expect.any(String));
+         expect(hmacMock).toHaveBeenCalledWith("sha256", "githubsecret");
+      });
+
+      it("should return message when not a push to the main branch", async () => {
+         const branchName = "nest-js-backend";
+         const mockLoggerWarn = jest.spyOn(logger, "warn");
+
+         // Call the redeploy method with a payload that does not match the expected branch
+         const result = await adminController.redeploy(invalidPayload, validSignature);
+
+         // Assertions
+         expect(result.message).toBe("Not a push to main branch, ignoring");
+         expect(mockLoggerWarn).toHaveBeenCalledWith("Ignoring push to non-main branch");
+         expect(adminService.redeploy).not.toHaveBeenCalled(); // Ensure redeploy is not called
       });
    });
 });

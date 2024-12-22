@@ -12,11 +12,11 @@ export class Log extends BaseEntity {
    @ApiProperty()
    type: "error" | "warn" | "info";
 
-   @Column({ type: "varchar" })
+   @Column({ type: "longtext" })
    @ApiProperty()
    message: string;
 
-   @Column({ nullable: true, type: "varchar", length: 512 })
+   @Column({ nullable: true, type: "longtext" })
    @ApiProperty()
    stack: string;
 
