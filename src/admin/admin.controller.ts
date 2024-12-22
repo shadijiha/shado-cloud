@@ -109,6 +109,10 @@ export class AdminController {
 
          // Verify GitHub signature
          const githubSecret = this.config.get<string>("GITHUB_WEBHOOK_SECRET");
+         if (!githubSecret) {
+            throw new Error("env var GITHUB_WEBHOOK_SECRET is undefined");
+         }
+
          const hash = crypto.createHmac("sha256", githubSecret).update(JSON.stringify(payload)).digest("hex");
          if (`sha256=${hash}` !== signature) {
             this.logger.warn("Invalid signature");
