@@ -1,4 +1,7 @@
-module.exports = {
+import { DataSource } from "typeorm";
+import 'dotenv/config';
+
+export const connection = new DataSource({
     type: process.env.DB_TYPE,
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
@@ -10,4 +13,4 @@ module.exports = {
     cli: {
         migrationsDir: "src/migrations",
     },
-};
+});

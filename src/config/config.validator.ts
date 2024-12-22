@@ -1,8 +1,10 @@
 import { Logger } from "@nestjs/common";
 import { plainToInstance } from "class-transformer";
 import {
+   IsEmail,
    IsEnum,
    IsNumber,
+   IsOptional,
    Max,
    Min,
    MinLength,
@@ -98,10 +100,12 @@ export class EnvVariables {
    @Validate(DoesNotEndWithConstraint, ["\\"])
    CLOUD_DIR: string;
 
+   /**
+    * Cookies and auth
+    */
    @MinLength(3)
    PASSWORD_VAULT_SALT: string;
 
-   // Cookies and auth
    @MinLength(5)
    COOKIE_NAME: string;
 
@@ -118,6 +122,22 @@ export class EnvVariables {
    @Validate(DoesNotEndWithConstraint, ["/"])
    BACKEND_HOST: string;
 
+   /**
+    * Github webhooks env
+    */
+   @IsOptional()
+   GITHUB_WEBHOOK_SECRET: string;
+
+   @IsOptional()
+   @IsEmail()
+   EMAIL_USER: string;
+
+   @IsOptional()
+   EMAIL_APP_PASSWORD: string;
+
+   /**
+    * Database env
+    */
    DB_TYPE: "mysql" | "sqlite";
 
    @Validate(DoesNotEndWithConstraint, ["/"])
@@ -134,6 +154,9 @@ export class EnvVariables {
 
    DB_NAME: string;
 
+   /**
+    * Redis env
+    */
    @Validate(DoesNotEndWithConstraint, ["/"])
    REDIS_HOST: string;
 
