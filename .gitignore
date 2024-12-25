@@ -2,7 +2,11 @@
 /dist
 /node_modules
 /ffmpeg
-src/migrations
+# I know we are not suppose to do that, but since the start of the app
+# we've been ignoring the migrations folder, so I'm going to keep it that way
+# For new apps, run ./deploy.sh and it will create the migrations
+migrations/*.ts
+
 # Logs
 logs
 *.log

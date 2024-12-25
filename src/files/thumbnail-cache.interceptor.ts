@@ -17,7 +17,7 @@ import { EnvVariables } from "src/config/config.validator";
  */
 @Injectable()
 export class ThumbnailCacheInterceptor extends CacheInterceptor {
-   private static readonly CachedFileTTL = 1000 * 60 * 5; // 5 minutes TTL for cached thumbnails
+   private static readonly CachedFileTTL = 1000 * 60 * 60 * 24 * 30; // 30 days TTL for cached thumbnails
 
    private readonly logger = new Logger(ThumbnailCacheInterceptor.name);
 
