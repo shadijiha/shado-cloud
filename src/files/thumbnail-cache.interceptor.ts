@@ -1,15 +1,21 @@
-import { CACHE_MANAGER, CacheInterceptor } from "@nestjs/cache-manager";
-import { Injectable, type ExecutionContext, type CallHandler, Inject, Logger, StreamableFile } from "@nestjs/common";
+import {
+   Injectable,
+   type ExecutionContext,
+   type CallHandler,
+   Inject,
+   StreamableFile,
+   NestInterceptor,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { Cache } from "cache-manager";
 import { type Observable, of } from "rxjs";
 import { switchMap } from "rxjs/operators";
 import { type Request, type Response } from "express";
-import { getUserIdFromRequest } from "src/util";
+import { getUserIdFromRequest, REDIS_CACHE } from "src/util";
 import { FilesService } from "./files.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { LoggerToDb } from "src/logging";
+import type Redis from "ioredis";
 
 /**
  * This interceptor is made to cache the requests thumbnails
@@ -17,16 +23,10 @@ import { LoggerToDb } from "src/logging";
  * if it doesn't, then request will proceed and then we'll cache the file in the response
  */
 @Injectable()
-export class ThumbnailCacheInterceptor extends CacheInterceptor {
-   private static readonly CachedFileTTL = 1000 * 60 * 60 * 24 * 30; // 30 days TTL for cached thumbnails
+export class ThumbnailCacheInterceptor implements NestInterceptor {
+   private static readonly CachedFileTTLSeconds = 60 * 60 * 24 * 30; // 30 days TTL for cached thumbnails
 
-   constructor(
-      @Inject(CACHE_MANAGER) private readonly cache: Cache,
-      reflector: Reflector,
-      private readonly logger: LoggerToDb,
-   ) {
-      super(cache, reflector);
-   }
+   constructor(@Inject(REDIS_CACHE) private readonly cache: Redis, private readonly logger: LoggerToDb) {}
 
    // TODOOOO: We might run into an issue where since only UploadedFile tumbnails in DB are invalidated with
    // a file is changed/delete and since here we are caching ALL files regardless of if they are in UploadedFile table
@@ -39,16 +39,15 @@ export class ThumbnailCacheInterceptor extends CacheInterceptor {
       const cacheKey = this.getCacheKeyFromReq(request);
 
       // Check if the thumbnail is cached
-      const cachedThumbnail: { type: "Buffer"; data: number[] } = await this.cache.get(cacheKey);
-      const cachedMime = await this.cache.get<string>(`${cacheKey}_MIME`);
+      const cachedThumbnail = await this.cache.getBuffer(cacheKey);
+      const cachedMime = await this.cache.get(`${cacheKey}_MIME`);
       if (cachedThumbnail && cachedMime) {
          this.logger.debug(`Cache hit for ${cacheKey} ${cachedMime}`);
 
          // Send the cached thumbnail
          response.setHeader("Content-Type", cachedMime); // Adjust MIME type
 
-         const buffer = Buffer.from(cachedThumbnail.data);
-         return of(new StreamableFile(buffer)); // Short-circuit the request to avoid further processing
+         return of(new StreamableFile(cachedThumbnail)); // Short-circuit the request to avoid further processing
       }
 
       // Proceed with the original request and cache the result afterward
@@ -62,8 +61,21 @@ export class ThumbnailCacheInterceptor extends CacheInterceptor {
 
                // Cache the thumbnail
                const { path: filepath } = request;
-               await this.cache.set(cacheKey, fileBuffer, ThumbnailCacheInterceptor.CachedFileTTL);
-               await this.cache.set(`${cacheKey}_MIME`, FilesService.detectFile(filepath));
+
+               const cacheMultiExecResult = await this.cache
+                  .multi()
+                  .setex(cacheKey, ThumbnailCacheInterceptor.CachedFileTTLSeconds, fileBuffer)
+                  .setex(
+                     `${cacheKey}_MIME`,
+                     ThumbnailCacheInterceptor.CachedFileTTLSeconds,
+                     FilesService.detectFile(filepath),
+                  )
+                  .exec();
+               cacheMultiExecResult.forEach(([err, result]) => {
+                  if (err) {
+                     this.logger.error(`Error caching thumbnail for ${cacheKey}: ${err}`);
+                  }
+               });
 
                this.logger.debug(`Caching thumbnail for ${cacheKey}`);
 

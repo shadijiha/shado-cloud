@@ -7,10 +7,8 @@ import { type Request } from "express";
 import { type CookiePayload } from "./auth/authApiTypes";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "./config/config.validator";
-import { type Cache } from "cache-manager";
-import type Redis from "ioredis";
 
-export type RedisCache = Cache & { store: { getClient: () => Redis } };
+export const REDIS_CACHE = "REDIS_CACHE" as const;
 
 /**
  * @example Use this function as decorator on top of controller functions

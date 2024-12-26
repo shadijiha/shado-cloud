@@ -5,7 +5,7 @@ import { UploadedFile } from "./../models/uploadedFile";
 import { TempUrl } from "./../models/tempUrl";
 import sharp from "sharp";
 import ThumbnailGenerator from "fs-thumbnail";
-import { RedisCache, SoftException } from "./../util";
+import { REDIS_CACHE, SoftException } from "./../util";
 import { FileAccessStat } from "./../models/stats/fileAccessStat";
 import { UsedData } from "./../user-profile/user-profile-types";
 import { DirectoriesService } from "./../directories/directories.service";
@@ -14,11 +14,11 @@ import mime from "mime-types";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
-import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
+import type Redis from "ioredis";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -35,7 +35,7 @@ export class FilesService {
       @InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
       @InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
       @Inject() private readonly logger: LoggerToDb,
-      @Inject(CACHE_MANAGER) private readonly cache: RedisCache,
+      @Inject(REDIS_CACHE) private readonly cache: Redis,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
    ) {
@@ -565,16 +565,15 @@ export class FilesService {
       // Invalidate cache
       const cacheKey = ThumbnailCacheInterceptor.getCacheKey(userId, uploadedFile.absolute_path, 0, 0, false);
       const pattern = `${cacheKey}*`;
-      const redis = this.cache.store.getClient();
 
       let cursor = "0";
       do {
          // SCAN command to get keys matching the pattern
-         const [newCursor, keys] = await redis.scan(cursor, "MATCH", pattern);
+         const [newCursor, keys] = await this.cache.scan(cursor, "MATCH", pattern);
          cursor = newCursor;
 
          if (keys.length > 0) {
-            await redis.del(...keys); // Delete matching keys
+            await this.cache.del(...keys); // Delete matching keys
             this.logger.debug(`Deleted keys: ${keys.join(", ")}`);
          }
       } while (cursor !== "0");

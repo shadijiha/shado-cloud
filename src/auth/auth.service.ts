@@ -3,14 +3,15 @@ import { User } from "./../models/user";
 import { Repository } from "typeorm";
 import argon2 from "argon2";
 import { InjectRepository } from "@nestjs/typeorm";
-import { CACHE_MANAGER } from "@nestjs/cache-manager";
-import { RedisCache } from "../util";
-
+import type Redis from "ioredis";
+import { REDIS_CACHE } from "src/util";
+import { LoggerToDb } from "src/logging";
 @Injectable()
 export class AuthService {
    constructor(
       @InjectRepository(User) private readonly userRepo: Repository<User>,
-      @Inject(CACHE_MANAGER) private readonly cache: RedisCache,
+      @Inject(REDIS_CACHE) private readonly cache: Redis,
+      private readonly logger: LoggerToDb,
    ) {}
 
    public getByEmail(email: string): Promise<User | null> {
@@ -27,12 +28,20 @@ export class AuthService {
 
    public async getById(userId: number): Promise<User | null> {
       const key = AuthService.getCachedUserKey(userId);
-      const cachedValue = await this.cache.get<string | null>(key);
+      const cachedValue = await this.cache.get(key);
       if (cachedValue) {
          // Attack member funtiosn back to the user
          const cachedUser = JSON.parse(cachedValue) as User;
          Object.setPrototypeOf(cachedUser, User.prototype);
-         return cachedUser;
+
+         // To avoid cache paring issues, we need to assert that the user still have the same properties
+         // as User class
+         if (cachedUser.id === userId && "email" in cachedUser) {
+            return cachedUser;
+         } else {
+            this.logger.warn(`Cache key ${key} is corrupted (value => ${cachedValue}), deleting it...`);
+            this.cache.del(key);
+         }
       }
       const user = await this.userRepo.findOne({ where: { id: userId } });
       if (!user) return null;

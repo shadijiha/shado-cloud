@@ -11,14 +11,12 @@ import { FileAccessStat } from "src/models/stats/fileAccessStat";
 import { TempUrl } from "src/models/tempUrl";
 import { LoggerToDb } from "src/logging";
 import { type User } from "src/models/user";
-import { CACHE_MANAGER } from "@nestjs/cache-manager";
-import { type Cache } from "cache-manager";
 import type Redis from "ioredis";
 import { ThumbnailCacheInterceptor } from "src/files/thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
-import { RedisCache } from "src/util";
+import { REDIS_CACHE } from "src/util";
 
 // Mocking external dependencies
 jest.mock("sharp", () => {
@@ -45,7 +43,7 @@ describe("FilesService", () => {
    let fileAccessStatRepo: Repository<FileAccessStat>;
    let userService: AuthService;
    let logger: LoggerToDb;
-   let cache: RedisCache;
+   let cache: Redis;
    let fs: AbstractFileSystem;
    let config: ConfigService<Pick<EnvVariables, "CLOUD_DIR">>;
 
@@ -102,13 +100,9 @@ describe("FilesService", () => {
                useValue: {},
             },
             {
-               provide: CACHE_MANAGER,
+               provide: REDIS_CACHE,
                useValue: {
-                  store: {
-                     getClient: jest.fn().mockReturnValue({
-                        scan: jest.fn().mockReturnValue(["0", []]),
-                     }),
-                  },
+                  scan: jest.fn().mockReturnValue(["0", []]),
                },
             },
             {
@@ -136,7 +130,7 @@ describe("FilesService", () => {
       uploadedFileRepo = module.get<Repository<UploadedFile>>(getRepositoryToken(UploadedFile));
       fileAccessStatRepo = module.get<Repository<FileAccessStat>>(getRepositoryToken(FileAccessStat));
       logger = module.get<LoggerToDb>(LoggerToDb);
-      cache = module.get<Cache>(CACHE_MANAGER) as any;
+      cache = module.get<Redis>(REDIS_CACHE) as any;
       fs = module.get<AbstractFileSystem>(AbstractFileSystem);
       config = module.get<ConfigService>(ConfigService);
    });
@@ -246,7 +240,7 @@ describe("FilesService", () => {
          ]); // <--- this function is called by invalidateThumbnailsFor
 
          // Mock redis cache
-         cache.store.getClient().scan = jest
+         cache.scan = jest
             .fn()
             .mockReturnValue([
                "0",
@@ -255,7 +249,7 @@ describe("FilesService", () => {
                   ThumbnailCacheInterceptor.getCacheKey(user.id, existingFile.absolute_path) + "_MIME",
                ],
             ]);
-         cache.store.getClient().del = jest.fn();
+         cache.del = jest.fn();
 
          // Act
          const result = await service.upload(user.id, mockFile, dest);
@@ -273,7 +267,7 @@ describe("FilesService", () => {
          expect(fs.unlinkSync).not.toHaveBeenCalledWith(thumbailAbsolute("24_100x100.jpg"));
 
          // Redis clear
-         expect(cache.store.getClient().del).toHaveBeenCalledWith(
+         expect(cache.del).toHaveBeenCalledWith(
             ThumbnailCacheInterceptor.getCacheKey(user.id, existingFile.absolute_path),
             ThumbnailCacheInterceptor.getCacheKey(user.id, existingFile.absolute_path) + "_MIME",
          );

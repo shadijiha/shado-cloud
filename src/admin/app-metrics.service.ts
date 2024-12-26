@@ -1,22 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import Redis from "ioredis";
-import { EnvVariables } from "src/config/config.validator";
+import type Redis from "ioredis";
+import { REDIS_CACHE } from "src/util";
 
 @Injectable()
 export class AppMetricsService {
-   private readonly redis: Redis;
-
    // Max length of string values to dump
-   private readonly maxLength = 200; // You can change this to whatever suits your needs
+   private readonly maxLength = 150;
 
-   constructor(@Inject() readonly config: ConfigService<EnvVariables>) {
-      this.redis = new Redis({
-         host: config.get<string>("REDIS_HOST"),
-         port: Number(config.get<string>("REDIS_PORT")),
-         password: config.get<string>("REDIS_PASSWORD"),
-      });
-   }
+   constructor(@Inject(REDIS_CACHE) private readonly redis: Redis) {}
 
    public async redisInfo(section: string): Promise<string> {
       return await this.redis.info(section);

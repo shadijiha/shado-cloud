@@ -15,13 +15,12 @@ import { CORPMiddleware } from "./corp.middleware";
 import { LoggerToDb } from "./logging";
 import { Log } from "./models/log";
 import { DataSource } from "typeorm";
-import { CacheModule } from "@nestjs/cache-manager";
-import redisStore from "cache-manager-ioredis";
 import { AbstractFileSystem } from "./file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "./file-system/file-system.service";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables, validate } from "./config/config.validator";
-import { isDev } from "./util";
+import { isDev, REDIS_CACHE } from "./util";
+import Redis from "ioredis";
 
 @Global()
 @Module({
@@ -38,8 +37,20 @@ import { isDev } from "./util";
          provide: AbstractFileSystem,
          useClass: NodeFileSystemService,
       },
+      {
+         provide: REDIS_CACHE,
+         useFactory: (config: ConfigService<EnvVariables>) => {
+            return new Redis({
+               host: config.get("REDIS_HOST"),
+               port: Number(config.get("REDIS_PORT")),
+               password: config.get("REDIS_PASSWORD"),
+            });
+         },
+         scope: Scope.DEFAULT,
+         inject: [ConfigService],
+      },
    ],
-   exports: [LoggerToDb, AbstractFileSystem],
+   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE],
 })
 export class GlobalUtilityModule {}
 
@@ -90,20 +101,6 @@ export class GlobalUtilityModule {}
       TempUrlModule,
       AdminModule,
       UserProfileModule,
-      CacheModule.registerAsync({
-         useFactory: (config: ConfigService<EnvVariables>) => {
-            return {
-               store: redisStore,
-               host: config.get("REDIS_HOST"),
-               port: Number(config.get("REDIS_PORT")),
-               password: config.get("REDIS_PASSWORD"),
-               isGlobal: true,
-               ttl: 1000 * 20, // 20 seconds
-            };
-         },
-         inject: [ConfigService],
-         isGlobal: true,
-      }),
    ],
    controllers: [AppController],
    providers: [
