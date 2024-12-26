@@ -8,7 +8,7 @@ export const connection = new DataSource({
     username: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    entities: ["dist/models/*{.ts,.js}"],
+    entities: ["dist/src/models/*{.ts,.js}"],
     migrations: ["dist/migrations/*{.ts,.js}"],
     cli: {
         migrationsDir: "src/migrations",
