@@ -63,7 +63,7 @@ export class GlobalUtilityModule {}
                username: config.get("DB_USERNAME"),
                password: config.get("DB_PASSWORD"),
                database: config.get<string>("DB_NAME"),
-               entities: ["dist/models/**/*{.ts,.js}"],
+               entities: ["dist/src/models/**/*{.ts,.js}"],
                synchronize: isDev(config),
                logging: false,
                // Only define cache if REDIS_HOST is defined in env
