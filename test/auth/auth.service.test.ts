@@ -3,9 +3,9 @@ import { AuthService } from "src/auth/auth.service";
 import { User } from "src/models/user";
 import { type Repository } from "typeorm";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { Logger } from "@nestjs/common";
 import argon2 from "argon2";
-import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { REDIS_CACHE } from "src/util";
+import { LoggerToDb } from "src/logging";
 
 jest.mock("argon2");
 
@@ -26,10 +26,16 @@ describe("AuthService", () => {
                },
             },
             {
-               provide: CACHE_MANAGER,
+               provide: REDIS_CACHE,
                useValue: {
                   get: jest.fn().mockReturnValue(null),
                   set: jest.fn(),
+               },
+            },
+            {
+               provide: LoggerToDb,
+               useValue: {
+                  warn: jest.fn(),
                },
             },
          ],
