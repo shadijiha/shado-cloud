@@ -352,7 +352,7 @@ export class FilesService {
             );
 
          return readStream;
-      } else {
+      } else if (fileMime.includes("video")) {
          // If it is a video generate thumbnail
          const thumbnailPath = path.join(path.dirname(dir), ".videometa." + path.basename(dir) + ".png");
 
@@ -379,6 +379,7 @@ export class FilesService {
 
          return this.fs.createReadStream(thumbnailPath);
       }
+      return null;
    }
 
    public async getUserRootPath(userId: number): Promise<string> {
@@ -402,6 +403,11 @@ export class FilesService {
 
    public static detectFile(filename: string): string {
       const result = mime.lookup(filename);
+      // if mime doesn't regonize it, then we'll try to guess it
+      if (result == false) {
+         if (filename.includes("jpg") || filename.includes("jpeg")) return "image/jpeg";
+         if (filename.includes("png")) return "image/png";
+      }
       return result == false ? "" : result;
    }
 

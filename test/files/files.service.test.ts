@@ -549,7 +549,7 @@ describe("FilesService", () => {
 
          fs.createReadStream = jest.fn().mockReturnValue("data");
 
-         await expect(service.toThumbnail("test/path", 1, 100, 100)).resolves.toBe("data");
+         await expect(service.toThumbnail("test/path", 1, 100, 100)).resolves.toBeNull();
       });
    });
 

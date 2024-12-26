@@ -106,6 +106,8 @@ describe("AdminService", () => {
             on: jest.fn(),
          };
          (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+         // @ts-expect-error
+         service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
          await service.redeploy();
@@ -129,6 +131,8 @@ describe("AdminService", () => {
             }),
          };
          (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+         // @ts-expect-error
+         service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
          await service.redeploy();
@@ -152,6 +156,8 @@ describe("AdminService", () => {
             }),
          };
          (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+         // @ts-expect-error
+         service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
          await service.redeploy();
@@ -175,6 +181,8 @@ describe("AdminService", () => {
             }),
          };
          (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+         // @ts-expect-error
+         service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
          await service.redeploy();
@@ -193,6 +201,8 @@ describe("AdminService", () => {
             }),
          };
          (exec as unknown as jest.Mock).mockImplementationOnce(() => mockExec);
+         // @ts-expect-error
+         service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
          await service.redeploy();
