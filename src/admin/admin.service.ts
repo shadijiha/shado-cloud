@@ -7,6 +7,7 @@ import { Repository } from "typeorm";
 import nodemailer from "nodemailer";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
+import { promisify } from "util";
 
 @Injectable()
 export class AdminService {
@@ -57,6 +58,10 @@ export class AdminService {
          text: "Deployment was triggered for Shado Cloud nestjs app",
       });
 
+      // Check and log the node version
+      const nodeVersion = (await this.execSync("node -v")).stdout;
+      this.logger.log(`[${AdminService.name}:${this.redeploy.name}] Node version: ${nodeVersion}`);
+
       const result = exec("./deploy.sh");
       result.stdout.on("data", (data) => {
          this.logger.log(data);
@@ -105,5 +110,9 @@ export class AdminService {
             this.logger.warn("Unable to send deployment email " + e.message);
          }
       }
+   }
+
+   private async execSync(command: string) {
+      return promisify(exec)(command);
    }
 }
