@@ -241,6 +241,9 @@ export class FilesConstoller {
    ) {
       try {
          const stream = await this.fileService.toThumbnail(path, userId, width, height);
+         if (!stream) {
+            throw new Error("Unable to generate thumbnail for " + path);
+         }
 
          return new StreamableFile(stream);
       } catch (e) {
