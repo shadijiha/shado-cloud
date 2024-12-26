@@ -25,7 +25,12 @@ export const AuthUser = createParamDecorator((data: unknown, ctx: ExecutionConte
    return payload.userId;
 });
 
-export function getUserIdFromRequest(request: Request & { configService: ConfigService<EnvVariables> }): number | -1 {
+export function getUserIdFromRequest(
+   request: (Request & { configService: ConfigService<EnvVariables> }) | undefined,
+): number | -1 {
+   if (!request) {
+      return -1;
+   }
    const token = parseJwt(request.cookies[request.configService?.get("COOKIE_NAME")]);
    const payload = token == null ? { userId: -1 } : (token as CookiePayload);
    return payload.userId;

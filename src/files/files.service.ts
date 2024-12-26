@@ -15,12 +15,10 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
-import type Redis from "ioredis";
 import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
-import { User } from "src/models/user";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -325,6 +323,7 @@ export class FilesService {
             );
 
             if (this.fs.existsSync(thumbnailPath)) {
+               this.logger.debug(`[${this.toThumbnail.name}] Found cached thumbnail at ${thumbnailPath}`);
                return this.fs.createReadStream(thumbnailPath);
             }
          }
@@ -342,13 +341,22 @@ export class FilesService {
                `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`,
             );
             await readStream.toFile(thumbnailPath);
+
+            this.logger.debug(`[${this.toThumbnail.name}] Created cached thumbnail at ${thumbnailPath}`);
             return this.fs.createReadStream(thumbnailPath);
          }
+
+         if (!uploadedFile)
+            this.logger.debug(
+               `[${this.toThumbnail.name}] Unable to cache thumbnail for ${path_} because it is not indexed`,
+            );
 
          return readStream;
       } else {
          // If it is a video generate thumbnail
          const thumbnailPath = path.join(path.dirname(dir), ".videometa." + path.basename(dir) + ".png");
+
+         this.logger.debug(`[${this.toThumbnail.name}] Generating thumbnail for video at ${path_}`);
 
          // TOOD: CHange this library because it is hard to test
          // instead of returning errors it prints them to the console

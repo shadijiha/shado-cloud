@@ -10,7 +10,7 @@ export class Log extends BaseEntity {
 
    @Column()
    @ApiProperty()
-   type: "error" | "warn" | "info";
+   type: "error" | "warn" | "info" | "debug";
 
    @Column({ type: "longtext" })
    @ApiProperty()

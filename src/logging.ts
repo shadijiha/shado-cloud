@@ -57,16 +57,21 @@ export class LoggerToDb extends ConsoleLogger {
       this.logToDb(message, "warn", undefined);
    }
 
+   public debug(message: any): void {
+      super.debug(message, this.context);
+      this.logToDb(message, "debug", undefined);
+   }
+
    private async logToDb(message: any, logType: Log["type"], stack?: string): Promise<void> {
       const ctx = RequestContext.currentContext;
-      const req: Request & { configService: ConfigService<EnvVariables> } = ctx.req;
+      const req: (Request & { configService: ConfigService<EnvVariables> }) | undefined = ctx?.req;
 
       const log = new Log();
       log.message = message;
       log.controller = this.context;
-      log.route = req.originalUrl;
+      log.route = req?.originalUrl;
       log.type = logType;
-      log.userAgent = "user-agent" in req.headers ? req.headers["user-agent"] : "unknown";
+      log.userAgent = req && "user-agent" in req.headers ? req.headers["user-agent"] : "unknown";
       log.ipAddress = this.getIp() || "localhost";
       log.stack = stack?.substring(0, 512);
 

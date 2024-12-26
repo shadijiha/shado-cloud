@@ -9,6 +9,7 @@ import { getUserIdFromRequest } from "src/util";
 import { FilesService } from "./files.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
+import { LoggerToDb } from "src/logging";
 
 /**
  * This interceptor is made to cache the requests thumbnails
@@ -19,9 +20,11 @@ import { EnvVariables } from "src/config/config.validator";
 export class ThumbnailCacheInterceptor extends CacheInterceptor {
    private static readonly CachedFileTTL = 1000 * 60 * 60 * 24 * 30; // 30 days TTL for cached thumbnails
 
-   private readonly logger = new Logger(ThumbnailCacheInterceptor.name);
-
-   constructor(@Inject(CACHE_MANAGER) private readonly cache: Cache, reflector: Reflector) {
+   constructor(
+      @Inject(CACHE_MANAGER) private readonly cache: Cache,
+      reflector: Reflector,
+      private readonly logger: LoggerToDb,
+   ) {
       super(cache, reflector);
    }
 

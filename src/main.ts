@@ -27,7 +27,7 @@ async function bootstrap() {
       ],
       credentials: true,
    });
-   app.useLogger(isDev(envConfig) ? ["log", "debug", "error", "verbose", "warn"] : ["error", "warn", "log"]);
+   app.useLogger(isDev(envConfig) ? ["log", "debug", "error", "verbose", "warn"] : ["error", "warn", "log", "debug"]);
 
    const config = new DocumentBuilder()
       .setTitle("Shado Cloud")
