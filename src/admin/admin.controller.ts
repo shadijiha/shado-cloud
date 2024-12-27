@@ -59,7 +59,7 @@ export class AdminController {
       this.logger.log("This is a debug log to test logging");
    }
 
-   @Delete("delete/:id")
+   @Delete("delete")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    @ApiBody({
       schema: {
