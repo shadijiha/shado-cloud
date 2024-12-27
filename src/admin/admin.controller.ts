@@ -61,29 +61,24 @@ export class AdminController {
 
    @Delete("delete/:id")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
-   @ApiParam({
-      name: "id",
-      description: "An ID or array of ids of the logs you want to delete",
+   @ApiBody({
+      schema: {
+         type: "object",
+         properties: {
+            ids: {
+               type: "array",
+               items: {
+                  type: "string",
+               },
+               description: "An array of ids of the logs you want to delete",
+            },
+         },
+      },
    })
-   async delete(@Param("id") id: string) {
-      let ids: number[] = [];
-
-      // See if prameter is a number
-      const data = decodeURIComponent(id);
-      if (data.includes("[")) {
-         const buffer = data.replace(/\[/g, "").replace(/\]/g, "").split(",");
-         buffer.forEach((e) => {
-            const int = parseInt(e);
-            if (!isNaN(int)) ids.push(int);
-         });
-      } else {
-         const int = parseInt(data);
-         if (isNaN(int)) {
-            const message = "Invalid ID: " + data;
-            this.logger.error(message);
-            throw new HttpException(message, HttpStatus.BAD_REQUEST);
-         }
-         ids = [parseInt(data)];
+   public delete(@Body() body: { ids: string[] }) {
+      let ids: number[] = body.ids.map((id) => parseInt(id)).filter((id) => !isNaN(id));
+      if (ids.length == 0) {
+         throw new HttpException("Invalid ids", HttpStatus.BAD_REQUEST);
       }
 
       this.adminService.deleteByIds(ids).catch((e) => {
