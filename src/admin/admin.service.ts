@@ -89,7 +89,7 @@ export class AdminService {
                html: "<h2>Shado cloud nestjs app has succesfully deployed!</h2>",
             });
          } else {
-            this.logger.error(new Error(`${fullcommand} exited with code ${code}`));
+            this.logger.error(`${fullcommand} exited with code ${code}`);
             await this.sendEmail({
                subject: "Shado Cloud - Failed deployment",
                html: `
