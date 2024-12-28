@@ -17,7 +17,7 @@ describe("AdminController", () => {
    let logger: LoggerToDb;
    let configService: ConfigService;
 
-   const mockPayload = { ref: "refs/heads/nest-js-backend" }; // example payload for main branch
+   const mockPayload = { ref: "refs/heads/master" }; // example payload for main branch
    const invalidPayload = { ref: "refs/heads/other-branch" }; // example payload for non-main branch
    const validSignature = "sha256=validsignature"; // Mocked valid signature
    const invalidSignature = "sha256=invalidsignature"; // Mocked invalid signature
@@ -30,7 +30,7 @@ describe("AdminController", () => {
                provide: AdminService,
                useValue: {
                   all: jest.fn(),
-                  deleteByIds: jest.fn(async () => {}),
+                  deleteByIds: jest.fn(async () => { }),
                   redeploy: jest.fn(),
                },
             },
@@ -217,7 +217,7 @@ describe("AdminController", () => {
       });
 
       it("should return message when not a push to the main branch", async () => {
-         const branchName = "nest-js-backend";
+         const branchName = "master";
          const mockLoggerWarn = jest.spyOn(logger, "warn");
 
          // Call the redeploy method with a payload that does not match the expected branch
