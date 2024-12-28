@@ -135,6 +135,11 @@ export class EnvVariables {
    @IsOptional()
    EMAIL_APP_PASSWORD: string;
 
+   @IsOptional()
+   @Validate(DoesNotEndWithConstraint, ["/"])
+   @Validate(ValidFilePath)
+   FRONTEND_DEPLOY_PATH: string;
+
    /**
     * Database env
     */

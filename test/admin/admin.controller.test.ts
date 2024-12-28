@@ -109,40 +109,47 @@ describe("AdminController", () => {
 
    describe("delete", () => {
       it("should delete logs by ids when a single id is passed", async () => {
-         const id = "1";
+         const ids = ["1"];
          const mockDeleteResponse = undefined;
          jest.spyOn(adminService, "deleteByIds").mockResolvedValue(mockDeleteResponse);
 
-         await adminController.delete(id);
+         adminController.delete({ ids });
 
          expect(adminService.deleteByIds).toHaveBeenCalledWith([1]);
          expect(adminService.deleteByIds).toHaveBeenCalledTimes(1);
       });
 
       it("should delete logs by ids when an array of ids is passed", async () => {
-         const id = "[1,2,3]";
+         const ids = ["1", "2", "3"];
          const mockDeleteResponse = undefined;
          jest.spyOn(adminService, "deleteByIds").mockResolvedValue(mockDeleteResponse);
 
-         await adminController.delete(id);
+         adminController.delete({ ids });
 
          expect(adminService.deleteByIds).toHaveBeenCalledWith([1, 2, 3]);
          expect(adminService.deleteByIds).toHaveBeenCalledTimes(1);
       });
 
-      it("should ignore invalid integers and flatten array in input array", async () => {
-         const id = "[1, 2, ni, 4, [5, 6]]";
+      it("should ignore invalid integers in input array", async () => {
+         const ids = ["1", "2", "ni", "4", "[5, 6]"];
 
-         await adminController.delete(id);
-         expect(adminService.deleteByIds).toHaveBeenCalledWith([1, 2, 4, 5, 6]);
+         adminController.delete({ ids });
+         expect(adminService.deleteByIds).toHaveBeenCalledWith([1, 2, 4]);
       });
 
-      it("should log an error and throw if invalid ids are provided", async () => {
-         const id = "invalid";
+      it("should throw if array of invalid ids is provided", async () => {
+         const ids = ["invalid"];
          jest.spyOn(logger, "logException").mockImplementation();
 
-         await expect(adminController.delete(id)).rejects.toThrow(HttpException);
-         expect(logger.error).toHaveBeenCalled();
+         expect(() => adminController.delete({ ids })).toThrow(HttpException);
+         expect(adminService.deleteByIds).not.toHaveBeenCalled();
+      });
+
+      it("should throw if ids not being a valid array object", async () => {
+         const ids = "invalid";
+         jest.spyOn(logger, "logException").mockImplementation();
+
+         expect(() => adminController.delete({ ids: ids as unknown as string[] })).toThrow(HttpException);
          expect(adminService.deleteByIds).not.toHaveBeenCalled();
       });
    });
@@ -159,13 +166,13 @@ describe("AdminController", () => {
          configService.get = jest.fn().mockReturnValue("githubsecret"); // Return secret
 
          // Call the redeploy method
-         const result = await adminController.redeploy(mockPayload, validSignature);
+         const result = await adminController.redeploy("backend", mockPayload, validSignature);
 
          // Assertions
          expect(hmacMock).toHaveBeenCalledWith("sha256", "githubsecret");
          expect(redeployMock).toHaveBeenCalled();
          expect(result.message).toBe("Deployment triggered successfully");
-         expect(logger.log).toHaveBeenCalledWith("Received webhook payload");
+         expect(logger.log).toHaveBeenCalledWith("Received backend webhook payload");
          expect(logger.log).toHaveBeenCalledWith("Starting redeployment...");
       });
 
@@ -179,7 +186,7 @@ describe("AdminController", () => {
 
          try {
             // Call the redeploy method with an invalid signature
-            await adminController.redeploy(mockPayload, invalidSignature);
+            await adminController.redeploy("backend", mockPayload, invalidSignature);
          } catch (error) {
             // Assertions
             expect(error).toBeInstanceOf(UnauthorizedException);
@@ -201,7 +208,7 @@ describe("AdminController", () => {
          configService.get = jest.fn().mockReturnValue("githubsecret"); // Return secret
 
          // Call the redeploy method
-         const result = await adminController.redeploy(mockPayload, validSignature);
+         const result = await adminController.redeploy("backend", mockPayload, validSignature);
 
          // Assertions
          expect(result.message).toBe(errorMessage);
@@ -214,11 +221,11 @@ describe("AdminController", () => {
          const mockLoggerWarn = jest.spyOn(logger, "warn");
 
          // Call the redeploy method with a payload that does not match the expected branch
-         const result = await adminController.redeploy(invalidPayload, validSignature);
+         const result = await adminController.redeploy("backend", invalidPayload, validSignature);
 
          // Assertions
-         expect(result.message).toBe("Not a push to main branch, ignoring");
-         expect(mockLoggerWarn).toHaveBeenCalledWith("Ignoring push to non-main branch");
+         expect(result.message).toBe(`Not a push to ${branchName} branch, ignoring`);
+         expect(mockLoggerWarn).toHaveBeenCalledWith(`Ignoring push to non-${branchName} branch`);
          expect(adminService.redeploy).not.toHaveBeenCalled(); // Ensure redeploy is not called
       });
    });

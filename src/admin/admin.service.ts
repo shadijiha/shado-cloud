@@ -47,7 +47,7 @@ export class AdminService {
       await this.logRepo.delete(ids);
    }
 
-   public async redeploy() {
+   public async redeploy(type: "backend" | "frontend") {
       // We can't have a promise that resolves / rejects because github webhooks have a 10 second timeout
       // there for we'll only acknowladge to github webhooks. If there's an error, it will be logged only
       // Github won't know about it
@@ -60,9 +60,20 @@ export class AdminService {
 
       // Check and log the node version
       const nodeVersion = (await this.execSync("node -v")).stdout;
-      this.logger.log(`[${AdminService.name}:${this.redeploy.name}] Node version: ${nodeVersion}`);
+      this.logger.log(`[${AdminService.name}:${this.redeploy.name}(type=${type})] Node version: ${nodeVersion}`);
 
-      const result = exec("./deploy.sh");
+      // Check if FRONTEND_DEPLOY_PATH is set
+      if (type == "frontend" && !this.config.get("FRONTEND_DEPLOY_PATH")) {
+         this.logger.error(
+            `[${AdminService.name}:${this.redeploy.name}(type=${type})] attempt to redeploy while FRONTEND_DEPLOY_PATH is not set`,
+         );
+         return;
+      }
+
+      const dirpath = type == "backend" ? __dirname : this.config.get<string>("FRONTEND_DEPLOY_PATH");
+      const fullcommand = `${dirpath}/deploy.sh`;
+      const result = exec(fullcommand);
+
       result.stdout.on("data", (data) => {
          this.logger.log(data);
       });
@@ -72,19 +83,19 @@ export class AdminService {
 
       const exitFn = async (code) => {
          if (code == 0) {
-            this.logger.log("./deploy.sh exited successfully");
+            this.logger.log(`${fullcommand} exited successfully`);
             await this.sendEmail({
                subject: "Shado Cloud - Successful deployment",
                html: "<h2>Shado cloud nestjs app has succesfully deployed!</h2>",
             });
          } else {
-            this.logger.error(new Error(`./deploy.sh exited with code ${code}`));
+            this.logger.error(`${fullcommand} exited with code ${code}`);
             await this.sendEmail({
                subject: "Shado Cloud - Failed deployment",
                html: `
                <h2>Shado cloud nestjs app has failed</h2>
                <code>
-                  ./deploy.sh exited with code ${code}
+                  ${fullcommand} exited with code ${code}
                </code>
                `,
             });
