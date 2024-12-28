@@ -13,6 +13,7 @@ import {
    Headers,
    UnauthorizedException,
    Req,
+   ParseArrayPipe,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -76,6 +77,10 @@ export class AdminController {
       },
    })
    public delete(@Body() body: { ids: string[] }) {
+      if (!Array.isArray(body.ids)) {
+         throw new HttpException("The 'ids' field must be a non-empty array.", HttpStatus.BAD_REQUEST);
+      }
+
       let ids: number[] = body.ids.map((id) => parseInt(id)).filter((id) => !isNaN(id));
       if (ids.length == 0) {
          throw new HttpException("Invalid ids", HttpStatus.BAD_REQUEST);
@@ -87,19 +92,30 @@ export class AdminController {
    }
 
    // Exlude from admin gaurds
-   @Post("redeploy")
+   @Post("redeploy/:type")
    @HttpCode(HttpStatus.OK)
-   @ApiBody({})
-   async redeploy(@Body() payload: any, @Headers("x-hub-signature-256") signature: string) {
-      // Validate payload (optional: check for GitHub signature for security)
-      const branchName = "nest-js-backend";
-      this.logger.log("Received webhook payload");
+   @ApiParam({
+      name: "type",
+      description: "Type of deployment to trigger",
+      enum: ["backend", "frontend"],
+   })
+   async redeploy(
+      @Param("type") type: string,
+      @Body() payload: any,
+      @Headers("x-hub-signature-256") signature: string,
+   ) {
+      if (type != "backend" && type != "frontend") {
+         throw new HttpException("Invalid deployment type", HttpStatus.BAD_REQUEST);
+      }
+
+      const branchName = type == "backend" ? "nest-js-backend" : "master";
+      this.logger.log("Received backend webhook payload");
 
       try {
          // Check that the push is from the correct branch (optional)
          if (payload.ref !== `refs/heads/${branchName}`) {
-            this.logger.warn("Ignoring push to non-main branch");
-            return { message: "Not a push to main branch, ignoring" };
+            this.logger.warn(`Ignoring push to non-${branchName} branch`);
+            return { message: `Not a push to ${branchName} branch, ignoring` };
          }
 
          // Verify GitHub signature
@@ -116,7 +132,7 @@ export class AdminController {
 
          // Run deployment steps
          this.logger.log("Starting redeployment...");
-         await this.adminService.redeploy();
+         await this.adminService.redeploy(type);
 
          return { message: "Deployment triggered successfully" };
       } catch (error) {

@@ -110,7 +110,7 @@ describe("AdminService", () => {
          service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
-         await service.redeploy();
+         await service.redeploy("backend");
 
          // Verify that the start email is sent
          expect(sendMailMock).toHaveBeenCalledWith(
@@ -135,7 +135,7 @@ describe("AdminService", () => {
          service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
-         await service.redeploy();
+         await service.redeploy("backend");
 
          // Verify that the success email is sent
          expect(sendMailMock).toHaveBeenCalledWith(
@@ -160,7 +160,7 @@ describe("AdminService", () => {
          service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
-         await service.redeploy();
+         await service.redeploy("backend");
 
          // Verify that the failure email is sent
          expect(sendMailMock).toHaveBeenCalledWith(
@@ -185,7 +185,7 @@ describe("AdminService", () => {
          service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
-         await service.redeploy();
+         await service.redeploy("backend");
 
          // Verify the logger.log was called for successful deployment
          expect(logger.log).toHaveBeenCalledWith("./deploy.sh exited successfully");
@@ -205,7 +205,7 @@ describe("AdminService", () => {
          service.execSync = jest.fn().mockResolvedValue({ stdout: "v23.5.0" });
 
          // Call the redeploy function
-         await service.redeploy();
+         await service.redeploy("backend");
 
          // Verify the logger.error was called for failed deployment
          expect(logger.error).toHaveBeenCalledWith(new Error("./deploy.sh exited with code 1"));
