@@ -70,7 +70,7 @@ export class AdminService {
          return;
       }
 
-      const dirpath = type == "backend" ? __dirname : this.config.get<string>("FRONTEND_DEPLOY_PATH");
+      const dirpath = type == "backend" ? "." : this.config.get<string>("FRONTEND_DEPLOY_PATH");
       const fullcommand = `${dirpath}/deploy.sh`;
       const result = exec(fullcommand);
 
