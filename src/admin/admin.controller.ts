@@ -40,7 +40,7 @@ export class AdminController {
       private readonly metrics: AppMetricsService,
       @Inject() private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
-   ) {}
+   ) { }
 
    @Get("logs")
    @ApiResponse({ type: [Log] })
@@ -108,7 +108,7 @@ export class AdminController {
          throw new HttpException("Invalid deployment type", HttpStatus.BAD_REQUEST);
       }
 
-      const branchName = type == "backend" ? "nest-js-backend" : "master";
+      const branchName = "master";
       this.logger.log("Received backend webhook payload");
 
       try {
