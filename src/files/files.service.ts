@@ -215,6 +215,7 @@ export class FilesService {
       });
 
       if (file) {
+         this.logger.debug(`[::${this.rename.name}] Renaming file in DB from ${relative} to ${relativeNew}`);
          file.absolute_path = relativeNew;
          this.uploadedFileRepo.save(file);
       } else {
