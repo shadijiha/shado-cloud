@@ -220,6 +220,10 @@ export class FilesService {
          this.uploadedFileRepo.save(file);
       } else {
          // Else if it is not in DB then insert it
+         this.logger.debug(
+            `[::${this.rename.name}] File found found in DB. Inserting it from ${relative} to ${relativeNew}`,
+         );
+
          const mime = FilesService.detectFile(newDir);
          const user = await this.userService.getById(userId);
 
