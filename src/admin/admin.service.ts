@@ -54,8 +54,8 @@ export class AdminService {
 
       // Send email for deployment start
       this.sendEmail({
-         subject: "Shado Cloud - deployment start",
-         text: "Deployment was triggered for Shado Cloud nestjs app",
+         subject: `Shado Cloud - ${type} deployment start`,
+         text: `Deployment was triggered for Shado Cloud ${type == "backend" ? "NestJS" : "React"} app`,
       });
 
       // Check and log the node version
@@ -70,9 +70,11 @@ export class AdminService {
          return;
       }
 
-      const dirpath = type == "backend" ? "." : this.config.get<string>("FRONTEND_DEPLOY_PATH");
-      const fullcommand = `${dirpath}/deploy.sh`;
-      const result = exec(fullcommand);
+      const fullcommand = `./deploy.sh`;
+      const result = exec(
+         fullcommand,
+         type == "backend" ? undefined : { cwd: this.config.get<string>("FRONTEND_DEPLOY_PATH") },
+      );
 
       result.stdout.on("data", (data) => {
          this.logger.log(data);
@@ -91,7 +93,7 @@ export class AdminService {
          } else {
             this.logger.error(`${fullcommand} exited with code ${code}`);
             await this.sendEmail({
-               subject: "Shado Cloud - Failed deployment",
+               subject: `Shado Cloud ${type} - Failed deployment`,
                html: `
                <h2>Shado cloud nestjs app has failed</h2>
                <code>

@@ -40,7 +40,7 @@ export class AdminController {
       private readonly metrics: AppMetricsService,
       @Inject() private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
-   ) { }
+   ) {}
 
    @Get("logs")
    @ApiResponse({ type: [Log] })

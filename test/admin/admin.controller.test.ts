@@ -30,7 +30,7 @@ describe("AdminController", () => {
                provide: AdminService,
                useValue: {
                   all: jest.fn(),
-                  deleteByIds: jest.fn(async () => { }),
+                  deleteByIds: jest.fn(async () => {}),
                   redeploy: jest.fn(),
                },
             },

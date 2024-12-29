@@ -115,8 +115,8 @@ describe("AdminService", () => {
          // Verify that the start email is sent
          expect(sendMailMock).toHaveBeenCalledWith(
             expect.objectContaining({
-               subject: "Shado Cloud - deployment start",
-               text: "Deployment was triggered for Shado Cloud nestjs app",
+               subject: "Shado Cloud - backend deployment start",
+               text: "Deployment was triggered for Shado Cloud NestJS app",
             }),
          );
       });
@@ -165,7 +165,7 @@ describe("AdminService", () => {
          // Verify that the failure email is sent
          expect(sendMailMock).toHaveBeenCalledWith(
             expect.objectContaining({
-               subject: "Shado Cloud - Failed deployment",
+               subject: "Shado Cloud backend - Failed deployment",
                html: expect.stringContaining("Shado cloud nestjs app has failed"),
             }),
          );
