@@ -12,8 +12,9 @@ import {
    UseGuards,
    Headers,
    UnauthorizedException,
-   Req,
-   ParseArrayPipe,
+   ParseEnumPipe,
+   Patch,
+   UsePipes,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -25,7 +26,10 @@ import { AppMetricsService } from "./app-metrics.service";
 import crypto from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
-import { Request } from "express";
+import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
+import { FeatureFlagService } from "./feature-flag.service";
+import { CreateFeatureFlagRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
+import { ValidationPipeline } from "src/auth/ValidationPipeline";
 
 /**
  * Each function of this controller needs to be decorated with
@@ -38,8 +42,9 @@ export class AdminController {
    constructor(
       private readonly adminService: AdminService,
       private readonly metrics: AppMetricsService,
-      @Inject() private readonly logger: LoggerToDb,
+      private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
+      private readonly featureFlagService: FeatureFlagService,
    ) {}
 
    @Get("logs")
@@ -148,13 +153,134 @@ export class AdminController {
       description: "Redis info section name",
    })
    @UseGuards(AuthGuard("jwt"), AdminGuard)
-   public async redisInfo(@Param("section") section: string | undefined) {
-      return await this.metrics.redisInfo(section);
+   public redisInfo(@Param("section") section: string | undefined) {
+      return this.metrics.redisInfo(section);
    }
 
    @Get("redis/dump")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
-   public async redisDumb() {
-      return await this.metrics.dumpRedisCache();
+   public redisDumb() {
+      return this.metrics.dumpRedisCache();
+   }
+
+   /**
+    * Feature flag endpoints
+    */
+   @Get("featureFlags")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getFeatureFlags() {
+      return this.featureFlagService.getFeatureFlags();
+   }
+
+   @Get("featureFlags/:namespace")
+   @ApiParam({
+      name: "namespace",
+      description: "Feature flag namespace",
+      enum: FeatureFlagNamespace,
+   })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getFeatureFlagsByNamespace(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+   ) {
+      return this.featureFlagService.getFeatureFlags(namespace);
+   }
+
+   @Get("featureFlag/:namespace/:key")
+   @ApiParam({
+      name: "namespace",
+      description: "Feature flag namespace",
+      enum: FeatureFlagNamespace,
+   })
+   @ApiParam({
+      name: "key",
+      description: "Feature flag key",
+   })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getFeatureFlag(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+      @Param("key") key: string,
+   ) {
+      return this.featureFlagService.getFeatureFlag(namespace, key);
+   }
+
+   @Patch("featureFlag/:namespace/:key/enable")
+   @ApiParam({
+      name: "namespace",
+      description: "Feature flag namespace",
+      enum: FeatureFlagNamespace,
+   })
+   @ApiParam({
+      name: "key",
+      description: "Feature flag key",
+   })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public enableFeatureFlag(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+      @Param("key") key: string,
+   ) {
+      return this.featureFlagService.enableFeatureFlag(namespace, key);
+   }
+
+   @Patch("featureFlag/:namespace/:key/disable")
+   @ApiParam({
+      name: "namespace",
+      description: "Feature flag namespace",
+      enum: FeatureFlagNamespace,
+   })
+   @ApiParam({
+      name: "key",
+      description: "Feature flag key",
+   })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public disableFeatureFlag(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+      @Param("key") key: string,
+   ) {
+      return this.featureFlagService.disableFeatureFlag(namespace, key);
+   }
+
+   @Post("featureFlag")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UsePipes(new ValidationPipeline())
+   public createFeatureFlag(@Body() body: CreateFeatureFlagRequest) {
+      return this.featureFlagService.createFeatureFlag(body);
+   }
+
+   @Delete("featureFlag/:namespace/:key")
+   @ApiParam({
+      name: "namespace",
+      description: "Feature flag namespace",
+      enum: FeatureFlagNamespace,
+   })
+   @ApiParam({
+      name: "key",
+      description: "Feature flag key",
+   })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public deleteFeatureFlag(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+      @Param("key") key: string,
+   ) {
+      return this.featureFlagService.deleteFeatureFlag(namespace, key);
+   }
+
+   @Patch("featureFlag/:namespace/:key")
+   @ApiParam({
+      name: "namespace",
+      description: "Feature flag namespace",
+      enum: FeatureFlagNamespace,
+   })
+   @ApiParam({
+      name: "key",
+      description: "Feature flag key",
+   })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UsePipes(new ValidationPipeline())
+   public updateFeatureFlag(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+      @Param("key") key: string,
+      @Body() body: UpdateFeatureFlagRequest,
+   ) {
+      return this.featureFlagService.updateFeatureFlag(namespace, key, body);
    }
 }

@@ -16,6 +16,8 @@ import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { LoggerToDb } from "src/logging";
 import type Redis from "ioredis";
+import { FeatureFlagService } from "src/admin/feature-flag.service";
+import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 
 /**
  * This interceptor is made to cache the requests thumbnails
@@ -26,7 +28,11 @@ import type Redis from "ioredis";
 export class ThumbnailCacheInterceptor implements NestInterceptor {
    private static readonly CachedFileTTLSeconds = 60 * 60 * 24 * 30; // 30 days TTL for cached thumbnails
 
-   constructor(@Inject(REDIS_CACHE) private readonly cache: Redis, private readonly logger: LoggerToDb) {}
+   constructor(
+      @Inject(REDIS_CACHE) private readonly cache: Redis,
+      private readonly logger: LoggerToDb,
+      private readonly featureFlagService: FeatureFlagService,
+   ) {}
 
    // TODOOOO: We might run into an issue where since only UploadedFile tumbnails in DB are invalidated with
    // a file is changed/delete and since here we are caching ALL files regardless of if they are in UploadedFile table
@@ -36,25 +42,27 @@ export class ThumbnailCacheInterceptor implements NestInterceptor {
    public async intercept(context: ExecutionContext, next: CallHandler<any>): Promise<Observable<any>> {
       const request: Request & { configService: ConfigService<EnvVariables> } = context.switchToHttp().getRequest();
       const response: Response = context.switchToHttp().getResponse();
-      const cacheKey = this.getCacheKeyFromReq(request);
 
       // Check if the thumbnail is cached
-      const cachedThumbnail = await this.cache.getBuffer(cacheKey);
-      const cachedMime = await this.cache.get(`${cacheKey}_MIME`);
-      if (cachedThumbnail && cachedMime) {
-         this.logger.debug(`Cache hit for ${cacheKey} ${cachedMime}`);
+      const cacheKey = this.getCacheKeyFromReq(request);
+      if (!(await this.isThumbnailRedisCachingDisabled())) {
+         const cachedThumbnail = await this.cache.getBuffer(cacheKey);
+         const cachedMime = await this.cache.get(`${cacheKey}_MIME`);
+         if (cachedThumbnail && cachedMime) {
+            this.logger.debug(`Cache hit for ${cacheKey} ${cachedMime}`);
 
-         // Send the cached thumbnail
-         response.setHeader("Content-Type", cachedMime); // Adjust MIME type
+            // Send the cached thumbnail
+            response.setHeader("Content-Type", cachedMime); // Adjust MIME type
 
-         return of(new StreamableFile(cachedThumbnail)); // Short-circuit the request to avoid further processing
+            return of(new StreamableFile(cachedThumbnail)); // Short-circuit the request to avoid further processing
+         }
       }
 
       // Proceed with the original request and cache the result afterward
       return next.handle().pipe(
          switchMap(async (data) => {
             // If the data is a stream, intercept the stream and cache it
-            if (data instanceof StreamableFile) {
+            if (!(await this.isThumbnailRedisCachingDisabled()) && data instanceof StreamableFile) {
                this.logger.debug("Received stream data for thumbnail");
 
                const fileBuffer = await this.streamToBuffer(data);
@@ -129,5 +137,18 @@ export class ThumbnailCacheInterceptor implements NestInterceptor {
             reject(err); // Reject with error if stream fails
          });
       });
+   }
+
+   /**
+    * Check if the feature flag for thumbnail caching is enabled
+    * if it is not enabled, we will not cache the thumbnails
+    * If the feature flag is not found, we will default to false
+    * @returns
+    */
+   private async isThumbnailRedisCachingDisabled(): Promise<boolean> {
+      return this.featureFlagService.isFeatureFlagEnabled(
+         FeatureFlagNamespace.Files,
+         "disable_thumbnail_interceptor_redis_cache",
+      );
    }
 }
