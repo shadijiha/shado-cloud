@@ -7,6 +7,7 @@ import { LoggerToDb } from "src/logging";
 import { ConfigService } from "@nestjs/config";
 import { exec } from "child_process";
 import nodemailer from "nodemailer";
+import { FeatureFlagService } from "src/admin/feature-flag.service";
 
 jest.mock("child_process", () => ({
    exec: jest.fn(),
@@ -47,6 +48,12 @@ describe("AdminService", () => {
                      if (key === "EMAIL_APP_PASSWORD") return "app-password";
                      return undefined;
                   }),
+               },
+            },
+            {
+               provide: FeatureFlagService,
+               useValue: {
+                  isFeatureFlagDisabled: jest.fn(),
                },
             },
          ],

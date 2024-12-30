@@ -8,6 +8,8 @@ import nodemailer from "nodemailer";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { promisify } from "util";
+import { FeatureFlagService } from "./feature-flag.service";
+import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 
 @Injectable()
 export class AdminService {
@@ -17,6 +19,7 @@ export class AdminService {
       @InjectRepository(Log) private readonly logRepo: Repository<Log>,
       @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly config: ConfigService<EnvVariables>,
+      private readonly featureFlagService: FeatureFlagService,
    ) {
       const email = this.config.get<string | undefined>("EMAIL_USER");
       const password = this.config.get<string | undefined>("EMAIL_APP_PASSWORD");
@@ -37,12 +40,19 @@ export class AdminService {
       }
    }
 
+   /**
+    * @returns Returns all logs in the database
+    */
    public async all() {
       return (await this.logRepo.find({ relations: ["user"] })).sort((a, b) => {
          return b.created_at.getTime() - a.created_at.getTime();
       });
    }
 
+   /**
+    * Deletes Logs by their ids
+    * @param ids
+    */
    public async deleteByIds(ids: number[]) {
       await this.logRepo.delete(ids);
    }
@@ -51,6 +61,14 @@ export class AdminService {
       // We can't have a promise that resolves / rejects because github webhooks have a 10 second timeout
       // there for we'll only acknowladge to github webhooks. If there's an error, it will be logged only
       // Github won't know about it
+
+      // Check if the feature flag is enabled
+      if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, `auto_${type}_redeploy`)) {
+         this.logger.warn(
+            `[${AdminService.name}:${this.redeploy.name}(type=${type})] attempt to redeploy while feature flag is disabled`,
+         );
+         return;
+      }
 
       // Send email for deployment start
       this.sendEmail({

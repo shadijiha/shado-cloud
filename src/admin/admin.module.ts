@@ -5,11 +5,13 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { Log } from "./../models/log";
 import { User } from "./../models/user";
 import { AppMetricsService } from "./app-metrics.service";
+import { FeatureFlagService } from "./feature-flag.service";
+import { FeatureFlag } from "src/models/admin/featureFlag";
 
 @Module({
    controllers: [AdminController],
-   imports: [TypeOrmModule.forFeature([Log, User])],
-   providers: [AdminService, AppMetricsService],
+   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag])],
+   providers: [AdminService, AppMetricsService, FeatureFlagService],
    exports: [AdminService],
 })
 export class AdminModule {}

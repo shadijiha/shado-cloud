@@ -10,6 +10,7 @@ import { LoggerToDb } from "src/logging";
 import { type Log } from "src/models/log";
 import { User } from "src/models/user";
 import crypto from "crypto";
+import { FeatureFlagService } from "src/admin/feature-flag.service";
 
 describe("AdminController", () => {
    let adminController: AdminController;
@@ -64,6 +65,10 @@ describe("AdminController", () => {
                useValue: {
                   get: jest.fn().mockReturnValue(""),
                },
+            },
+            {
+               provide: FeatureFlagService,
+               useValue: {},
             },
          ],
       }).compile();

@@ -17,6 +17,7 @@ import { AbstractFileSystem } from "src/file-system/abstract-file-system.interfa
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { REDIS_CACHE } from "src/util";
+import { FeatureFlagService } from "src/admin/feature-flag.service";
 
 // Mocking external dependencies
 jest.mock("sharp", () => {
@@ -120,6 +121,12 @@ describe("FilesService", () => {
                   get: jest
                      .fn()
                      .mockImplementation((key: string) => (key == "CLOUD_DIR" ? "/testing_cloud" : undefined)),
+               },
+            },
+            {
+               provide: FeatureFlagService,
+               useValue: {
+                  isFeatureFlagDisabled: jest.fn().mockResolvedValue(true),
                },
             },
          ],

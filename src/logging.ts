@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { ConsoleLogger, Injectable } from "@nestjs/common";
+import { ConsoleLogger, Inject, Injectable } from "@nestjs/common";
 import { Log } from "./models/log";
 import { User } from "./models/user";
 import { RequestContext } from "nestjs-request-context";
@@ -10,10 +10,16 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "./config/config.validator";
+import { FeatureFlagNamespace } from "./models/admin/featureFlag";
+import { FeatureFlagService } from "./admin/feature-flag.service";
 
 @Injectable()
 export class LoggerToDb extends ConsoleLogger {
-   constructor(context: string, @InjectRepository(Log) private readonly logRepo: Repository<Log>) {
+   constructor(
+      context: string,
+      @InjectRepository(Log) private readonly logRepo: Repository<Log>,
+      @Inject() private readonly featureFlagService: FeatureFlagService,
+   ) {
       super(context);
    }
 
@@ -57,7 +63,10 @@ export class LoggerToDb extends ConsoleLogger {
       this.logToDb(message, "warn", undefined);
    }
 
-   public debug(message: any): void {
+   public async debug(message: any) {
+      if (await this.loggingDisabled()) {
+         return;
+      }
       super.debug(message, this.context);
       this.logToDb(message, "debug", undefined);
    }
@@ -82,6 +91,25 @@ export class LoggerToDb extends ConsoleLogger {
       }
 
       this.logRepo.save(log);
+   }
+
+   private async loggingDisabled(): Promise<boolean> {
+      // Check if logging is enabled for this context and this log level
+      const featureFlag = await this.featureFlagService.getFeatureFlag(
+         FeatureFlagNamespace.Log,
+         "disabled_log_context",
+      );
+      if (featureFlag && featureFlag.enabled) {
+         try {
+            if (JSON.parse(featureFlag.payload).includes(this.context)) {
+               return true;
+            }
+         } catch (e) {
+            super.error(`Error parsing feature flag payload: ${(e as Error).message}`);
+            return false;
+         }
+      }
+      return false;
    }
 
    private getIp(): string {

@@ -19,6 +19,8 @@ import { AbstractFileSystem } from "src/file-system/abstract-file-system.interfa
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import type Redis from "ioredis";
+import { FeatureFlagService } from "src/admin/feature-flag.service";
+import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -38,6 +40,7 @@ export class FilesService {
       @Inject(REDIS_CACHE) private readonly cache: Redis,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
+      @Inject() private readonly featureFlagService: FeatureFlagService,
    ) {
       this.dirService = new DirectoriesService(
          userService,
@@ -321,7 +324,13 @@ export class FilesService {
             await this.createMetaFolderIfNotExists(userId),
             FilesService.THUMBNAILS_FOLDER_NAME,
          );
-         if (uploadedFile) {
+         if (
+            (await this.featureFlagService.isFeatureFlagDisabled(
+               FeatureFlagNamespace.Files,
+               "disable_thumbnail_caching_disk",
+            )) &&
+            uploadedFile
+         ) {
             const thumbnailPath = path.join(
                thumbnailFolder,
                `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`,
@@ -340,7 +349,14 @@ export class FilesService {
 
          // cache thumbnail for next time and return it
          // Don't do it if we are inside the thumbnail folder (to avoid recursive thumbnail generation)
-         if (uploadedFile && !path.normalize(dir).includes(path.normalize(FilesService.THUMBNAILS_FOLDER_NAME))) {
+         if (
+            (await this.featureFlagService.isFeatureFlagDisabled(
+               FeatureFlagNamespace.Files,
+               "disable_thumbnail_caching_disk",
+            )) &&
+            uploadedFile &&
+            !path.normalize(dir).includes(path.normalize(FilesService.THUMBNAILS_FOLDER_NAME))
+         ) {
             const thumbnailPath = path.join(
                thumbnailFolder,
                `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`,
@@ -355,6 +371,8 @@ export class FilesService {
             this.logger.debug(
                `[${this.toThumbnail.name}] Unable to cache thumbnail for ${path_} because it is not indexed`,
             );
+
+         this.logger.debug(`[${this.toThumbnail.name}] Returning computed resized thumbnail for ${path_}`);
 
          return readStream;
       } else if (fileMime.includes("video")) {

@@ -21,16 +21,23 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables, validate } from "./config/config.validator";
 import { isDev, REDIS_CACHE } from "./util";
 import Redis from "ioredis";
+import { FeatureFlagService } from "./admin/feature-flag.service";
+import { FeatureFlag } from "./models/admin/featureFlag";
 
 @Global()
 @Module({
+   imports: [TypeOrmModule.forFeature([FeatureFlag])],
    providers: [
       {
          provide: LoggerToDb,
          scope: Scope.TRANSIENT,
-         inject: [DataSource, INQUIRER],
-         useFactory: (dataSource: DataSource, parentClass: object) => {
-            return new LoggerToDb(parentClass?.constructor.name ?? "UnknownSource", dataSource.getRepository(Log));
+         inject: [DataSource, INQUIRER, FeatureFlagService],
+         useFactory: (dataSource: DataSource, parentClass: object, featureFlagService: FeatureFlagService) => {
+            return new LoggerToDb(
+               parentClass?.constructor.name ?? "UnknownSource",
+               dataSource.getRepository(Log),
+               featureFlagService,
+            );
          },
       },
       {
@@ -49,8 +56,9 @@ import Redis from "ioredis";
          scope: Scope.DEFAULT,
          inject: [ConfigService],
       },
+      FeatureFlagService,
    ],
-   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE],
+   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService],
 })
 export class GlobalUtilityModule {}
 
