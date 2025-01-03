@@ -180,10 +180,11 @@ export class AdminService {
       const result = await this.dataSource
          .createQueryBuilder()
          .select()
-         .from(tableName, "table")
+         .from(tableName, "")
+         .where("1=1")
          .orderBy(order_column, order_by)
          .limit(limit)
-         .getMany();
+         .getRawMany();
 
       // If table is user remove password
       if (this.entityManager.getRepository(User).metadata.tableName == tableName) {
