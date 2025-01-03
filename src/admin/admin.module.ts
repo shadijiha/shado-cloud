@@ -7,6 +7,7 @@ import { User } from "./../models/user";
 import { AppMetricsService } from "./app-metrics.service";
 import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlag } from "src/models/admin/featureFlag";
+import { EncryptedPassword } from "src/models/EncryptedPassword";
 
 @Module({
    controllers: [AdminController],

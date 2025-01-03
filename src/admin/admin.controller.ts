@@ -28,7 +28,7 @@ import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { FeatureFlagService } from "./feature-flag.service";
-import { CreateFeatureFlagRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
+import { CreateFeatureFlagRequest, DatabaseGetTableRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
 import { ValidationPipeline } from "src/auth/ValidationPipeline";
 
 /**
@@ -282,5 +282,25 @@ export class AdminController {
       @Body() body: UpdateFeatureFlagRequest,
    ) {
       return this.featureFlagService.updateFeatureFlag(namespace, key, body);
+   }
+
+   /**
+    * Database endpoints
+    */
+   @Get("database/db/tables")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getTables() {
+      return this.adminService.getTables();
+   }
+
+   @Post("database/db/tables/:table/select")
+   @ApiParam({
+      name: "table",
+      description: "Table name",
+   })
+   @UsePipes(new ValidationPipeline())
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getTable(@Param("table") table: string, @Body() body: DatabaseGetTableRequest) {
+      return this.adminService.getTable(table, body);
    }
 }

@@ -1,15 +1,18 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
+import { InjectDataSource, InjectEntityManager, InjectRepository } from "@nestjs/typeorm";
 import { exec } from "child_process";
 import { LoggerToDb } from "../logging";
 import { Log } from "../models/log";
-import { Repository } from "typeorm";
+import { DataSource, EntityManager, Repository } from "typeorm";
 import nodemailer from "nodemailer";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { promisify } from "util";
 import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
+import { DatabaseGetTableRequest } from "./adminApiTypes";
+import { EncryptedPassword } from "src/models/EncryptedPassword";
+import { User } from "src/models/user";
 
 @Injectable()
 export class AdminService {
@@ -20,6 +23,8 @@ export class AdminService {
       @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
+      @InjectDataSource() private readonly dataSource: DataSource,
+      @InjectEntityManager() private readonly entityManager: EntityManager,
    ) {
       const email = this.config.get<string | undefined>("EMAIL_USER");
       const password = this.config.get<string | undefined>("EMAIL_APP_PASSWORD");
@@ -125,6 +130,63 @@ export class AdminService {
       result.on("close", exitFn);
       result.on("exit", exitFn);
       result.on("disconnect", exitFn);
+   }
+
+   /**
+    * Database admin methods
+    */
+   public async getTables() {
+      if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, "database_api_access")) {
+         throw new Error("Database API access is disabled");
+      }
+
+      const tables = this.dataSource.entityMetadatas.map((meta) => meta.tableName);
+      return tables.map((table) => {
+         return {
+            table,
+            columns: this.entityManager.getRepository(table).metadata.columns.map((col) => col.propertyName),
+         };
+      });
+   }
+
+   public async getTable(tableName: string, request: DatabaseGetTableRequest) {
+      const { limit, order_by } = request;
+      const tables = await this.getTables(); // <-- If feature flag is disabled this will throw an error
+      if (!tables.find((entry) => entry.table == tableName)) {
+         throw new Error(`Table ${tableName} does not exist`);
+      }
+
+      // Verify that the table is not a password table
+      if (tableName == this.entityManager.getRepository(EncryptedPassword).metadata.tableName) {
+         throw new Error("Table is encrypted");
+      }
+
+      // Verify limit
+      if ((!Number.isNaN(parseInt(limit as any)) && limit < 1) || limit > 500) {
+         throw new Error("Limit must be between 1 and 500");
+      }
+
+      // Verify order_by
+      if (!DatabaseGetTableRequest.OrderyByOptions.includes(order_by)) {
+         throw new Error("order_by must be either " + DatabaseGetTableRequest.OrderyByOptions.join(" or "));
+      }
+
+      // Verify order_column
+      const columns = tables.find((entry) => entry.table == tableName)?.columns;
+      if (request.order_column && !columns.includes(request.order_column)) {
+         throw new Error(`Column ${request.order_column} does not exist in table ${tableName}`);
+      }
+
+      const result = await this.dataSource.query(`SELECT * FROM ${tableName} ORDER BY id ${order_by} LIMIT ${limit}`);
+
+      // If table is user remove password
+      if (this.entityManager.getRepository(User).metadata.tableName == tableName) {
+         for (const row of result) {
+            row.password = "<hidden>";
+         }
+      }
+
+      return result;
    }
 
    private async sendEmail(options: { subject: string; text?: string; html?: string }) {

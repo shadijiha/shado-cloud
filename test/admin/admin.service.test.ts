@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 import { AdminService } from "src/admin/admin.service";
-import { getRepositoryToken } from "@nestjs/typeorm";
+import { getDataSourceToken, getEntityManagerToken, getRepositoryToken } from "@nestjs/typeorm";
 import { Log } from "src/models/log";
 import { type Repository } from "typeorm";
 import { LoggerToDb } from "src/logging";
@@ -54,6 +54,18 @@ describe("AdminService", () => {
                provide: FeatureFlagService,
                useValue: {
                   isFeatureFlagDisabled: jest.fn(),
+               },
+            },
+            {
+               provide: getDataSourceToken(),
+               useValue: {
+                  query: jest.fn(),
+               },
+            },
+            {
+               provide: getEntityManagerToken(),
+               useValue: {
+                  query: jest.fn(),
                },
             },
          ],

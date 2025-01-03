@@ -1,7 +1,10 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsEnum, IsNotEmpty, IsOptional } from "class-validator";
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, Max, Min } from "class-validator";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 
+/**
+ * Feature flag endpoints DTO
+ */
 export class CreateFeatureFlagRequest {
    @ApiProperty({ enum: FeatureFlagNamespace })
    @IsNotEmpty()
@@ -29,4 +32,28 @@ export class UpdateFeatureFlagRequest {
    @ApiProperty()
    @IsOptional()
    description?: string;
+}
+
+/**
+ * Database endpoints DTO
+ */
+export class DatabaseGetTableRequest {
+   public static readonly OrderyByOptions = ["ASC", "DESC"] as const;
+
+   @ApiProperty({ description: "The limit of the number of rows to return" })
+   @IsNumber()
+   @Max(500)
+   @Min(1)
+   limit: number;
+
+   @ApiProperty({
+      enum: DatabaseGetTableRequest.OrderyByOptions,
+      description: "The order to return the rows in",
+   })
+   @IsEnum(DatabaseGetTableRequest.OrderyByOptions)
+   order_by: (typeof DatabaseGetTableRequest.OrderyByOptions)[number];
+
+   @ApiProperty({ description: "The column to order by" })
+   @IsOptional()
+   order_column?: string;
 }
