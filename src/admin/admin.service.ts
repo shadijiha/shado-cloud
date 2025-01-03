@@ -177,12 +177,13 @@ export class AdminService {
          throw new Error(`Column ${order_column} does not exist in table ${tableName}`);
       }
 
-      const result = await this.dataSource.query("SELECT * FROM ? ORDER BY ? ? LIMIT ?", [
-         tableName,
-         order_column,
-         order_by,
-         limit,
-      ]);
+      const result = await this.dataSource
+         .createQueryBuilder()
+         .select()
+         .from(tableName, "table")
+         .orderBy(order_column, order_by)
+         .limit(limit)
+         .getMany();
 
       // If table is user remove password
       if (this.entityManager.getRepository(User).metadata.tableName == tableName) {
