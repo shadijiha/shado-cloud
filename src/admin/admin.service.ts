@@ -150,7 +150,7 @@ export class AdminService {
    }
 
    public async getTable(tableName: string, request: DatabaseGetTableRequest) {
-      const { limit, order_by } = request;
+      const { limit, order_by, order_column } = request;
       const tables = await this.getTables(); // <-- If feature flag is disabled this will throw an error
       if (!tables.find((entry) => entry.table == tableName)) {
          throw new Error(`Table ${tableName} does not exist`);
@@ -173,11 +173,16 @@ export class AdminService {
 
       // Verify order_column
       const columns = tables.find((entry) => entry.table == tableName)?.columns;
-      if (request.order_column && !columns.includes(request.order_column)) {
-         throw new Error(`Column ${request.order_column} does not exist in table ${tableName}`);
+      if (order_column && !columns.includes(order_column)) {
+         throw new Error(`Column ${order_column} does not exist in table ${tableName}`);
       }
 
-      const result = await this.dataSource.query(`SELECT * FROM ${tableName} ORDER BY id ${order_by} LIMIT ${limit}`);
+      const result = await this.dataSource.query("SELECT * FROM ? ORDER BY ? ? LIMIT ?", [
+         tableName,
+         order_column,
+         order_by,
+         limit,
+      ]);
 
       // If table is user remove password
       if (this.entityManager.getRepository(User).metadata.tableName == tableName) {
