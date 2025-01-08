@@ -20,7 +20,7 @@ export class FileAccessStat extends BaseEntity {
    @PrimaryGeneratedColumn()
    id: number;
 
-   @ManyToOne(() => UploadedFile)
+   @ManyToOne(() => UploadedFile, { onDelete: "CASCADE" })
    @JoinColumn()
    @Index({ unique: false })
    @ApiProperty({ type: () => UploadedFile })

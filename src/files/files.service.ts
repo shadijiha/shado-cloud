@@ -285,7 +285,9 @@ export class FilesService {
          is_audio: fileMime.includes("audio"),
          is_pdf: fileMime.includes("pdf"),
          size: stats.size,
-         temp_url: tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid())[0] : null,
+         temp_url: tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid()) : null,
+         db_record: file,
+         related_keys_in_redis: file ? await this.getCacheKeysForFile(userId, file) : [],
          thumbails,
       };
    }
@@ -586,19 +588,28 @@ export class FilesService {
       });
 
       // Invalidate cache
+      const cachedFileKeys = await this.getCacheKeysForFile(userId, uploadedFile);
+      if (cachedFileKeys.length > 0) {
+         await this.cache.del(...cachedFileKeys);
+         this.logger.debug(`Deleted keys: ${cachedFileKeys.join(", ")}`);
+      } else {
+         this.logger.debug(`No keys found in redis cache for file ${uploadedFile.absolute_path}`);
+      }
+   }
+
+   private async getCacheKeysForFile(userId: number, uploadedFile: UploadedFile): Promise<string[]> {
       const cacheKey = ThumbnailCacheInterceptor.getCacheKey(userId, uploadedFile.absolute_path, 0, 0, false);
       const pattern = `${cacheKey}*`;
-
       let cursor = "0";
-      do {
-         // SCAN command to get keys matching the pattern
-         const [newCursor, keys] = await this.cache.scan(cursor, "MATCH", pattern);
-         cursor = newCursor;
+      const keys: string[] = [];
 
-         if (keys.length > 0) {
-            await this.cache.del(...keys); // Delete matching keys
-            this.logger.debug(`Deleted keys: ${keys.join(", ")}`);
-         }
-      } while (cursor !== "0");
+      do {
+         // Scan for keys in the Redis store
+         const result = await this.cache.scan(cursor, "MATCH", pattern);
+         cursor = result[0]; // Update the cursor to the new position
+         keys.push(...result[1]); // Push the found keys to the keys array
+      } while (cursor !== "0"); // If cursor is '0', the scan is complete
+
+      return keys;
    }
 }
