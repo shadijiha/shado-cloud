@@ -3,8 +3,10 @@ import { plainToInstance } from "class-transformer";
 import {
    IsEmail,
    IsEnum,
+   IsInt,
    IsNumber,
    IsOptional,
+   IsString,
    Max,
    Min,
    MinLength,
@@ -91,9 +93,30 @@ enum Environment {
    Prod = "prod",
 }
 
+export enum ReplicationRole {
+   Master = "master",
+   Replica = "replica",
+}
+
 export class EnvVariables {
+   /**
+    * Env and replication
+    */
    @IsEnum(Environment)
    ENV: Environment;
+
+   @IsInt()
+   @IsOptional()
+   @Min(1200)
+   @Max(90000)
+   APP_PORT: number | undefined;
+
+   @IsEnum(ReplicationRole)
+   REPLICATION_ROLE: ReplicationRole;
+
+   @IsString()
+   @IsOptional()
+   MASTER_OR_REPLICA_LOCAL_IP: string | undefined;
 
    @Validate(ValidFilePath)
    @Validate(DoesNotEndWithConstraint, ["/"])

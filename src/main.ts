@@ -9,13 +9,19 @@ import helmet from "helmet";
 import { LoggerToDb } from "./logging";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ConfigServiceInterceptor } from "./config/config.interceptor";
-import { EnvVariables } from "./config/config.validator";
+import { EnvVariables, ReplicationRole } from "./config/config.validator";
 import { isDev } from "./util";
+import { ReplicationModule } from "./replication/replication.module";
 
 async function bootstrap() {
-   const app = await NestFactory.create(AppModule);
-
    await ConfigModule.envVariablesLoaded;
+
+   const replicationRole = (process.env as unknown as EnvVariables).REPLICATION_ROLE;
+   const app =
+      replicationRole == ReplicationRole.Replica
+         ? await NestFactory.create(ReplicationModule)
+         : await NestFactory.create(AppModule);
+
    const envConfig = app.get<ConfigService<EnvVariables>>(ConfigService);
 
    app.enableCors({
@@ -48,9 +54,11 @@ async function bootstrap() {
    app.use(cookieParser());
    app.use(json({ limit: "100mb" }));
    app.use(urlencoded({ extended: true, limit: "100mb" }));
-   app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb)));
    app.useGlobalInterceptors(new ConfigServiceInterceptor(envConfig));
+   if (replicationRole != ReplicationRole.Replica) {
+      app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb)));
+   }
 
-   await app.listen(9000);
+   await app.listen(envConfig.get("APP_PORT") ?? 9000);
 }
 bootstrap();

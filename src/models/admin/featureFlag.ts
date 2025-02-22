@@ -1,9 +1,10 @@
-import { BaseEntity, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BaseEntity, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 export enum FeatureFlagNamespace {
    Log = "log",
    Files = "files",
    Admin = "admin",
+   Replication = "replication",
 }
 
 @Entity()
