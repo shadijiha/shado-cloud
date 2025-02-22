@@ -18,11 +18,12 @@ import { DataSource } from "typeorm";
 import { AbstractFileSystem } from "./file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "./file-system/file-system.service";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { EnvVariables, validate } from "./config/config.validator";
+import { EnvVariables, ReplicationRole, validate } from "./config/config.validator";
 import { isDev, REDIS_CACHE } from "./util";
 import Redis from "ioredis";
 import { FeatureFlagService } from "./admin/feature-flag.service";
 import { FeatureFlag } from "./models/admin/featureFlag";
+import { ReplicationModule } from "./replication/replication.module";
 
 @Global()
 @Module({
@@ -31,12 +32,18 @@ import { FeatureFlag } from "./models/admin/featureFlag";
       {
          provide: LoggerToDb,
          scope: Scope.TRANSIENT,
-         inject: [DataSource, INQUIRER, FeatureFlagService],
-         useFactory: (dataSource: DataSource, parentClass: object, featureFlagService: FeatureFlagService) => {
+         inject: [DataSource, INQUIRER, FeatureFlagService, ConfigService],
+         useFactory: (
+            dataSource: DataSource,
+            parentClass: object,
+            featureFlagService: FeatureFlagService,
+            config: ConfigService<EnvVariables>,
+         ) => {
             return new LoggerToDb(
                parentClass?.constructor.name ?? "UnknownSource",
                dataSource.getRepository(Log),
                featureFlagService,
+               config,
             );
          },
       },
@@ -109,6 +116,7 @@ export class GlobalUtilityModule {}
       TempUrlModule,
       AdminModule,
       UserProfileModule,
+      ReplicationModule,
    ],
    controllers: [AppController],
    providers: [

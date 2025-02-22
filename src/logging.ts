@@ -9,7 +9,7 @@ import { OperationStatus, type OperationStatusResponse } from "./files/filesApiT
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
-import { EnvVariables } from "./config/config.validator";
+import { EnvVariables, ReplicationRole } from "./config/config.validator";
 import { FeatureFlagNamespace } from "./models/admin/featureFlag";
 import { FeatureFlagService } from "./admin/feature-flag.service";
 
@@ -19,6 +19,7 @@ export class LoggerToDb extends ConsoleLogger {
       context: string,
       @InjectRepository(Log) private readonly logRepo: Repository<Log>,
       @Inject() private readonly featureFlagService: FeatureFlagService,
+      private readonly configService: ConfigService<EnvVariables>,
    ) {
       super(context);
    }
@@ -49,16 +50,19 @@ export class LoggerToDb extends ConsoleLogger {
    }
 
    public error(message: any, stack?: string): void {
+      message = this.alterMessage(message);
       super.error(message, stack);
       this.logToDb(message, "error", stack);
    }
 
    public log(message: any): void {
+      message = this.alterMessage(message);
       super.log(message, this.context);
       this.logToDb(message, "info", undefined);
    }
 
    public warn(message: any): void {
+      message = this.alterMessage(message);
       super.warn(message, this.context);
       this.logToDb(message, "warn", undefined);
    }
@@ -67,6 +71,7 @@ export class LoggerToDb extends ConsoleLogger {
       if (await this.loggingDisabled()) {
          return;
       }
+      message = this.alterMessage(message);
       super.debug(message, this.context);
       this.logToDb(message, "debug", undefined);
    }
@@ -125,5 +130,9 @@ export class LoggerToDb extends ConsoleLogger {
       } catch (e) {
          super.debug((e as Error).message);
       }
+   }
+
+   private alterMessage(message: string): string {
+      return `${this.configService.get("REPLICATION_ROLE") == ReplicationRole.Replica ? "[REPLICA]" : ""} ${message}`;
    }
 }
