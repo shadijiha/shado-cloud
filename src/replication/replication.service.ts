@@ -38,7 +38,9 @@ export class ReplicationService implements OnModuleInit {
             ).data;
 
             // Files to replicate
-            const replicaDoesNotHave = masterFiles.filter((e) => !replicaFiles.find((f) => f.path == e.path));
+            const replicaDoesNotHave = masterFiles.filter(
+               (e) => !replicaFiles.find((f) => this.pathEquals(f.path, e.path)),
+            );
             this.logger.log(`${replicaDoesNotHave.length} Files to replicate`);
 
             let filesReplicated = 0;
@@ -59,7 +61,9 @@ export class ReplicationService implements OnModuleInit {
             }
 
             // Files to delete
-            const masterDoesNotHave = replicaFiles.filter((e) => !masterFiles.find((f) => f.path == e.path));
+            const masterDoesNotHave = replicaFiles.filter(
+               (e) => !masterFiles.find((f) => this.pathEquals(f.path, e.path)),
+            );
             this.logger.log(`${masterDoesNotHave.length} Files to delete`);
             for (const file of masterDoesNotHave) {
                this.fs.unlinkSync(path.join(this.cloudDir, file.path));
@@ -100,9 +104,8 @@ export class ReplicationService implements OnModuleInit {
        * current function itself
        */
       for (const folder of folders) {
-         files.push(...this.listRecusively(`${path_}/${folder.name}/`));
+         files.push(...this.listRecusively(path.join(path_, folder.name)));
       }
-
       return files;
    }
 
@@ -112,6 +115,12 @@ export class ReplicationService implements OnModuleInit {
 
    private isReplica() {
       return this.config.get("REPLICATION_ROLE") == ReplicationRole.Replica;
+   }
+
+   private pathEquals(path1: string, path2: string) {
+      const normalizedPath1 = path.normalize(path.resolve(path1));
+      const normalizedPath2 = path.normalize(path.resolve(path2));
+      return normalizedPath1 == normalizedPath2;
    }
 
    private get cloudDir() {

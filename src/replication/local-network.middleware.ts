@@ -1,14 +1,21 @@
-import { ForbiddenException, Injectable, NestMiddleware } from "@nestjs/common";
+import { ForbiddenException, Injectable, NestMiddleware, Optional } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
+import { LoggerToDb } from "src/logging";
 
 @Injectable()
 export class LocalNetworkMiddleware implements NestMiddleware {
-   constructor(private readonly featureFlagService: FeatureFlagService) {}
+   constructor(
+      @Optional() private readonly featureFlagService: FeatureFlagService,
+      @Optional() private readonly logger: LoggerToDb,
+   ) {}
 
    async use(req: Request, res: Response, next: NextFunction) {
-      if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Replication, "replication")) {
+      if (
+         this.featureFlagService &&
+         (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Replication, "replication"))
+      ) {
          throw new ForbiddenException("Replication is disabled");
       }
 
@@ -16,6 +23,7 @@ export class LocalNetworkMiddleware implements NestMiddleware {
       if (this.isLocalNetwork(ip)) {
          next();
       } else {
+         if (this.logger) this.logger.debug(`Refused connection from ${ip}`);
          throw new ForbiddenException("Access is allowed only from local network");
       }
    }
