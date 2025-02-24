@@ -1,8 +1,6 @@
-import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger, OnModuleInit, StreamableFile } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { lastValueFrom } from "rxjs";
 import { EnvVariables, ReplicationRole } from "src/config/config.validator";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import * as path from "path";
@@ -10,11 +8,8 @@ import * as path from "path";
 @Injectable()
 export class ReplicationService implements OnModuleInit {
    private readonly logger = new Logger(ReplicationService.name);
-   constructor(
-      private readonly config: ConfigService<EnvVariables>,
-      private readonly httpService: HttpService,
-      private readonly fs: AbstractFileSystem,
-   ) {}
+
+   constructor(private readonly config: ConfigService<EnvVariables>, private readonly fs: AbstractFileSystem) {}
 
    public onModuleInit() {
       this.replicate();
@@ -33,9 +28,7 @@ export class ReplicationService implements OnModuleInit {
 
             const masterIp = "http://" + this.config.get("MASTER_OR_REPLICA_LOCAL_IP");
             const replicaFiles = this.listCloudDir();
-            const masterFiles: typeof replicaFiles = (
-               await lastValueFrom(this.httpService.get(`${masterIp}/replication/listall`))
-            ).data;
+            const masterFiles: typeof replicaFiles = await (await fetch(`${masterIp}/replication/listall`)).json();
 
             // Files to replicate
             const replicaDoesNotHave = masterFiles.filter(
@@ -48,13 +41,11 @@ export class ReplicationService implements OnModuleInit {
                if (!this.fs.existsSync(path.join(this.cloudDir, file.path))) {
                   this.fs.mkdirSync(path.join(this.cloudDir, path.dirname(file.path)), { recursive: true });
                }
-               const response = await lastValueFrom(
-                  this.httpService.get(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`, {
-                     responseType: "arraybuffer",
-                  }),
-               );
+               const responseData = await (
+                  await fetch(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`)
+               ).arrayBuffer();
                const filePath = path.join(this.cloudDir, file.path);
-               this.fs.writeFileSync(filePath, response.data);
+               this.fs.writeFileSync(filePath, Buffer.from(responseData));
 
                this.logger.log(`Done ${filesReplicated + 1} of ${replicaDoesNotHave.length} files`);
                filesReplicated++;

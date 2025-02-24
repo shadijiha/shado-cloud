@@ -1,6 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ReplicationService } from "./replication.service";
-import { HttpModule } from "@nestjs/axios";
 import { LocalNetworkMiddleware } from "./local-network.middleware";
 import { ReplicationController } from "./replication.controller";
 import { ConditionalModule, ConfigModule } from "@nestjs/config";
@@ -31,7 +30,6 @@ import { ScheduleModule } from "@nestjs/schedule";
          (env: NodeJS.ProcessEnv) => env.REPLICATION_ROLE == ReplicationRole.Replica,
       ),
       ScheduleModule.forRoot(),
-      HttpModule,
    ],
    controllers: [ReplicationController],
    providers: [
