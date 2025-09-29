@@ -9,6 +9,8 @@ import { type IncomingHttpHeaders } from "http";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { EnvVariables } from "../config/config.validator";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class TempUrlService {
@@ -17,7 +19,8 @@ export class TempUrlService {
       private readonly userService: AuthService,
       @InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
       @Inject() private readonly fs: AbstractFileSystem,
-   ) {}
+      @Inject() private readonly config: ConfigService<EnvVariables>,
+   ) { }
 
    public async generate(
       requestHeaders: IncomingHttpHeaders,
@@ -38,7 +41,7 @@ export class TempUrlService {
       tempUrl.is_readonly = is_readonly;
       this.tempUrlRepo.save(tempUrl);
 
-      return requestHeaders.origin + "/temp/" + tempUrl.url + "/get";
+      return (this.config.get("BACKEND_HOST") ?? requestHeaders.origin) + "/temp/" + tempUrl.url + "/get";
    }
 
    public async asStream(tempUrl: string) {
