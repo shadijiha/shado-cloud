@@ -4,19 +4,27 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { EnvVariables, ReplicationRole } from "src/config/config.validator";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import * as path from "path";
+import { Readable } from "stream";
 
 @Injectable()
 export class ReplicationService implements OnModuleInit {
    private readonly logger = new Logger(ReplicationService.name);
+   private isReplicating = false; // lock flag
 
-   constructor(private readonly config: ConfigService<EnvVariables>, private readonly fs: AbstractFileSystem) {}
+   constructor(private readonly config: ConfigService<EnvVariables>, private readonly fs: AbstractFileSystem) { }
 
    public onModuleInit() {
       this.replicate();
    }
 
-   @Cron(CronExpression.EVERY_HOUR)
+   @Cron(CronExpression.EVERY_MINUTE)
    public async replicate() {
+      if (this.isReplicating) {
+         this.logger.warn("A replication job is currently running. Skipping this Cron iteration");
+         return;
+      }
+
+      this.isReplicating = true;
       try {
          if (this.isReplica()) {
             this.logger.log("Replicating data from master...");
@@ -41,11 +49,28 @@ export class ReplicationService implements OnModuleInit {
                if (!this.fs.existsSync(path.join(this.cloudDir, file.path))) {
                   this.fs.mkdirSync(path.join(this.cloudDir, path.dirname(file.path)), { recursive: true });
                }
-               const responseData = await (
-                  await fetch(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`)
-               ).arrayBuffer();
+               const response = await fetch(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`);
+               if (!response.ok || !response.body) {
+                  this.logger.error(`Failed to download file ${file.path}, status: ${response.status}, text: ${await response.text()}`);
+               }
                const filePath = path.join(this.cloudDir, file.path);
-               this.fs.writeFileSync(filePath, Buffer.from(responseData));
+
+               await new Promise<void>(async (resolve, reject) => {
+                  try {
+                     const dest = this.fs.createWriteStream(filePath);
+
+                     // Stream chunks directly to file
+                     for await (const chunk of response.body as any) {
+                        dest.write(chunk);
+                     }
+
+                     dest.end();
+                     dest.on("finish", resolve);
+                     dest.on("error", reject);
+                  } catch (err) {
+                     reject(err);
+                  }
+               });
 
                this.logger.log(`Done ${filesReplicated + 1} of ${replicaDoesNotHave.length} files`);
                filesReplicated++;
@@ -56,8 +81,12 @@ export class ReplicationService implements OnModuleInit {
                (e) => !masterFiles.find((f) => this.pathEquals(f.path, e.path)),
             );
             this.logger.log(`${masterDoesNotHave.length} Files to delete`);
+            let filesDeleted = 0;
             for (const file of masterDoesNotHave) {
                this.fs.unlinkSync(path.join(this.cloudDir, file.path));
+               filesDeleted++;
+
+               this.logger.log(`Deleted ${filesDeleted} of ${masterDoesNotHave.length} (file: ${file.path})`);
             }
          } else if (this.isMaster()) {
             // No op
@@ -68,6 +97,8 @@ export class ReplicationService implements OnModuleInit {
          const e = error as Error;
          const fullMessage = `${this.config.get("REPLICATION_ROLE")} encountered an exception: ${e.message}`;
          this.logger.error(fullMessage, e.stack);
+      } finally {
+         this.isReplicating = false;
       }
    }
 
