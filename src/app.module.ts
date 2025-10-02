@@ -107,10 +107,10 @@ export class GlobalUtilityModule {}
          },
          inject: [ConfigService],
       }),
-      ThrottlerModule.forRoot({
+      ThrottlerModule.forRoot([{
          ttl: 30,
          limit: 1000,
-      }),
+      }]),
       FilesModule,
       DirectoriesModule,
       TempUrlModule,
