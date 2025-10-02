@@ -43,10 +43,10 @@ export class DirectoriesController {
       }
    }
 
-   @Get("list/:path?")
-   @ApiParam({ name: "path", type: String, allowEmptyValue: true })
+   @Get("list{/:path}")
+   @ApiParam({ name: "path", type: String, required: false, allowEmptyValue: true })
    @ApiResponse({ type: DirListResponse })
-   public async list(@AuthUser() userId: number, @Param("path") path: string): Promise<DirListResponse> {
+   public async list(@AuthUser() userId: number, @Param("path") path: string | undefined): Promise<DirListResponse> {
       try {
          const list = await this.directoriesService.list(userId, path ?? "");
 

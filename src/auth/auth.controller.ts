@@ -128,7 +128,7 @@ export class AuthController {
          .cookie(this.config.get("COOKIE_NAME"), token, {
             httpOnly: true,
             domain: this.getDomain(headers), // your domain here!
-            expires: new Date(Date.now() + 1000 * 60 * 60 * 24),
+            expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 180), // 180 days
             secure: isDev(this.config) ? false : headers.origin.startsWith("https"),
             sameSite: isDev(this.config) ? "lax" : "none",
          })

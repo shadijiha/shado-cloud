@@ -426,7 +426,7 @@ describe("FilesService", () => {
          userService.getById = jest.fn().mockResolvedValue({ id: -1, email: "cait@queen.com" } as User);
          service.isOwner = jest.fn().mockResolvedValue(false);
 
-         await expect(service.toThumbnail("test/path", 1)).rejects.toThrowError(
+         await expect(service.toThumbnail("test/path", 1)).rejects.toThrow(
             "You don't have permission to access this file",
          );
       });
@@ -439,7 +439,7 @@ describe("FilesService", () => {
          service.isOwner = jest.fn().mockResolvedValue(true);
          fs.existsSync = jest.fn().mockReturnValue(false);
 
-         await expect(service.toThumbnail("path/to/file.png", 1)).rejects.toThrowError(
+         await expect(service.toThumbnail("path/to/file.png", 1)).rejects.toThrow(
             `${config.get("CLOUD_DIR")}/${user.email}/path/to/file.png does not exist`,
          );
       });
@@ -524,7 +524,7 @@ describe("FilesService", () => {
             size: [100, 100],
             quality: 70,
          });
-         expect(genFn).toBeCalledWith({
+         expect(genFn).toHaveBeenCalledWith({
             path: absolutePath,
             output: "/path/to/.videometa.video.mp4.png",
          });
