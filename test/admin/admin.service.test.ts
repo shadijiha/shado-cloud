@@ -8,6 +8,7 @@ import { ConfigService } from "@nestjs/config";
 import { exec } from "child_process";
 import nodemailer from "nodemailer";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
+import { EmailService } from "../../src/admin/email.service";
 
 jest.mock("child_process", () => ({
    exec: jest.fn(),
@@ -68,6 +69,12 @@ describe("AdminService", () => {
                   query: jest.fn(),
                },
             },
+            {
+               provide: EmailService,
+               useValue: {
+                  sendEmail: sendMailMock
+               }
+            }
          ],
       }).compile();
 
