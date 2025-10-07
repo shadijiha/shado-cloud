@@ -12,6 +12,8 @@ import { FilesService } from "../../files/files.service";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { EmailService } from "../email.service";
+import { FeatureFlagService } from "../feature-flag.service";
+import { FeatureFlagNamespace } from "../../models/admin/featureFlag";
 
 puppeteer.use(StealthPlugin());
 
@@ -24,6 +26,7 @@ export class ServiceFunctionsController {
         @InjectRepository(ServiceFunction) private readonly serviceFuncRepo: Repository<ServiceFunction>,
         @Inject() private readonly fileService: FilesService,
         @Inject() private readonly emailService: EmailService,
+        @Inject() private readonly featureFlag: FeatureFlagService,
     ) { }
 
     @Get("all")
@@ -143,6 +146,14 @@ export class ServiceFunctionsController {
     }
 
     private async executeFunction(func: ServiceFunction) {
+        if (!await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Admin, "enable_service_functions_execution")) {
+            const msg = `Cannot execute service function ${func.id} for user ${func.user_id}. ${FeatureFlagNamespace.Admin}.enable_service_functions_execution feature flag is disabled`;
+            this.logger.log(msg);
+            func.last_execution_logs = msg;
+            await this.serviceFuncRepo.save(func);
+            return;
+        }
+
         this.logger.log(`Running service function ${func.id} for user ${func.user_id}`);
 
         func.last_execution_logs = "";
