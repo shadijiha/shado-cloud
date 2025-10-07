@@ -4,7 +4,6 @@ import { exec } from "child_process";
 import { LoggerToDb } from "../logging";
 import { Log } from "../models/log";
 import { DataSource, EntityManager, Repository } from "typeorm";
-import nodemailer from "nodemailer";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { promisify } from "util";
@@ -13,10 +12,11 @@ import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { DatabaseGetTableRequest } from "./adminApiTypes";
 import { EncryptedPassword } from "src/models/EncryptedPassword";
 import { User } from "src/models/user";
+import { EmailService } from "./email.service";
 
 @Injectable()
 export class AdminService {
-   private transporter: nodemailer.Transporter | undefined;
+
 
    public constructor(
       @InjectRepository(Log) private readonly logRepo: Repository<Log>,
@@ -25,24 +25,9 @@ export class AdminService {
       private readonly featureFlagService: FeatureFlagService,
       @InjectDataSource() private readonly dataSource: DataSource,
       @InjectEntityManager() private readonly entityManager: EntityManager,
+      @Inject() private readonly emailService: EmailService,
    ) {
-      const email = this.config.get<string | undefined>("EMAIL_USER");
-      const password = this.config.get<string | undefined>("EMAIL_APP_PASSWORD");
 
-      // We only want to send emails if credentials are defined in the env
-      if (email && password) {
-         this.transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-               user: config.get("EMAIL_USER"), // Your email address
-               pass: config.get("EMAIL_APP_PASSWORD"), // Your email password (or app-specific password)
-            },
-         });
-      } else {
-         this.logger.warn(
-            "Emails won't be sent because .env email or password are either undefined or not escaped properly",
-         );
-      }
    }
 
    /**
@@ -76,7 +61,7 @@ export class AdminService {
       }
 
       // Send email for deployment start
-      this.sendEmail({
+      this.emailService.sendEmail({
          subject: `Shado Cloud - ${type} deployment start`,
          text: `Deployment was triggered for Shado Cloud ${type == "backend" ? "NestJS" : "React"} app`,
       });
@@ -109,13 +94,13 @@ export class AdminService {
       const exitFn = async (code) => {
          if (code == 0) {
             this.logger.log(`${fullcommand} exited successfully`);
-            await this.sendEmail({
+            await this.emailService.sendEmail({
                subject: "Shado Cloud - Successful deployment",
                html: "<h2>Shado cloud nestjs app has succesfully deployed!</h2>",
             });
          } else {
             this.logger.error(`${fullcommand} exited with code ${code}`);
-            await this.sendEmail({
+            await this.emailService.sendEmail({
                subject: `Shado Cloud ${type} - Failed deployment`,
                html: `
                <h2>Shado cloud nestjs app has failed</h2>
@@ -194,22 +179,6 @@ export class AdminService {
       }
 
       return result;
-   }
-
-   private async sendEmail(options: { subject: string; text?: string; html?: string }) {
-      if (this.transporter) {
-         try {
-            await this.transporter.sendMail({
-               from: this.config.get<string>("EMAIL_USER"), // Sender address
-               to: this.config.get<string>("EMAIL_USER"), // Receiver's address
-               subject: options.subject, // Subject line
-               text: options.text, // Plain text body
-               html: options.html,
-            });
-         } catch (e) {
-            this.logger.warn("Unable to send deployment email " + e.message);
-         }
-      }
    }
 
    private async execSync(command: string) {

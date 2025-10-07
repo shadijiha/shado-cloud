@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+   app:
+      build:
+        context: .
+        dockerfile: Dockerfile.dev
+      container_name: shado-cloud
+      
+      env_file:
+         - .env
+      ports:
+         - "${APP_PORT}:${APP_PORT}"
+      volumes:
+         - .:/app
+         - /app/node_modules
+         # Bind mount host Desktop folder to /app/uploads in container
+         - D:\shado-cloud-replica:/app/uploads
+      depends_on:
+         - mysql
+         - redis
+      environment:
+         - CHOKIDAR_USEPOLLING=true
+         - DOCKER_HOST=tcp://host.docker.internal:2375
+
+
+   mysql:
+      image: mysql:8.0
+      container_name: mysql-db-shado-cloud
+      restart: unless-stopped
+      env_file:
+         - .env
+      environment:
+         MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+         MYSQL_DATABASE: ${DB_NAME}
+         MYSQL_USER: ${DB_USERNAME}
+         MYSQL_PASSWORD: ${DB_PASSWORD}
+      ports:
+         - "3306:3306"
+      volumes:
+         - mysql_data:/var/lib/mysql
+      healthcheck:
+         test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+         interval: 5s
+         retries: 10
+         start_period: 10s
+
+   redis:
+      image: redis:7
+      container_name: redis-cache-shado-cloud
+      restart: unless-stopped
+      env_file:
+         - .env
+      ports:
+         - "6379:6379"
+      command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+      healthcheck:
+         test: ["CMD", "redis-cli", "ping"]
+         interval: 5s
+         retries: 10
+         start_period: 5s
+
+   phpmyadmin:
+      image: phpmyadmin:latest
+      container_name: phpmyadmin
+      restart: unless-stopped
+      ports:
+         - "8080:80" # Access via http://localhost:8080
+      environment:
+         PMA_HOST: mysql # Must match your MySQL service name
+         PMA_USER: ${DB_USERNAME} # Optional default user login
+         PMA_PASSWORD: ${DB_PASSWORD} # Optional password
+      depends_on:
+         - mysql
+
+volumes:
+   mysql_data:

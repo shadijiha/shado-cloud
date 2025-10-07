@@ -7,12 +7,15 @@ import { User } from "./../models/user";
 import { AppMetricsService } from "./app-metrics.service";
 import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlag } from "src/models/admin/featureFlag";
-import { EncryptedPassword } from "src/models/EncryptedPassword";
+import { ServiceFunctionsController } from "./service-functions/service-functions.controller";
+import { ServiceFunction } from "../models/admin/serviceFunction";
+import { FilesModule } from "../files/files.module";
+import { EmailService } from "./email.service";
 
 @Module({
-   controllers: [AdminController],
-   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag])],
-   providers: [AdminService, AppMetricsService, FeatureFlagService],
+   controllers: [AdminController, ServiceFunctionsController],
+   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction]), FilesModule],
+   providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService],
    exports: [AdminService],
 })
-export class AdminModule {}
+export class AdminModule { }
