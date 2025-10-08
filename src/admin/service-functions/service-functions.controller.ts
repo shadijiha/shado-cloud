@@ -14,6 +14,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { EmailService } from "../email.service";
 import { FeatureFlagService } from "../feature-flag.service";
 import { FeatureFlagNamespace } from "../../models/admin/featureFlag";
+import { DirectoriesService } from "../../directories/directories.service";
 
 puppeteer.use(StealthPlugin());
 
@@ -27,6 +28,7 @@ export class ServiceFunctionsController {
         @Inject() private readonly fileService: FilesService,
         @Inject() private readonly emailService: EmailService,
         @Inject() private readonly featureFlag: FeatureFlagService,
+        @Inject() private readonly directoriesService: DirectoriesService,
     ) { }
 
     @Get("all")
@@ -181,10 +183,14 @@ export class ServiceFunctionsController {
             fs: {
                 readFileAsync: async (path: string) => this.streamToString(await this.fileService.asStream(func.user_id, path, `service-func-${func.id}`)),
                 writeFileAsync: (path: string, content: string, append?: boolean) => this.fileService.save(func.user_id, path, content, append),
+                deleteFileAsync: (path: string) => this.fileService.delete(func.user_id, path),
                 existsAsync: (path: string) => this.fileService.exists(func.user_id, path),
+                mkdirAsync: (path: string) => this.directoriesService.new(func.user_id, path),
+                deleteDirAsync: (path: string) => this.directoriesService.delete(func.user_id, path),
             },
             puppeteer: puppeteer,
-            sendEmail: e => this.emailService.sendEmail(e)
+            sendEmail: e => this.emailService.sendEmail(e),
+            self: { ...func },
         }
 
         try {
