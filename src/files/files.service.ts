@@ -546,7 +546,7 @@ export class FilesService {
 
       // Now see if the stat already exists
       let stat = await this.fileAccessStatRepo.findOne({
-         where: { user: { id: userId }, uploaded_file: indexed, user_agent },
+         where: { user: { id: userId }, uploaded_file: { id: indexed.id }, user_agent },
       });
       if (!stat) {
          stat = new FileAccessStat();
