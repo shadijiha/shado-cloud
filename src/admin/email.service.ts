@@ -31,15 +31,16 @@ export class EmailService {
         }
     }
 
-    public async sendEmail(options: { subject: string; text?: string; html?: string }) {
+    public async sendEmail(options: { to?: string, subject: string; text?: string; html?: string, attachments?: any[] }) {
         if (this.transporter) {
             try {
                 await this.transporter.sendMail({
                     from: this.config.get<string>("EMAIL_USER"), // Sender address
-                    to: this.config.get<string>("EMAIL_USER"), // Receiver's address
+                    to: options.to ?? this.config.get<string>("EMAIL_USER"), // Receiver's address
                     subject: options.subject, // Subject line
                     text: options.text, // Plain text body
                     html: options.html,
+                    attachments: options.attachments,
                 });
             } catch (e) {
                 this.logger.warn("Unable to send email " + e.message);

@@ -11,6 +11,13 @@ export class ServiceFunction {
     @Column({ type: "longtext", nullable: true })
     last_execution_logs: string | null;
 
+    /**
+     * This column is the service function "storage" or "disk"
+     * You can save data of any kind here and retreive it in subsequent executions
+     */
+    @Column({ type: "longtext", nullable: true })
+    storage: string | undefined | null;
+
     @Column()
     user_id: number;
 

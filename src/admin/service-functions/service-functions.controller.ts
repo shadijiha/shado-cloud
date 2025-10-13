@@ -15,6 +15,7 @@ import { EmailService } from "../email.service";
 import { FeatureFlagService } from "../feature-flag.service";
 import { FeatureFlagNamespace } from "../../models/admin/featureFlag";
 import { DirectoriesService } from "../../directories/directories.service";
+import { basename, dirname } from "path";
 
 puppeteer.use(StealthPlugin());
 
@@ -163,6 +164,8 @@ export class ServiceFunctionsController {
 
         const context = {
             fetch: fetch,
+            setTimeout: setTimeout,
+            setInterval: setInterval,
             console: {
                 log: async e => {
                     this.logger.log(e);
@@ -183,6 +186,13 @@ export class ServiceFunctionsController {
             fs: {
                 readFileAsync: async (path: string) => this.streamToString(await this.fileService.asStream(func.user_id, path, `service-func-${func.id}`)),
                 writeFileAsync: (path: string, content: string, append?: boolean) => this.fileService.save(func.user_id, path, content, append),
+                writeImageAsync: (path: string, content: Buffer, mime?: string) => this.fileService.upload(func.user_id, {
+                    originalname: basename(path),
+                    buffer: content,
+                    mimetype: mime ?? 'image/png',
+                    size: content.length,
+                } as any, dirname(path)),
+                readImageAsync: async (path: string) => this.streamToBuffer(await this.fileService.asStream(func.user_id, path, `service-func-${func.id}`)),
                 deleteFileAsync: (path: string) => this.fileService.delete(func.user_id, path),
                 existsAsync: (path: string) => this.fileService.exists(func.user_id, path),
                 mkdirAsync: (path: string) => this.directoriesService.new(func.user_id, path),
@@ -190,7 +200,16 @@ export class ServiceFunctionsController {
             },
             puppeteer: puppeteer,
             sendEmail: e => this.emailService.sendEmail(e),
-            self: { ...func },
+            self: {
+                ...func,
+                storage: {
+                    get: () => func.storage,
+                    set: async (str) => {
+                        func.storage = str;
+                        await this.serviceFuncRepo.save(func);
+                    }
+                }
+            },
         }
 
         try {
@@ -227,6 +246,15 @@ export class ServiceFunctionsController {
         });
     }
 
+    private streamToBuffer(stream: Readable): Promise<Buffer> {
+        return new Promise((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            stream.on('data', (chunk) => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks)));
+            stream.on('error', (err) => reject(err));
+        });
+    }
+
     private safeStringify(obj: any): string {
         const seen = new WeakSet();
 
@@ -239,6 +267,13 @@ export class ServiceFunctionsController {
                 value.constructor.name.includes("Puppeteer")
             ) {
                 return "[Object puppeteer browser npm]";
+            } else if (
+                value &&
+                typeof value === "object" &&
+                value.constructor &&
+                value.constructor.name.includes("opencv")
+            ) {
+                return "[Object OpenCV browser npm]";
             }
 
             // Handle functions
