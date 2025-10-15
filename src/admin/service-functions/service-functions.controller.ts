@@ -197,6 +197,7 @@ export class ServiceFunctionsController {
                 existsAsync: (path: string) => this.fileService.exists(func.user_id, path),
                 mkdirAsync: (path: string) => this.directoriesService.new(func.user_id, path),
                 deleteDirAsync: (path: string) => this.directoriesService.delete(func.user_id, path),
+                listFilesAsync: (path: string) => this.directoriesService.list(func.user_id, path),
             },
             puppeteer: puppeteer,
             sendEmail: e => this.emailService.sendEmail(e),
