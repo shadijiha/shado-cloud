@@ -109,7 +109,7 @@ export class ThumbnailCacheInterceptor implements NestInterceptor {
 
    public static getCacheKey(
       userId: number,
-      path: string,
+      path: string | string[],
       width?: any,
       height?: any,
       includeDimensions = true,

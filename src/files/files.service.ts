@@ -240,7 +240,7 @@ export class FilesService {
       }
    }
 
-   public async info(userId: number, relativePath: string) {
+   public async info(userId: number, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false) {
       const root = await this.getUserRootPath(userId);
       const dir = await this.absolutePath(userId, relativePath);
       const relative = path.relative(root, dir);
@@ -263,7 +263,7 @@ export class FilesService {
 
       // Get all cached thumbnails for this file
       const thumbails: string[] = [];
-      if (file) {
+      if (file && fetch_db_records) {
          const thumbnailFolder = path.join(
             await this.createMetaFolderIfNotExists(userId),
             FilesService.THUMBNAILS_FOLDER_NAME,
@@ -289,7 +289,7 @@ export class FilesService {
          size: stats.size,
          temp_url: tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid()) : null,
          db_record: file,
-         related_keys_in_redis: file ? await this.getCacheKeysForFile(userId, file) : [],
+         related_keys_in_redis: file && fetch_related_keys_in_redis ? await this.getCacheKeysForFile(userId, file) : [],
          thumbails,
       };
    }
