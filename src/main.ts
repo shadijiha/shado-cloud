@@ -12,6 +12,7 @@ import { ConfigServiceInterceptor } from "./config/config.interceptor";
 import { EnvVariables, ReplicationRole } from "./config/config.validator";
 import { isDev } from "./util";
 import { ReplicationModule } from "./replication/replication.module";
+import { IoAdapter } from "@nestjs/platform-socket.io";
 
 async function bootstrap() {
    await ConfigModule.envVariablesLoaded;
@@ -33,6 +34,7 @@ async function bootstrap() {
       ],
       credentials: true,
    });
+   app.useWebSocketAdapter(new IoAdapter(app));
    app.useLogger(isDev(envConfig) ? ["log", "debug", "error", "verbose", "warn"] : ["error", "warn", "log", "debug"]);
 
    const config = new DocumentBuilder()
