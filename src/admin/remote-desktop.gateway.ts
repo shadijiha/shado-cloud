@@ -113,19 +113,29 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    private startStreaming() {
       this.logger.log("Starting screen stream");
       const env = this.execEnv;
-      this.logger.log(JSON.stringify(env));
+      
+      // Use FFmpeg for better performance
+      const ffmpegCmd = `ffmpeg -f x11grab -framerate 15 -video_size ${this.screenWidth}x${this.screenHeight} -i :0 -vframes 1 -f mjpeg -q:v 5 pipe:1 2>/dev/null | base64`;
       
       this.streamInterval = setInterval(async () => { 
-        try {
-            const { stdout } = await execAsync(
-              "scrot -p -o /tmp/screen.jpg -q 70 && base64 /tmp/screen.jpg",
-              { maxBuffer: 10 * 1024 * 1024, env },
-            );
-            this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
-         } catch (err) {
-            this.logger.error("Screen capture failed: " + (err as Error).message);
+         try {
+            const { stdout } = await execAsync(ffmpegCmd, { maxBuffer: 10 * 1024 * 1024, env });
+            if (stdout.trim()) {
+               this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
+            }
+         } catch {
+            // Fallback to scrot if ffmpeg fails
+            try {
+               const { stdout } = await execAsync(
+                  "scrot -p -o /tmp/screen.jpg -q 70 && base64 /tmp/screen.jpg",
+                  { maxBuffer: 10 * 1024 * 1024, env },
+               );
+               this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
+            } catch (err) {
+               this.logger.error("Screen capture failed: " + (err as Error).message);
+            }
          }
-      }, 200); // ~5 FPS
+      }, 66); // ~15 FPS
    }
 
    private stopStreaming() {
