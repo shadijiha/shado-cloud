@@ -9,7 +9,7 @@ import {
    OnGatewayDisconnect,
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
-import { exec } from "child_process";
+import { exec, spawn, ChildProcess } from "child_process";
 import { promisify } from "util";
 import { Logger } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
@@ -44,6 +44,7 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    server: Server;
 
    private streamInterval: NodeJS.Timeout | null = null;
+   private ffmpegProcess: ChildProcess | null = null;
    private connectedClients = 0;
    private screenWidth = 1920;
    private screenHeight = 1080;
@@ -111,39 +112,81 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    }
 
    private startStreaming() {
-      this.logger.log("Starting screen stream");
+      this.logger.log("Starting screen stream with FFmpeg");
       const env = this.execEnv;
       
-      // Use FFmpeg for better performance
-      const ffmpegCmd = `ffmpeg -f x11grab -framerate 15 -video_size ${this.screenWidth}x${this.screenHeight} -i :0 -vframes 1 -f mjpeg -q:v 5 pipe:1 2>/dev/null | base64`;
-      
-      this.streamInterval = setInterval(async () => { 
-         try {
-            const { stdout } = await execAsync(ffmpegCmd, { maxBuffer: 10 * 1024 * 1024, env });
-            if (stdout.trim()) {
-               this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
-            }
-         } catch {
-            // Fallback to scrot if ffmpeg fails
-            try {
-               const { stdout } = await execAsync(
-                  "scrot -p -o /tmp/screen.jpg -q 70 && base64 /tmp/screen.jpg",
-                  { maxBuffer: 10 * 1024 * 1024, env },
-               );
-               this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
-            } catch (err) {
-               this.logger.error("Screen capture failed: " + (err as Error).message);
-            }
+      // Use FFmpeg to continuously capture and output MJPEG frames
+      this.ffmpegProcess = spawn("ffmpeg", [
+         "-f", "x11grab",
+         "-framerate", "20",
+         "-video_size", `${this.screenWidth}x${this.screenHeight}`,
+         "-draw_mouse", "1",
+         "-i", ":0",
+         "-f", "mjpeg",
+         "-q:v", "8",
+         "-r", "20",
+         "pipe:1"
+      ], { env, stdio: ["ignore", "pipe", "ignore"] });
+
+      let buffer = Buffer.alloc(0);
+      const JPEG_START = Buffer.from([0xff, 0xd8]);
+      const JPEG_END = Buffer.from([0xff, 0xd9]);
+
+      this.ffmpegProcess.stdout?.on("data", (chunk: Buffer) => {
+         buffer = Buffer.concat([buffer, chunk]);
+         
+         // Find complete JPEG frames
+         let startIdx = buffer.indexOf(JPEG_START);
+         while (startIdx !== -1) {
+            const endIdx = buffer.indexOf(JPEG_END, startIdx + 2);
+            if (endIdx === -1) break;
+            
+            const frame = buffer.slice(startIdx, endIdx + 2);
+            buffer = buffer.slice(endIdx + 2);
+            
+            this.server.emit("frame", `data:image/jpeg;base64,${frame.toString("base64")}`);
+            startIdx = buffer.indexOf(JPEG_START);
          }
-      }, 66); // ~15 FPS
+      });
+
+      this.ffmpegProcess.on("error", (err) => {
+         this.logger.error("FFmpeg error: " + err.message);
+         this.fallbackToScrot(env);
+      });
+
+      this.ffmpegProcess.on("exit", (code) => {
+         if (code !== 0 && this.connectedClients > 0) {
+            this.logger.warn("FFmpeg exited, falling back to scrot");
+            this.fallbackToScrot(env);
+         }
+      });
+   }
+
+   private fallbackToScrot(env: NodeJS.ProcessEnv) {
+      this.logger.log("Using scrot fallback");
+      this.streamInterval = setInterval(async () => {
+         try {
+            const { stdout } = await execAsync(
+               "scrot -p -o /tmp/screen.jpg -q 60 && base64 /tmp/screen.jpg",
+               { maxBuffer: 10 * 1024 * 1024, env, timeout: 500 },
+            );
+            this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
+         } catch (err) {
+            this.logger.error("Screen capture failed: " + (err as Error).message);
+         }
+      }, 100);
    }
 
    private stopStreaming() {
+      if (this.ffmpegProcess) {
+         this.ffmpegProcess.kill();
+         this.ffmpegProcess = null;
+      }
       if (this.streamInterval) {
          clearInterval(this.streamInterval);
          this.streamInterval = null;
-         this.logger.log("Stopped screen stream");
       }
+      this.logger.log("Stopped screen stream");
    }
 
    private get execEnv() {
