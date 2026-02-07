@@ -1,0 +1,22 @@
+# mediamtx configuration for screen streaming
+logLevel: warn
+logDestinations: [stdout]
+
+api: yes
+apiAddress: 127.0.0.1:9997
+
+rtsp: no
+rtmp: no
+hls: no
+srt: no
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigin: '*'
+webrtcICEServers2: []
+
+paths:
+  screen:
+    source: publisher
+    runOnDemand: ffmpeg -f x11grab -framerate 30 -video_size 1920x1080 -draw_mouse 1 -i :0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g 30 -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandRestart: yes

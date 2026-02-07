@@ -1,0 +1,25 @@
+# mediamtx configuration for Mac screen streaming
+logLevel: info
+logDestinations: [stdout]
+
+api: yes
+apiAddress: 127.0.0.1:9997
+
+rtsp: yes
+rtspAddress: :8554
+
+hls: yes
+hlsAddress: :8890
+hlsAllowOrigins: ['*']
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigins: ['*']
+webrtcICEServers2: []
+webrtcAdditionalHosts: [127.0.0.1]
+webrtcLocalUDPAddress: 127.0.0.1:8189
+webrtcLocalTCPAddress: 127.0.0.1:8189
+
+paths:
+  screen:
+    source: publisher

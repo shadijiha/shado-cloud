@@ -112,69 +112,35 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    }
 
    private startStreaming() {
-      this.logger.log("Starting screen stream with FFmpeg");
-      const env = this.execEnv;
+      this.logger.log("Starting WebRTC stream via mediamtx");
+      // mediamtx handles the streaming - we just notify clients of the WebRTC endpoint
+      const webrtcUrl = "http://localhost:8889/screen/whep";
+      this.server.emit("webrtc-url", webrtcUrl);
       
-      // Use FFmpeg to continuously capture and output MJPEG frames
-      this.ffmpegProcess = spawn("ffmpeg", [
-         "-f", "x11grab",
-         "-framerate", "20",
-         "-video_size", `${this.screenWidth}x${this.screenHeight}`,
-         "-draw_mouse", "1",
-         "-i", ":0",
-         "-f", "mjpeg",
-         "-q:v", "8",
-         "-r", "20",
-         "pipe:1"
-      ], { env, stdio: ["ignore", "pipe", "ignore"] });
+      // Also start MJPEG fallback
+      this.startMjpegFallback();
+   }
 
-      let buffer = Buffer.alloc(0);
-      const JPEG_START = Buffer.from([0xff, 0xd8]);
-      const JPEG_END = Buffer.from([0xff, 0xd9]);
-
-      this.ffmpegProcess.stdout?.on("data", (chunk: Buffer) => {
-         buffer = Buffer.concat([buffer, chunk]);
-         
-         // Find complete JPEG frames
-         let startIdx = buffer.indexOf(JPEG_START);
-         while (startIdx !== -1) {
-            const endIdx = buffer.indexOf(JPEG_END, startIdx + 2);
-            if (endIdx === -1) break;
-            
-            const frame = buffer.slice(startIdx, endIdx + 2);
-            buffer = buffer.slice(endIdx + 2);
-            
-            this.server.emit("frame", `data:image/jpeg;base64,${frame.toString("base64")}`);
-            startIdx = buffer.indexOf(JPEG_START);
+   private startMjpegFallback() {
+      const env = this.execEnv;
+      const isMac = process.platform === "darwin";
+      const captureCmd = isMac 
+         ? "screencapture -x -t jpg /tmp/screen.jpg && base64 /tmp/screen.jpg"
+         : "scrot -p -o /tmp/screen.jpg -q 60 && base64 /tmp/screen.jpg";
+      
+      this.streamInterval = setInterval(async () => {
+         try {
+            const { stdout } = await execAsync(captureCmd, { maxBuffer: 10 * 1024 * 1024, env, timeout: 1000 });
+            this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
+         } catch (err) {
+            // Silent fail - WebRTC might be working
          }
-      });
-
-      this.ffmpegProcess.on("error", (err) => {
-         this.logger.error("FFmpeg error: " + err.message);
-         this.fallbackToScrot(env);
-      });
-
-      this.ffmpegProcess.on("exit", (code) => {
-         if (code !== 0 && this.connectedClients > 0) {
-            this.logger.warn("FFmpeg exited, falling back to scrot");
-            this.fallbackToScrot(env);
-         }
-      });
+      }, 100);
    }
 
    private fallbackToScrot(env: NodeJS.ProcessEnv) {
-      this.logger.log("Using scrot fallback");
-      this.streamInterval = setInterval(async () => {
-         try {
-            const { stdout } = await execAsync(
-               "scrot -p -o /tmp/screen.jpg -q 60 && base64 /tmp/screen.jpg",
-               { maxBuffer: 10 * 1024 * 1024, env, timeout: 500 },
-            );
-            this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
-         } catch (err) {
-            this.logger.error("Screen capture failed: " + (err as Error).message);
-         }
-      }, 100);
+      this.logger.log("Using MJPEG fallback");
+      this.startMjpegFallback();
    }
 
    private stopStreaming() {
@@ -204,38 +170,65 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
       try {
          const x = Math.round(event.x);
          const y = Math.round(event.y);
-         this.logger.debug(`Mouse event: ${event.type} at ${x},${y}`);
-         if (event.type === "move") {
-            await execAsync(`xdotool mousemove ${x} ${y}`, { env: this.execEnv });
-         } else if (event.type === "click") {
-            const button = event.button || 1;
-            await execAsync(`xdotool mousemove ${x} ${y} click ${button}`, { env: this.execEnv });
-         } else if (event.type === "scroll") {
-            const direction = (event.scrollY || 0) > 0 ? 5 : 4; // 4=up, 5=down
-            await execAsync(`xdotool mousemove ${x} ${y} click ${direction}`, { env: this.execEnv });
+         const isMac = process.platform === "darwin";
+         
+         if (isMac) {
+            if (event.type === "move") {
+               await execAsync(`cliclick m:${x},${y}`);
+            } else if (event.type === "click") {
+               const btn = event.button === 3 ? "rc" : "c";
+               await execAsync(`cliclick ${btn}:${x},${y}`);
+            } else if (event.type === "scroll") {
+               const dir = (event.scrollY || 0) > 0 ? "-" : "+";
+               await execAsync(`cliclick m:${x},${y} "scroll:${dir}3"`);
+            }
+         } else {
+            if (event.type === "move") {
+               await execAsync(`xdotool mousemove ${x} ${y}`, { env: this.execEnv });
+            } else if (event.type === "click") {
+               const button = event.button || 1;
+               await execAsync(`xdotool mousemove ${x} ${y} click ${button}`, { env: this.execEnv });
+            } else if (event.type === "scroll") {
+               const direction = (event.scrollY || 0) > 0 ? 5 : 4;
+               await execAsync(`xdotool mousemove ${x} ${y} click ${direction}`, { env: this.execEnv });
+            }
          }
       } catch (err) {
-         this.logger.error("Mouse event failed", err);
+         this.logger.error("Mouse event failed: " + (err as Error).message);
       }
    }
 
    @SubscribeMessage("key")
    async handleKey(client: Socket, event: KeyEvent) {
       try {
-         const key = this.mapKey(event.key);
-         // Only handle keydown to avoid double input
+         const isMac = process.platform === "darwin";
+         
          if (event.type === "down") {
-            if (key.length === 1 && !event.key.startsWith("Arrow")) {
-               // Regular character - use type
-               await execAsync(`xdotool type --clearmodifiers "${key}"`, { env: this.execEnv });
+            if (isMac) {
+               const key = this.mapKeyMac(event.key);
+               await execAsync(`cliclick ${key}`);
             } else {
-               // Special key - use key
-               await execAsync(`xdotool key ${key}`, { env: this.execEnv });
+               const key = this.mapKey(event.key);
+               if (key.length === 1 && !event.key.startsWith("Arrow")) {
+                  await execAsync(`xdotool type --clearmodifiers "${key}"`, { env: this.execEnv });
+               } else {
+                  await execAsync(`xdotool key ${key}`, { env: this.execEnv });
+               }
             }
          }
       } catch (err) {
-         this.logger.error("Key event failed", err);
+         this.logger.error("Key event failed: " + (err as Error).message);
       }
+   }
+
+   private mapKeyMac(key: string): string {
+      const special: Record<string, string> = {
+         Enter: "kp:return", Backspace: "kp:delete", Tab: "kp:tab",
+         Escape: "kp:escape", ArrowUp: "kp:arrow-up", ArrowDown: "kp:arrow-down",
+         ArrowLeft: "kp:arrow-left", ArrowRight: "kp:arrow-right",
+         " ": "kp:space", Delete: "kp:fwd-delete",
+      };
+      return special[key] || `t:${key}`;
    }
 
    private mapKey(key: string): string {
