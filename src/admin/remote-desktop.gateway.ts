@@ -1,4 +1,7 @@
 import {
+   Inject,
+} from "@nestjs/common";
+import {
    WebSocketGateway,
    WebSocketServer,
    SubscribeMessage,
@@ -15,6 +18,7 @@ import { EnvVariables } from "../config/config.validator";
 import * as cookie from "cookie";
 import * as jwt from "jsonwebtoken";
 import { CookiePayload } from "../auth/authApiTypes";
+import { LoggerToDb } from "../logging";
 
 const execAsync = promisify(exec);
 
@@ -39,7 +43,6 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    @WebSocketServer()
    server: Server;
 
-   private logger = new Logger(RemoteDesktopGateway.name);
    private streamInterval: NodeJS.Timeout | null = null;
    private connectedClients = 0;
    private screenWidth = 1920;
@@ -48,7 +51,10 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    constructor(
       private authService: AuthService,
       private config: ConfigService<EnvVariables>,
-   ) {}
+    @Inject() private readonly logger: LoggerToDb,
+   ) {
+           this.logger.log("RemoteDesktopGateway initialized");
+   }
 
    async handleConnection(client: Socket) {
       // Verify admin authentication via JWT
@@ -106,18 +112,20 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
 
    private startStreaming() {
       this.logger.log("Starting screen stream");
-      const env = { ...process.env, DISPLAY: process.env.DISPLAY || ":99" };
-      this.streamInterval = setInterval(async () => {
-         try {
+      const env = this.execEnv;
+      this.logger.log(JSON.stringify(env));
+      
+      this.streamInterval = setInterval(async () => { 
+        try {
             const { stdout } = await execAsync(
-               "scrot -o /tmp/screen.jpg -q 70 && base64 /tmp/screen.jpg",
-               { maxBuffer: 10 * 1024 * 1024, env },
+              "scrot -p -o /tmp/screen.jpg -q 70 && base64 /tmp/screen.jpg",
+              { maxBuffer: 10 * 1024 * 1024, env },
             );
             this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
          } catch (err) {
-            this.logger.error("Screen capture failed", err);
+            this.logger.error("Screen capture failed: " + (err as Error).message);
          }
-      }, 33); // ~30 FPS
+      }, 200); // ~5 FPS
    }
 
    private stopStreaming() {
@@ -129,7 +137,13 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    }
 
    private get execEnv() {
-      return { ...process.env, DISPLAY: process.env.DISPLAY || ":99" };
+      // Try user session first, fall back to gdm
+      const xauth = process.env.XAUTHORITY || `/home/shadi/.Xauthority`;
+      return {
+        ...process.env,
+        DISPLAY: process.env.DISPLAY || ":0",
+        XAUTHORITY: xauth,
+      };
    }
 
    @SubscribeMessage("mouse")
@@ -137,7 +151,7 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
       try {
          const x = Math.round(event.x);
          const y = Math.round(event.y);
-
+         this.logger.debug(`Mouse event: ${event.type} at ${x},${y}`);
          if (event.type === "move") {
             await execAsync(`xdotool mousemove ${x} ${y}`, { env: this.execEnv });
          } else if (event.type === "click") {
