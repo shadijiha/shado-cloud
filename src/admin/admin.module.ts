@@ -12,11 +12,13 @@ import { ServiceFunction } from "../models/admin/serviceFunction";
 import { FilesModule } from "../files/files.module";
 import { EmailService } from "./email.service";
 import { DirectoriesModule } from "../directories/directories.module";
+import { RemoteDesktopGateway } from "./remote-desktop.gateway";
+import { AuthService } from "../auth/auth.service";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController],
    imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction]), FilesModule, DirectoriesModule],
-   providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService],
+   providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService, RemoteDesktopGateway, AuthService],
    exports: [AdminService],
 })
 export class AdminModule { }
