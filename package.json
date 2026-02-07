@@ -54,6 +54,7 @@
         "nodemailer": "^7.0.6",
         "passport": "^0.7.0",
         "passport-jwt": "^4.0.1",
+        "pdf2pic": "^3.2.0",
         "puppeteer": "^24.23.0",
         "puppeteer-extra": "^3.3.6",
         "puppeteer-extra-plugin-stealth": "^2.11.2",

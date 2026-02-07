@@ -26,6 +26,10 @@ jest.mock("sharp", () => {
          resize: jest.fn().mockReturnThis(),
          toBuffer: jest.fn().mockResolvedValue(Buffer.from("mocked image data")),
          withMetadata: jest.fn().mockReturnThis(),
+         metadata: jest.fn().mockResolvedValue({ width: 400, height: 600 }),
+         extract: jest.fn().mockReturnThis(),
+         png: jest.fn().mockReturnThis(),
+         toFile: jest.fn().mockResolvedValue({}),
          pipe: jest.fn().mockReturnValue({
             toFile: jest.fn().mockResolvedValue({}),
          }),
@@ -33,6 +37,9 @@ jest.mock("sharp", () => {
    });
 });
 jest.mock("fs-thumbnail");
+jest.mock("pdf2pic", () => ({
+   fromBuffer: jest.fn().mockReturnValue(jest.fn().mockResolvedValue({ buffer: Buffer.from("mock pdf image") })),
+}));
 
 // Mocking the Date function to return a fixed date
 const mockDate = new Date("2024-12-15");
@@ -545,12 +552,93 @@ describe("FilesService", () => {
 
       it("should handle unsupported mime types gracefully", async () => {
          service.absolutePath = jest.fn().mockResolvedValue("/path/to/file");
-         FilesService.detectFile = jest.fn().mockReturnValue("application/pdf");
+         FilesService.detectFile = jest.fn().mockReturnValue("application/octet-stream");
          service.isOwner = jest.fn().mockResolvedValue(true);
 
          fs.createReadStream = jest.fn().mockReturnValue("data");
 
          await expect(service.toThumbnail("test/path", 1, 100, 100)).resolves.toBeNull();
+      });
+
+      it("should generate and return a PDF thumbnail", async () => {
+         const mockFile = { id: 42 };
+         const user = { id: 1, email: "cait@cupcake.com" };
+         const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/document.pdf`;
+         const metaDir = `${config.get("CLOUD_DIR")}/${user.email}/${FilesService.METADATA_FOLDER_NAME}`;
+         const thumbnailFolder = `${metaDir}/${FilesService.THUMBNAILS_FOLDER_NAME}`;
+
+         userService.getById = jest.fn().mockResolvedValue(user);
+         service.absolutePath = jest.fn().mockResolvedValue(absolutePath);
+         FilesService.detectFile = jest.fn().mockReturnValue("application/pdf");
+         service.isOwner = jest.fn().mockResolvedValue(true);
+         service.createMetaFolderIfNotExists = jest.fn().mockResolvedValue(metaDir);
+
+         fs.readFileSync = jest.fn().mockReturnValue("mock pdf content");
+         fs.writeFileSync = jest.fn();
+         fs.unlinkSync = jest.fn();
+
+         // File exists but no cached thumbnail, temp file exists for cleanup
+         jest.spyOn(fs, "existsSync").mockImplementation((path: string) => {
+            if (path === absolutePath) return true;
+            if (path.includes("_pdf_")) return false; // No cached thumbnail
+            if (path.includes("pdf_thumb_") && path.endsWith(".1.png")) return true; // Temp file exists
+            return false;
+         });
+
+         uploadedFileRepo.findOne = jest.fn().mockResolvedValue(mockFile);
+         fs.createReadStream = jest.fn().mockReturnValue("pdfThumbnailStream");
+
+         const result = await service.toThumbnail("document.pdf", 1, 400, 300);
+
+         expect(result).toBe("pdfThumbnailStream");
+         expect(fs.writeFileSync).toHaveBeenCalledWith(
+            `${thumbnailFolder}/${mockFile.id}_pdf_400x300.png`,
+            expect.any(Buffer),
+         );
+         // Verify temp file cleanup
+         expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringMatching(/pdf_thumb_.*\.1\.png$/));
+      });
+
+      it("should return cached PDF thumbnail if it exists", async () => {
+         const mockFile = { id: 42 };
+         const user = { id: 1, email: "cait@queen.com" };
+         const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/document.pdf`;
+         const metaDir = `${config.get("CLOUD_DIR")}/${user.email}/${FilesService.METADATA_FOLDER_NAME}`;
+         const thumbnailFolder = `${metaDir}/${FilesService.THUMBNAILS_FOLDER_NAME}`;
+         const cachedThumbnailPath = `${thumbnailFolder}/${mockFile.id}_pdf_400x300.png`;
+
+         userService.getById = jest.fn().mockResolvedValue(user);
+         service.absolutePath = jest.fn().mockResolvedValue(absolutePath);
+         FilesService.detectFile = jest.fn().mockReturnValue("application/pdf");
+         service.isOwner = jest.fn().mockResolvedValue(true);
+         service.createMetaFolderIfNotExists = jest.fn().mockResolvedValue(metaDir);
+
+         // Both file and cached thumbnail exist
+         jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
+         uploadedFileRepo.findOne = jest.fn().mockResolvedValue(mockFile);
+         fs.createReadStream = jest.fn().mockReturnValue("cachedPdfThumbnailStream");
+
+         const result = await service.toThumbnail("document.pdf", 1, 400, 300);
+
+         expect(result).toBe("cachedPdfThumbnailStream");
+         expect(fs.createReadStream).toHaveBeenCalledWith(cachedThumbnailPath);
+      });
+
+      it("should throw error for PDF if file does not exist", async () => {
+         const user = { id: 1, email: "cait@queen.com" };
+         const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/missing.pdf`;
+
+         userService.getById = jest.fn().mockResolvedValue(user);
+         service.absolutePath = jest.fn().mockResolvedValue(absolutePath);
+         FilesService.detectFile = jest.fn().mockReturnValue("application/pdf");
+         service.isOwner = jest.fn().mockResolvedValue(true);
+
+         jest.spyOn(fs, "existsSync").mockReturnValue(false);
+
+         await expect(service.toThumbnail("missing.pdf", 1, 400, 300)).rejects.toThrow(
+            `${absolutePath} does not exist`,
+         );
       });
    });
 

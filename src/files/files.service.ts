@@ -21,6 +21,8 @@ import { EnvVariables } from "src/config/config.validator";
 import type Redis from "ioredis";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
+import { fromBuffer as pdfToImage } from "pdf2pic";
+import { Readable } from "stream";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -403,6 +405,86 @@ export class FilesService {
          }, 1000);
 
          return this.fs.createReadStream(thumbnailPath);
+      } else if (fileMime.includes("pdf")) {
+         // Generate thumbnail for PDF first page
+         if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
+
+         const uploadedFile = await this.uploadedFileRepo.findOne({
+            where: { absolute_path: path.normalize(path_), user: { id: userId } },
+         });
+         const thumbnailFolder = path.join(
+            await this.createMetaFolderIfNotExists(userId),
+            FilesService.THUMBNAILS_FOLDER_NAME,
+         );
+
+         // Check if cached thumbnail exists
+         if (
+            (await this.featureFlagService.isFeatureFlagDisabled(
+               FeatureFlagNamespace.Files,
+               "disable_thumbnail_caching_disk",
+            )) &&
+            uploadedFile
+         ) {
+            const thumbnailPath = path.join(thumbnailFolder, `${uploadedFile.id}_pdf_${width}x${height}.png`);
+            if (this.fs.existsSync(thumbnailPath)) {
+               this.logger.debug(`[${this.toThumbnail.name}] Found cached PDF thumbnail at ${thumbnailPath}`);
+               return this.fs.createReadStream(thumbnailPath);
+            }
+         }
+
+         this.logger.debug(`[${this.toThumbnail.name}] Generating thumbnail for PDF at ${path_}`);
+
+         const targetWidth = Number(width) || 400;
+         const targetHeight = Number(height) || 300;
+         const pageNumber = 1;
+
+         // Read PDF file
+         const pdfBuffer = Buffer.from(this.fs.readFileSync(dir, "binary") as string, "binary");
+         const tempFilename = `pdf_thumb_${Date.now()}`;
+         const options = {
+            density: 150,
+            format: "png",
+            width: targetWidth,
+            savePath: thumbnailFolder,
+            saveFilename: tempFilename,
+         };
+
+         const convert = pdfToImage(pdfBuffer, options);
+         const result = await convert(pageNumber, { responseType: "buffer" });
+
+         // Clean up temp file created by pdf2pic
+         const tempPath = path.join(thumbnailFolder, `${tempFilename}.${pageNumber}.png`);
+         if (this.fs.existsSync(tempPath)) this.fs.unlinkSync(tempPath);
+
+         if (result.buffer) {
+            // Crop to top portion and resize in memory
+            const metadata = await sharp(result.buffer).metadata();
+            const cropHeight = Math.min(metadata.height || targetHeight, Math.floor((metadata.height || targetHeight) * 0.5));
+            const croppedBuffer = await sharp(result.buffer)
+               .extract({ left: 0, top: 0, width: metadata.width || targetWidth, height: cropHeight })
+               .resize(targetWidth, targetHeight, { fit: "cover" })
+               .png()
+               .toBuffer();
+
+            // If caching is enabled, save to disk
+            if (
+               (await this.featureFlagService.isFeatureFlagDisabled(
+                  FeatureFlagNamespace.Files,
+                  "disable_thumbnail_caching_disk",
+               )) &&
+               uploadedFile
+            ) {
+               const cachedPath = path.join(thumbnailFolder, `${uploadedFile.id}_pdf_${width}x${height}.png`);
+               this.fs.writeFileSync(cachedPath, croppedBuffer);
+               this.logger.debug(`[${this.toThumbnail.name}] Cached PDF thumbnail at ${cachedPath}`);
+               return this.fs.createReadStream(cachedPath);
+            }
+
+            // Return buffer as stream
+            return Readable.from(croppedBuffer);
+         }
+
+         return null;
       }
       return null;
    }
