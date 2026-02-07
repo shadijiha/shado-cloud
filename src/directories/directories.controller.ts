@@ -27,7 +27,7 @@ export class DirectoriesController {
    constructor(
       private readonly directoriesService: DirectoriesService,
       @Inject() private readonly logger: LoggerToDb,
-   ) {}
+   ) { }
 
    @Get("root")
    public async root(@AuthUser() userId: number) {
@@ -45,10 +45,17 @@ export class DirectoriesController {
 
    @Get("list{/:path}")
    @ApiParam({ name: "path", type: String, required: false, allowEmptyValue: true })
+   @ApiQuery({ name: "fetch_related_keys_in_redis", required: false, type: Boolean, example: false })
+   @ApiParam({ name: "fetch_db_records", type: Boolean, required: false, example: false })
    @ApiResponse({ type: DirListResponse })
-   public async list(@AuthUser() userId: number, @Param("path") path: string | undefined): Promise<DirListResponse> {
+   public async list(
+      @AuthUser() userId: number,
+      @Param("path") path: string | undefined,
+      @Query("fetch_related_keys_in_redis") fetch_related_keys_in_redis: boolean,
+      @Query("fetch_db_records") fetch_db_records: boolean,
+   ): Promise<DirListResponse> {
       try {
-         const list = await this.directoriesService.list(userId, path ?? "");
+         const list = await this.directoriesService.list(userId, path ?? "", fetch_related_keys_in_redis, fetch_db_records);
 
          return {
             status: OperationStatus[OperationStatus.SUCCESS],

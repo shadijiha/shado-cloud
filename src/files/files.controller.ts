@@ -54,7 +54,7 @@ export class FilesConstoller {
       @Req() req: Request,
    ) {
       try {
-         const fileInto = await this.fileService.info(userId, path);
+         const fileInto = await this.fileService.info(userId, path, false, false);
 
          // In case that it is a video or audio
          // We need to see if this request is for seeking
@@ -186,7 +186,7 @@ export class FilesConstoller {
    @ApiResponse({ type: FileInfoResponse })
    public async info(@Param("path") path: string, @AuthUser() userId: number): Promise<FileInfoResponse> {
       try {
-         const info = await this.fileService.info(userId, path);
+         const info = await this.fileService.info(userId, path, true, true);
          return {
             status: OperationStatus[OperationStatus.SUCCESS],
             data: info,

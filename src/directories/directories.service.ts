@@ -32,7 +32,7 @@ export class DirectoriesService {
       return await this.fileService.getUserRootPath(userId);
    }
 
-   public async list(userId: number, relativePath: string) {
+   public async list(userId: number, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false) {
       const dir = await this.fileService.absolutePath(userId, relativePath);
 
       if (!(await this.fileService.isOwner(userId, dir))) {
@@ -44,13 +44,14 @@ export class DirectoriesService {
 
       for (const file of files) {
          if (file.isDirectory()) {
+            const userRoot = await this.fileService.getUserRootPath(userId);
             result.push({
                name: file.name,
-               path: path.relative(await this.fileService.getUserRootPath(userId), dir),
+               path: path.relative(userRoot, dir),
                is_dir: true,
             });
          } else {
-            result.push(await this.fileService.info(userId, path.join(relativePath, file.name)));
+            result.push(await this.fileService.info(userId, path.join(relativePath, file.name), fetch_related_keys_in_redis ?? false, fetch_db_records ?? false));
          }
       }
 
