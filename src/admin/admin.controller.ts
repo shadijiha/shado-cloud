@@ -348,7 +348,7 @@ export class AdminController {
       @Query("file") file: string,
       @Res() res: Response,
    ) {
-      const filePath = decodeURIComponent(file);
+      const filePath = file; // Already decoded by NestJS
       const stream = await this.adminService.getBackupFile(filePath);
       const filename = filePath.split("/").pop();
       

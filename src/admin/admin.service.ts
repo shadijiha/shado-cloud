@@ -280,14 +280,15 @@ export class AdminService {
 
    private async runServerSetupBackup(subject: Subject<MessageEvent>) {
       const tmpDir = `/tmp/server-setup-${Date.now()}`;
-      const zipPath = `/tmp/server-setup-${Date.now()}.zip`;
+      const zipPath = `/tmp/server-backup-${Date.now()}.zip`;
       await fs.promises.mkdir(tmpDir, { recursive: true });
 
       const isMac = process.platform === "darwin";
-      const steps = ["MySQL dump", "Apache config", ".env file", "Creating zip"];
+      const filesToBackup: { name: string; getData: () => Promise<string> }[] = [];
 
-      // Step 1: MySQL dump
-      subject.next({ data: { type: "progress", step: steps[0], percent: 0 } });
+      // Collect backup tasks
+      // 1. MySQL dump
+      subject.next({ data: { type: "progress", step: "Dumping MySQL databases...", percent: 0, current: 0, total: 3 } });
       try {
          const dbHost = this.config.get("DB_HOST") || "localhost";
          const dbUser = this.config.get("DB_USERNAME");
@@ -297,9 +298,10 @@ export class AdminService {
       } catch (e) {
          await fs.promises.writeFile(`${tmpDir}/mysql-error.txt`, e.message);
       }
+      subject.next({ data: { type: "progress", step: "MySQL dump complete", percent: 33, current: 1, total: 3 } });
 
-      // Step 2: Apache config
-      subject.next({ data: { type: "progress", step: steps[1], percent: 25 } });
+      // 2. Apache config
+      subject.next({ data: { type: "progress", step: "Copying Apache config...", percent: 33, current: 1, total: 3 } });
       try {
          const apacheConfPath = isMac ? "/opt/homebrew/etc/httpd/httpd.conf" : "/etc/apache2/sites-available/000-default.conf";
          const content = await fs.promises.readFile(apacheConfPath, "utf-8");
@@ -307,20 +309,40 @@ export class AdminService {
       } catch (e) {
          await fs.promises.writeFile(`${tmpDir}/apache-error.txt`, e.message);
       }
+      subject.next({ data: { type: "progress", step: "Apache config complete", percent: 66, current: 2, total: 3 } });
 
-      // Step 3: .env file
-      subject.next({ data: { type: "progress", step: steps[2], percent: 50 } });
+      // 3. .env file
+      subject.next({ data: { type: "progress", step: "Copying .env file...", percent: 66, current: 2, total: 3 } });
       try {
          const content = await fs.promises.readFile(path.join(process.cwd(), ".env"), "utf-8");
          await fs.promises.writeFile(`${tmpDir}/env-file.txt`, content);
       } catch (e) {
          await fs.promises.writeFile(`${tmpDir}/env-error.txt`, e.message);
       }
+      subject.next({ data: { type: "progress", step: "All files copied", percent: 100, current: 3, total: 3 } });
 
-      // Step 4: Create zip
-      subject.next({ data: { type: "progress", step: steps[3], percent: 75 } });
-      const zipBuffer = await this.createZipBuffer(tmpDir);
-      await fs.promises.writeFile(zipPath, zipBuffer);
+      // Create zip with progress
+      subject.next({ data: { type: "progress", step: "Creating zip archive...", percent: 0, phase: "zip" } });
+      
+      await new Promise<void>((resolve, reject) => {
+         const output = fs.createWriteStream(zipPath);
+         const archive = archiver("zip", { zlib: { level: 9 } });
+
+         archive.on("error", reject);
+         output.on("close", resolve);
+
+         archive.on("progress", (progress) => {
+            const percent = progress.entries.total > 0 
+               ? Math.round((progress.entries.processed / progress.entries.total) * 100)
+               : 0;
+            subject.next({ data: { type: "progress", step: "Compressing files...", percent, phase: "zip", current: progress.entries.processed, total: progress.entries.total } });
+         });
+
+         archive.pipe(output);
+         archive.directory(tmpDir, false);
+         archive.finalize();
+      });
+
       await fs.promises.rm(tmpDir, { recursive: true, force: true });
 
       subject.next({ data: { type: "complete", downloadPath: `/admin/backup/download?file=${encodeURIComponent(zipPath)}` } });
@@ -388,6 +410,9 @@ export class AdminService {
    public async getBackupFile(filePath: string): Promise<fs.ReadStream> {
       if (!filePath.startsWith("/tmp/") || !filePath.includes("-backup-")) {
          throw new HttpException("Invalid file path", HttpStatus.BAD_REQUEST);
+      }
+      if (!fs.existsSync(filePath)) {
+         throw new HttpException("Backup file not found or already downloaded", HttpStatus.NOT_FOUND);
       }
       return fs.createReadStream(filePath);
    }
