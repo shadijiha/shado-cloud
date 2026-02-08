@@ -14,11 +14,12 @@ import { EmailService } from "./email.service";
 import { DirectoriesModule } from "../directories/directories.module";
 import { RemoteDesktopGateway } from "./remote-desktop.gateway";
 import { AuthService } from "../auth/auth.service";
+import { DeploymentService } from "./deployment.service";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController],
    imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction]), FilesModule, DirectoriesModule],
-   providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService, RemoteDesktopGateway, AuthService],
+   providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService, RemoteDesktopGateway, AuthService, DeploymentService],
    exports: [AdminService],
 })
 export class AdminModule { }

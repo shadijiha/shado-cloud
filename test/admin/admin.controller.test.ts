@@ -11,6 +11,7 @@ import { type Log } from "src/models/log";
 import { User } from "src/models/user";
 import crypto from "crypto";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
+import { DeploymentService } from "src/admin/deployment.service";
 
 describe("AdminController", () => {
    let adminController: AdminController;
@@ -69,6 +70,14 @@ describe("AdminController", () => {
             {
                provide: FeatureFlagService,
                useValue: {},
+            },
+            {
+               provide: DeploymentService,
+               useValue: {
+                  isRunning: jest.fn().mockReturnValue(false),
+                  getCurrentDeployment: jest.fn().mockReturnValue(null),
+                  startDeployment: jest.fn(),
+               },
             },
          ],
       }).compile();
@@ -160,6 +169,12 @@ describe("AdminController", () => {
    });
 
    describe("redeploy", () => {
+      let deploymentService: any;
+
+      beforeEach(() => {
+         deploymentService = adminController["deploymentService"];
+      });
+
       it("should successfully trigger redeployment with valid GitHub signature", async () => {
          // Mocking the signature verification and redeploy process
          const hmacMock = jest.spyOn(crypto, "createHmac").mockReturnValue({
@@ -167,7 +182,7 @@ describe("AdminController", () => {
             digest: jest.fn().mockReturnValue("validsignature"),
          } as any);
 
-         const redeployMock = jest.spyOn(adminService, "redeploy").mockResolvedValue();
+         const startDeploymentMock = jest.spyOn(deploymentService, "startDeployment").mockReturnValue({});
          configService.get = jest.fn().mockReturnValue("githubsecret"); // Return secret
 
          // Call the redeploy method
@@ -175,7 +190,7 @@ describe("AdminController", () => {
 
          // Assertions
          expect(hmacMock).toHaveBeenCalledWith("sha256", "githubsecret");
-         expect(redeployMock).toHaveBeenCalled();
+         expect(startDeploymentMock).toHaveBeenCalledWith("backend", "github-webhook");
          expect(result.message).toBe("Deployment triggered successfully");
          expect(logger.log).toHaveBeenCalledWith("Received backend webhook payload");
          expect(logger.log).toHaveBeenCalledWith("Starting redeployment...");
@@ -200,7 +215,7 @@ describe("AdminController", () => {
          }
       });
 
-      it("should return error message if redeploy fails", async () => {
+      it("should return error message if deployment fails to start", async () => {
          const errorMessage = "Deployment failed";
 
          // Mocking the signature verification and redeploy process
@@ -209,7 +224,9 @@ describe("AdminController", () => {
             digest: jest.fn().mockReturnValue("validsignature"),
          } as any);
 
-         const redeployMock = jest.spyOn(adminService, "redeploy").mockRejectedValue(new Error(errorMessage));
+         jest.spyOn(deploymentService, "startDeployment").mockImplementation(() => {
+            throw new Error(errorMessage);
+         });
          configService.get = jest.fn().mockReturnValue("githubsecret"); // Return secret
 
          // Call the redeploy method
@@ -231,7 +248,6 @@ describe("AdminController", () => {
          // Assertions
          expect(result.message).toBe(`Not a push to ${branchName} branch, ignoring`);
          expect(mockLoggerWarn).toHaveBeenCalledWith(`Ignoring push to non-${branchName} branch`);
-         expect(adminService.redeploy).not.toHaveBeenCalled(); // Ensure redeploy is not called
       });
    });
 

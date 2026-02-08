@@ -9,6 +9,7 @@ import {
    Inject,
    Param,
    Post,
+   Put,
    UseGuards,
    Headers,
    UnauthorizedException,
@@ -40,6 +41,9 @@ import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { FeatureFlagService } from "./feature-flag.service";
 import { CreateFeatureFlagRequest, DatabaseGetTableRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
 import { ValidationPipeline } from "src/auth/ValidationPipeline";
+import { DeploymentService } from "./deployment.service";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Each function of this controller needs to be decorated with
@@ -55,6 +59,7 @@ export class AdminController {
       private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
+      private readonly deploymentService: DeploymentService,
    ) {}
 
    @Get("logs")
@@ -147,7 +152,7 @@ export class AdminController {
 
          // Run deployment steps
          this.logger.log("Starting redeployment...");
-         await this.adminService.redeploy(type);
+         this.deploymentService.startDeployment(type as "backend" | "frontend", "github-webhook");
 
          return { message: "Deployment triggered successfully" };
       } catch (error) {
@@ -405,5 +410,72 @@ export class AdminController {
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    public deleteBackground(@Param("filename") filename: string) {
       return this.adminService.deleteBackgroundImage(filename);
+   }
+
+   // Deployment Pipeline
+   @Get("deployment/status")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getDeploymentStatus() {
+      return {
+         isRunning: this.deploymentService.isRunning(),
+         current: this.deploymentService.getCurrentDeployment(),
+         last: this.deploymentService.getLastDeployment(),
+      };
+   }
+
+   @Get("deployment/stream")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @Sse()
+   public streamDeployment(): Observable<MessageEvent> {
+      const subject = this.deploymentService.getSubject();
+      if (!subject) {
+         throw new HttpException("No deployment in progress", HttpStatus.NOT_FOUND);
+      }
+      return subject.asObservable();
+   }
+
+   @Get("deployment/start/:project")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @Sse()
+   public startDeployment(
+      @Param("project") project: "backend" | "frontend",
+   ): Observable<MessageEvent> {
+      if (project !== "backend" && project !== "frontend") {
+         throw new HttpException("Invalid project", HttpStatus.BAD_REQUEST);
+      }
+      return this.deploymentService.startDeployment(project, "admin");
+   }
+
+   // Environment file management
+   @Get("env/:project")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getEnvFile(@Param("project") project: "backend" | "frontend"): string {
+      const envPath = project === "backend" 
+         ? path.join(process.cwd(), ".env")
+         : path.join(this.config.get("FRONTEND_DEPLOY_PATH") || "", ".env");
+      
+      if (!fs.existsSync(envPath)) {
+         throw new HttpException("Env file not found", HttpStatus.NOT_FOUND);
+      }
+      return fs.readFileSync(envPath, "utf-8");
+   }
+
+   @Put("env/:project")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public saveEnvFile(
+      @Param("project") project: "backend" | "frontend",
+      @Body("content") content: string,
+   ): { success: boolean } {
+      const envPath = project === "backend" 
+         ? path.join(process.cwd(), ".env")
+         : path.join(this.config.get("FRONTEND_DEPLOY_PATH") || "", ".env");
+      
+      if (project === "frontend" && !this.config.get("FRONTEND_DEPLOY_PATH")) {
+         throw new HttpException("FRONTEND_DEPLOY_PATH not configured", HttpStatus.BAD_REQUEST);
+      }
+      
+      fs.writeFileSync(envPath, content, "utf-8");
+      this.logger.log(`Env file updated for ${project}`);
+      return { success: true };
    }
 }
