@@ -57,8 +57,8 @@ export class DeploymentService {
       { step: "test", name: "Run Tests", cmd: "npm", args: ["test", "--", "--runInBand", "--no-colors"] },
       { step: "build", name: "Build", cmd: "npm", args: ["run", "build"] },
       { step: "migrate", name: "Run Migrations", cmd: "npx", args: ["typeorm", "migration:run", "-d", "ormconfig.js"] },
-      { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend", "--update-env"] },
-      { step: "verify", name: "Verify Deployment", cmd: "pm2", args: ["show", "shado-cloud-backend"] },
+      { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend", "--update-env", "--no-daemon"] },
+      { step: "verify", name: "Verify Deployment", cmd: "pm2", args: ["list", "--no-daemon"] },
    ];
 
    private readonly frontendSteps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[] = [
@@ -328,11 +328,24 @@ export class DeploymentService {
 
    private runStep(cmd: string, args: string[], cwd: string, step: DeploymentStep, deployment: DeploymentState): Promise<void> {
       return new Promise((resolve, reject) => {
-         const proc = spawn(cmd, args, { cwd, shell: true, env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" } });
+         const env = { 
+            ...process.env, 
+            FORCE_COLOR: "0", 
+            NO_COLOR: "1",
+            PM2_NO_INTERACTION: "1",
+            CI: "true",
+         };
+         const proc = spawn(cmd, args, { cwd, shell: true, env, stdio: ["ignore", "pipe", "pipe"] });
          this.currentProcess = proc;
          const stepState = deployment.steps.find(s => s.step === step)!;
 
          const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+
+         // Timeout for steps that might hang
+         const timeout = setTimeout(() => {
+            proc.kill("SIGTERM");
+            reject(new Error("Step timed out after 60 seconds"));
+         }, 60000);
 
          proc.stdout.on("data", (data) => {
             const output = stripAnsi(data.toString());
@@ -347,8 +360,9 @@ export class DeploymentService {
          });
 
          proc.on("close", (code) => {
+            clearTimeout(timeout);
             this.currentProcess = null;
-            if (code === 0) {
+            if (code === 0 || code === null) {
                resolve();
             } else {
                reject(new Error(`Process exited with code ${code}`));
@@ -356,6 +370,7 @@ export class DeploymentService {
          });
 
          proc.on("error", (err) => {
+            clearTimeout(timeout);
             this.currentProcess = null;
             reject(err);
          });
