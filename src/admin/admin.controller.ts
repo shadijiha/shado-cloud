@@ -20,7 +20,10 @@ import {
    Sse,
    MessageEvent,
    Query,
+   UseInterceptors,
+   UploadedFile,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { Observable } from "rxjs";
 import { AuthGuard } from "@nestjs/passport";
@@ -367,5 +370,40 @@ export class AdminController {
       stream.on("close", () => {
          this.adminService.deleteBackupFile(filePath);
       });
+   }
+
+   /**
+    * Background images endpoints
+    */
+   @Get("backgrounds")
+   public getBackgrounds() {
+      return this.adminService.getBackgroundImages();
+   }
+
+   @Get("backgrounds/:filename")
+   public async getBackgroundImage(
+      @Param("filename") filename: string,
+      @Res() res: Response,
+   ) {
+      const stream = await this.adminService.getBackgroundImageStream(filename);
+      const ext = filename.split(".").pop()?.toLowerCase();
+      const mimeTypes: Record<string, string> = {
+         jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif"
+      };
+      res.set({ "Content-Type": mimeTypes[ext || "jpg"] || "image/jpeg" });
+      stream.pipe(res);
+   }
+
+   @Post("backgrounds")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseInterceptors(FileInterceptor("file"))
+   public uploadBackground(@UploadedFile() file: Express.Multer.File) {
+      return this.adminService.uploadBackgroundImage(file);
+   }
+
+   @Delete("backgrounds/:filename")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public deleteBackground(@Param("filename") filename: string) {
+      return this.adminService.deleteBackgroundImage(filename);
    }
 }

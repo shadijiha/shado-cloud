@@ -460,4 +460,65 @@ export class AdminService {
          this.logger.error(`Failed to delete backup file ${filePath}: ${e.message}`);
       }
    }
+
+   /**
+    * Background images management
+    */
+   private getBackgroundsDir(): string {
+      const dir = path.join(this.config.get("CLOUD_DIR"), "_system", "backgrounds");
+      if (!fs.existsSync(dir)) {
+         fs.mkdirSync(dir, { recursive: true });
+      }
+      return dir;
+   }
+
+   public async getBackgroundImages(): Promise<{ images: string[] }> {
+      const dir = this.getBackgroundsDir();
+      try {
+         const files = await fs.promises.readdir(dir);
+         const images = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f));
+         return { images };
+      } catch {
+         return { images: [] };
+      }
+   }
+
+   public async uploadBackgroundImage(file: Express.Multer.File): Promise<{ filename: string }> {
+      if (!file) {
+         throw new HttpException("No file provided", HttpStatus.BAD_REQUEST);
+      }
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) {
+         throw new HttpException("Invalid file type. Only images allowed.", HttpStatus.BAD_REQUEST);
+      }
+
+      const dir = this.getBackgroundsDir();
+      const ext = path.extname(file.originalname) || ".jpg";
+      const filename = `bg_${Date.now()}${ext}`;
+      const filePath = path.join(dir, filename);
+
+      await fs.promises.writeFile(filePath, file.buffer);
+      return { filename };
+   }
+
+   public async deleteBackgroundImage(filename: string): Promise<void> {
+      if (filename.includes("/") || filename.includes("..")) {
+         throw new HttpException("Invalid filename", HttpStatus.BAD_REQUEST);
+      }
+      const filePath = path.join(this.getBackgroundsDir(), filename);
+      if (!fs.existsSync(filePath)) {
+         throw new HttpException("Image not found", HttpStatus.NOT_FOUND);
+      }
+      await fs.promises.unlink(filePath);
+   }
+
+   public async getBackgroundImageStream(filename: string): Promise<fs.ReadStream> {
+      if (filename.includes("/") || filename.includes("..")) {
+         throw new HttpException("Invalid filename", HttpStatus.BAD_REQUEST);
+      }
+      const filePath = path.join(this.getBackgroundsDir(), filename);
+      if (!fs.existsSync(filePath)) {
+         throw new HttpException("Image not found", HttpStatus.NOT_FOUND);
+      }
+      return fs.createReadStream(filePath);
+   }
 }

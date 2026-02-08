@@ -306,4 +306,44 @@ describe("AdminController", () => {
          });
       });
    });
+
+   describe("background images", () => {
+      it("getBackgrounds should call service", async () => {
+         adminService.getBackgroundImages = jest.fn().mockResolvedValue({ images: ["bg1.jpg"] });
+
+         const result = await adminController.getBackgrounds();
+
+         expect(adminService.getBackgroundImages).toHaveBeenCalled();
+         expect(result).toEqual({ images: ["bg1.jpg"] });
+      });
+
+      it("uploadBackground should call service with file", async () => {
+         const mockFile = { originalname: "test.jpg" } as Express.Multer.File;
+         adminService.uploadBackgroundImage = jest.fn().mockResolvedValue({ filename: "bg_123.jpg" });
+
+         const result = await adminController.uploadBackground(mockFile);
+
+         expect(adminService.uploadBackgroundImage).toHaveBeenCalledWith(mockFile);
+         expect(result).toEqual({ filename: "bg_123.jpg" });
+      });
+
+      it("deleteBackground should call service with filename", async () => {
+         adminService.deleteBackgroundImage = jest.fn().mockResolvedValue(undefined);
+
+         await adminController.deleteBackground("bg_123.jpg");
+
+         expect(adminService.deleteBackgroundImage).toHaveBeenCalledWith("bg_123.jpg");
+      });
+
+      it("getBackgroundImage should set headers and call service", async () => {
+         const mockStream = { pipe: jest.fn() };
+         adminService.getBackgroundImageStream = jest.fn().mockResolvedValue(mockStream);
+
+         const mockRes = { set: jest.fn() };
+         await adminController.getBackgroundImage("bg_123.jpg", mockRes as any);
+
+         expect(adminService.getBackgroundImageStream).toHaveBeenCalledWith("bg_123.jpg");
+         expect(mockRes.set).toHaveBeenCalledWith({ "Content-Type": "image/jpeg" });
+      });
+   });
 });

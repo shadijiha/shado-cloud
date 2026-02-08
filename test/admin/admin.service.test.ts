@@ -305,4 +305,28 @@ describe("AdminService", () => {
          );
       });
    });
+
+   describe("uploadBackgroundImage", () => {
+      it("should throw when no file provided", async () => {
+         await expect(service.uploadBackgroundImage(null as any)).rejects.toThrow("No file provided");
+      });
+
+      it("should throw for invalid file type", async () => {
+         const file = { mimetype: "text/plain", originalname: "test.txt", buffer: Buffer.from("") } as Express.Multer.File;
+         await expect(service.uploadBackgroundImage(file)).rejects.toThrow("Invalid file type");
+      });
+   });
+
+   describe("deleteBackgroundImage", () => {
+      it("should throw for path traversal attempt", async () => {
+         await expect(service.deleteBackgroundImage("../etc/passwd")).rejects.toThrow("Invalid filename");
+         await expect(service.deleteBackgroundImage("foo/bar.jpg")).rejects.toThrow("Invalid filename");
+      });
+   });
+
+   describe("getBackgroundImageStream", () => {
+      it("should throw for path traversal attempt", async () => {
+         await expect(service.getBackgroundImageStream("../etc/passwd")).rejects.toThrow("Invalid filename");
+      });
+   });
 });
