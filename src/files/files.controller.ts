@@ -165,7 +165,6 @@ export class FilesConstoller {
       @Query("width") width: number | undefined,
       @Query("height") height: number | undefined,
    ) {
-      this.logger.log(`[thumbnail] Called with path=${path}, width=${width}, height=${height}`);
       try {
          const stream = await this.fileService.toThumbnail(path, userId, width, height);
          if (!stream) {
@@ -195,7 +194,6 @@ export class FilesConstoller {
       @Res() res: Response,
       @Req() req: Request,
    ) {
-      this.logger.log(`[getFile] Called with path=${path}`);
       try {
          const fileInto = await this.fileService.info(userId, path, false, false);
 
