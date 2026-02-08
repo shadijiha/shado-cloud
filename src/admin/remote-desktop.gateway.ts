@@ -19,6 +19,7 @@ import * as cookie from "cookie";
 import * as jwt from "jsonwebtoken";
 import { CookiePayload } from "../auth/authApiTypes";
 import { LoggerToDb } from "../logging";
+import { networkInterfaces } from "os";
 
 const execAsync = promisify(exec);
 
@@ -114,7 +115,9 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    private startStreaming() {
       this.logger.log("Starting WebRTC stream via mediamtx");
       // mediamtx handles the streaming - we just notify clients of the WebRTC endpoint
-      const webrtcUrl = "http://localhost:8889/screen/whep";
+      const nets = networkInterfaces();
+const ip = Object.values(nets).flat().find((n: any) => n.family === "IPv4" && !n.internal)?.address || "localhost";
+const webrtcUrl = `http://${ip}:8889/screen/whep`;
       this.server.emit("webrtc-url", webrtcUrl);
       
       // Also start MJPEG fallback
@@ -126,7 +129,7 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
       const isMac = process.platform === "darwin";
       const captureCmd = isMac 
          ? "screencapture -x -t jpg /tmp/screen.jpg && base64 /tmp/screen.jpg"
-         : "scrot -p -o /tmp/screen.jpg -q 60 && base64 /tmp/screen.jpg";
+         : "scrot -p -o /tmp/screen.jpg -q 20 && base64 /tmp/screen.jpg";
       
       this.streamInterval = setInterval(async () => {
          try {
@@ -135,7 +138,7 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
          } catch (err) {
             // Silent fail - WebRTC might be working
          }
-      }, 100);
+      }, 500);
    }
 
    private fallbackToScrot(env: NodeJS.ProcessEnv) {
