@@ -40,80 +40,6 @@ import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 export class FilesConstoller {
    constructor(private readonly fileService: FilesService, @Inject() private readonly logger: LoggerToDb) {}
 
-   @Get(":path")
-   @ApiResponse({ description: "Returns a stream of the requested file" })
-   @ApiParam({
-      name: "path",
-      description: "File relative path + file name + extension",
-      type: String,
-   })
-   public async getFile(
-      @Param("path") path: string,
-      @AuthUser() userId: number,
-      @Res() res: Response,
-      @Req() req: Request,
-   ) {
-      try {
-         const fileInto = await this.fileService.info(userId, path, false, false);
-
-         // In case that it is a video or audio
-         // We need to see if this request is for seeking
-         if (fileInto.is_video || fileInto.is_audio) {
-            /* res.set({
-					"Content-Type": fileInto.mime,
-					"Content-Disposition": `filename="${fileInto.name}"`,
-					"Content-Length": fileInto.size,
-				}); */
-
-            const total = fileInto.size;
-            if (req.headers.range) {
-               const range = req.headers.range;
-               const parts = range.replace(/bytes=/, "").split("-");
-               const partialstart = parts[0];
-               const partialend = parts[1];
-
-               const start = parseInt(partialstart, 10);
-               const end = partialend ? parseInt(partialend, 10) : total - 1;
-               const chunksize = end - start + 1;
-
-               const file = await this.fileService.asStream(userId, path, req.headers["user-agent"], {
-                  start,
-                  end,
-               });
-               res.writeHead(206, {
-                  "Content-Range": "bytes " + start + "-" + end + "/" + total,
-                  "Accept-Ranges": "bytes",
-                  "Content-Length": chunksize,
-                  "Content-Type": fileInto.mime,
-               });
-
-               file.pipe(res);
-            } else {
-               res.writeHead(200, {
-                  "Content-Length": total,
-                  "Content-Type": fileInto.mime,
-               });
-               (await this.fileService.asStream(userId, path, req.headers["user-agent"])).pipe(res);
-            }
-         }
-         // Otherwise for any other file just do a simple stream
-         else {
-            const file = await this.fileService.asStream(userId, path, req.headers["user-agent"]);
-            res.writeHead(200, {
-               "Content-Type": fileInto.mime,
-               "Content-Length": fileInto.size,
-            });
-            file.pipe(res);
-         }
-      } catch (e) {
-         this.logger.logException(e);
-         res.status(400).send({
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "path", message: (e as Error).message }],
-         });
-      }
-   }
-
    @Post("upload")
    @ApiResponse({ type: OperationStatusResponse })
    @ApiConsumes("multipart/form-data")
@@ -252,6 +178,74 @@ export class FilesConstoller {
             status: OperationStatus[OperationStatus.FAILED],
             errors: [{ field: "path", message: (e as Error).message }],
          };
+      }
+   }
+
+   @Get(":path")
+   @ApiResponse({ description: "Returns a stream of the requested file" })
+   @ApiParam({
+      name: "path",
+      description: "File relative path + file name + extension",
+      type: String,
+   })
+   public async getFile(
+      @Param("path") path: string,
+      @AuthUser() userId: number,
+      @Res() res: Response,
+      @Req() req: Request,
+   ) {
+      try {
+         const fileInto = await this.fileService.info(userId, path, false, false);
+
+         // In case that it is a video or audio
+         // We need to see if this request is for seeking
+         if (fileInto.is_video || fileInto.is_audio) {
+            const total = fileInto.size;
+            if (req.headers.range) {
+               const range = req.headers.range;
+               const parts = range.replace(/bytes=/, "").split("-");
+               const partialstart = parts[0];
+               const partialend = parts[1];
+
+               const start = parseInt(partialstart, 10);
+               const end = partialend ? parseInt(partialend, 10) : total - 1;
+               const chunksize = end - start + 1;
+
+               const file = await this.fileService.asStream(userId, path, req.headers["user-agent"], {
+                  start,
+                  end,
+               });
+               res.writeHead(206, {
+                  "Content-Range": "bytes " + start + "-" + end + "/" + total,
+                  "Accept-Ranges": "bytes",
+                  "Content-Length": chunksize,
+                  "Content-Type": fileInto.mime,
+               });
+
+               file.pipe(res);
+            } else {
+               res.writeHead(200, {
+                  "Content-Length": total,
+                  "Content-Type": fileInto.mime,
+               });
+               (await this.fileService.asStream(userId, path, req.headers["user-agent"])).pipe(res);
+            }
+         }
+         // Otherwise for any other file just do a simple stream
+         else {
+            const file = await this.fileService.asStream(userId, path, req.headers["user-agent"]);
+            res.writeHead(200, {
+               "Content-Type": fileInto.mime,
+               "Content-Length": fileInto.size,
+            });
+            file.pipe(res);
+         }
+      } catch (e) {
+         this.logger.logException(e);
+         res.status(400).send({
+            status: OperationStatus[OperationStatus.FAILED],
+            errors: [{ field: "path", message: (e as Error).message }],
+         });
       }
    }
 }
