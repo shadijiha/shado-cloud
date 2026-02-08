@@ -154,6 +154,12 @@ export class AdminController {
       }
    }
 
+   @Get("metrics/system")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getSystemMetrics() {
+      return this.metrics.getSystemMetrics();
+   }
+
    @Get("redis/info/:section")
    @ApiParam({
       name: "section",

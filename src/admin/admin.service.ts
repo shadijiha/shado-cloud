@@ -284,24 +284,54 @@ export class AdminService {
       await fs.promises.mkdir(tmpDir, { recursive: true });
 
       const isMac = process.platform === "darwin";
-      const filesToBackup: { name: string; getData: () => Promise<string> }[] = [];
 
-      // Collect backup tasks
-      // 1. MySQL dump
-      subject.next({ data: { type: "progress", step: "Dumping MySQL databases...", percent: 0, current: 0, total: 3 } });
+      // Step 1: MySQL dump with progress
+      subject.next({ data: { type: "progress", step: "Dumping MySQL databases...", percent: 0, phase: "mysql" } });
       try {
          const dbHost = this.config.get("DB_HOST") || "localhost";
          const dbUser = this.config.get("DB_USERNAME");
          const dbPass = this.config.get("DB_PASSWORD");
          const mysqldump = isMac ? "/opt/homebrew/bin/mysqldump" : "mysqldump";
-         await this.execSync(`${mysqldump} -h ${dbHost} -u ${dbUser} -p'${dbPass}' --all-databases > ${tmpDir}/mysql-dump.sql`);
+         
+         await new Promise<void>((resolve, reject) => {
+            const dumpPath = `${tmpDir}/mysql-dump.sql`;
+            const output = fs.createWriteStream(dumpPath);
+            const child = require("child_process").spawn(mysqldump, [
+               "-h", dbHost,
+               "-u", dbUser,
+               `-p${dbPass}`,
+               "--all-databases"
+            ]);
+
+            let bytesWritten = 0;
+            child.stdout.on("data", (chunk: Buffer) => {
+               bytesWritten += chunk.length;
+               output.write(chunk);
+               subject.next({ 
+                  data: { 
+                     type: "progress", 
+                     step: "Dumping MySQL databases...", 
+                     processedBytes: bytesWritten,
+                     phase: "mysql"
+                  } 
+               });
+            });
+
+            child.stderr.on("data", () => {}); // Ignore warnings
+            child.on("close", (code: number) => {
+               output.end();
+               if (code === 0) resolve();
+               else reject(new Error(`mysqldump exited with code ${code}`));
+            });
+            child.on("error", reject);
+         });
       } catch (e) {
          await fs.promises.writeFile(`${tmpDir}/mysql-error.txt`, e.message);
+         subject.next({ data: { type: "progress", step: "MySQL dump failed", phase: "mysql" } });
       }
-      subject.next({ data: { type: "progress", step: "MySQL dump complete", percent: 33, current: 1, total: 3 } });
 
-      // 2. Apache config
-      subject.next({ data: { type: "progress", step: "Copying Apache config...", percent: 33, current: 1, total: 3 } });
+      // Step 2: Apache config (quick)
+      subject.next({ data: { type: "progress", step: "Copying Apache config...", phase: "copy" } });
       try {
          const apacheConfPath = isMac ? "/opt/homebrew/etc/httpd/httpd.conf" : "/etc/apache2/sites-available/000-default.conf";
          const content = await fs.promises.readFile(apacheConfPath, "utf-8");
@@ -309,21 +339,20 @@ export class AdminService {
       } catch (e) {
          await fs.promises.writeFile(`${tmpDir}/apache-error.txt`, e.message);
       }
-      subject.next({ data: { type: "progress", step: "Apache config complete", percent: 66, current: 2, total: 3 } });
 
-      // 3. .env file
-      subject.next({ data: { type: "progress", step: "Copying .env file...", percent: 66, current: 2, total: 3 } });
+      // Step 3: .env file (quick)
+      subject.next({ data: { type: "progress", step: "Copying .env file...", phase: "copy" } });
       try {
          const content = await fs.promises.readFile(path.join(process.cwd(), ".env"), "utf-8");
          await fs.promises.writeFile(`${tmpDir}/env-file.txt`, content);
       } catch (e) {
          await fs.promises.writeFile(`${tmpDir}/env-error.txt`, e.message);
       }
-      subject.next({ data: { type: "progress", step: "All files copied", percent: 100, current: 3, total: 3 } });
 
-      // Create zip with progress
-      subject.next({ data: { type: "progress", step: "Creating zip archive...", percent: 0, phase: "zip" } });
-      
+      // Step 4: Create zip with byte progress
+      subject.next({ data: { type: "progress", step: "Scanning files...", percent: 0, phase: "zip" } });
+      const totalSize = await this.getDirSize(tmpDir);
+
       await new Promise<void>((resolve, reject) => {
          const output = fs.createWriteStream(zipPath);
          const archive = archiver("zip", { zlib: { level: 9 } });
@@ -332,10 +361,17 @@ export class AdminService {
          output.on("close", resolve);
 
          archive.on("progress", (progress) => {
-            const percent = progress.entries.total > 0 
-               ? Math.round((progress.entries.processed / progress.entries.total) * 100)
-               : 0;
-            subject.next({ data: { type: "progress", step: "Compressing files...", percent, phase: "zip", current: progress.entries.processed, total: progress.entries.total } });
+            const percent = totalSize > 0 ? Math.min(99, Math.round((progress.fs.processedBytes / totalSize) * 100)) : 0;
+            subject.next({ 
+               data: { 
+                  type: "progress", 
+                  step: "Compressing...", 
+                  percent, 
+                  processedBytes: progress.fs.processedBytes, 
+                  totalBytes: totalSize,
+                  phase: "zip"
+               } 
+            });
          });
 
          archive.pipe(output);
