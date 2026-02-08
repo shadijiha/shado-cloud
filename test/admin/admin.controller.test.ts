@@ -234,4 +234,42 @@ describe("AdminController", () => {
          expect(adminService.redeploy).not.toHaveBeenCalled(); // Ensure redeploy is not called
       });
    });
+
+   describe("getServerSetup", () => {
+      it("should call service with sudo password", async () => {
+         const mockBuffer = Buffer.from("zip-content");
+         adminService.generateServerSetupBackup = jest.fn().mockResolvedValue(mockBuffer);
+
+         const mockRes = { set: jest.fn() };
+
+         await adminController.getServerSetup({ sudoPassword: "secret123" }, mockRes as any);
+
+         expect(adminService.generateServerSetupBackup).toHaveBeenCalledWith("secret123");
+      });
+
+      it("should call service without password when not provided", async () => {
+         const mockBuffer = Buffer.from("zip-content");
+         adminService.generateServerSetupBackup = jest.fn().mockResolvedValue(mockBuffer);
+
+         const mockRes = { set: jest.fn() };
+
+         await adminController.getServerSetup({}, mockRes as any);
+
+         expect(adminService.generateServerSetupBackup).toHaveBeenCalledWith(undefined);
+      });
+
+      it("should set correct response headers", async () => {
+         const mockBuffer = Buffer.from("zip-content");
+         adminService.generateServerSetupBackup = jest.fn().mockResolvedValue(mockBuffer);
+
+         const mockRes = { set: jest.fn() };
+
+         await adminController.getServerSetup({}, mockRes as any);
+
+         expect(mockRes.set).toHaveBeenCalledWith({
+            "Content-Type": "application/zip",
+            "Content-Disposition": expect.stringContaining("server-setup-"),
+         });
+      });
+   });
 });

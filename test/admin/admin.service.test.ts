@@ -237,4 +237,43 @@ describe("AdminService", () => {
          expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("deploy.sh exited with code 1"));
       });
    });
+
+   describe("generateServerSetupBackup", () => {
+      it("should call execSync for mysql dump", async () => {
+         const execSyncMock = jest.fn().mockResolvedValue({ stdout: "" });
+         // @ts-expect-error
+         service.execSync = execSyncMock;
+         // @ts-expect-error
+         service.createZipBuffer = jest.fn().mockResolvedValue(Buffer.from("zip"));
+
+         try {
+            await service.generateServerSetupBackup();
+         } catch {
+            // May fail due to fs operations, but we're testing execSync was called
+         }
+
+         expect(execSyncMock).toHaveBeenCalledWith(expect.stringContaining("mysqldump"));
+      });
+
+      it("should include sudo prefix when password provided on linux", async () => {
+         const execSyncMock = jest.fn().mockResolvedValue({ stdout: "" });
+         // @ts-expect-error
+         service.execSync = execSyncMock;
+         // @ts-expect-error
+         service.createZipBuffer = jest.fn().mockResolvedValue(Buffer.from("zip"));
+
+         const originalPlatform = process.platform;
+         Object.defineProperty(process, "platform", { value: "linux" });
+
+         try {
+            await service.generateServerSetupBackup("testpass");
+         } catch {
+            // May fail due to fs operations
+         }
+
+         expect(execSyncMock).toHaveBeenCalledWith(expect.stringContaining("echo 'testpass' | sudo -S"));
+
+         Object.defineProperty(process, "platform", { value: originalPlatform });
+      });
+   });
 });

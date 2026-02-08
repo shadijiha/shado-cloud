@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, HttpException, HttpStatus } from "@nestjs/common";
 import { InjectDataSource, InjectEntityManager, InjectRepository } from "@nestjs/typeorm";
 import { exec } from "child_process";
 import { LoggerToDb } from "../logging";
@@ -13,6 +13,9 @@ import { DatabaseGetTableRequest } from "./adminApiTypes";
 import { EncryptedPassword } from "src/models/EncryptedPassword";
 import { User } from "src/models/user";
 import { EmailService } from "./email.service";
+import * as fs from "fs";
+import * as path from "path";
+import archiver from "archiver";
 
 @Injectable()
 export class AdminService {
@@ -183,5 +186,81 @@ export class AdminService {
 
    private async execSync(command: string) {
       return promisify(exec)(command);
+   }
+
+   public async generateServerSetupBackup(sudoPassword?: string): Promise<Buffer> {
+      const tmpDir = `/tmp/server-setup-${Date.now()}`;
+      await fs.promises.mkdir(tmpDir, { recursive: true });
+
+      const errors: string[] = [];
+      const sudoPrefix = sudoPassword ? `echo '${sudoPassword}' | sudo -S` : "";
+      const isMac = process.platform === "darwin";
+
+      // 1. MySQL dump
+      try {
+         const dbHost = this.config.get("DB_HOST") || "localhost";
+         const dbUser = this.config.get("DB_USERNAME");
+         const dbPass = this.config.get("DB_PASSWORD");
+         const mysqldump = isMac ? "/opt/homebrew/bin/mysqldump" : "mysqldump";
+         
+         const dumpCmd = `${mysqldump} -h ${dbHost} -u ${dbUser} -p'${dbPass}' --all-databases > ${tmpDir}/mysql-dump.sql`;
+         await this.execSync(dumpCmd);
+      } catch (e) {
+         errors.push(`MySQL dump failed: ${e.message}`);
+      }
+
+      // 2. Apache config
+      const apacheConfPath = isMac 
+         ? "/opt/homebrew/etc/httpd/httpd.conf"
+         : "/etc/apache2/sites-available/000-default.conf";
+      try {
+         if (sudoPassword && !isMac) {
+            await this.execSync(`${sudoPrefix} cat ${apacheConfPath} > ${tmpDir}/apache-config.conf`);
+         } else {
+            const content = await fs.promises.readFile(apacheConfPath, "utf-8");
+            await fs.promises.writeFile(`${tmpDir}/apache-config.conf`, content);
+         }
+      } catch (e) {
+         if (e.code === "EACCES" || e.message?.includes("Permission denied")) {
+            throw new HttpException("SUDO_REQUIRED", HttpStatus.FORBIDDEN);
+         }
+         errors.push(`Apache config failed: ${e.message}`);
+      }
+
+      // 3. .env file
+      try {
+         const envPath = path.join(process.cwd(), ".env");
+         const content = await fs.promises.readFile(envPath, "utf-8");
+         await fs.promises.writeFile(`${tmpDir}/env-file.txt`, content);
+      } catch (e) {
+         errors.push(`.env file failed: ${e.message}`);
+      }
+
+      // Write errors log if any
+      if (errors.length > 0) {
+         await fs.promises.writeFile(`${tmpDir}/errors.txt`, errors.join("\n"));
+      }
+
+      // Create zip
+      const zipBuffer = await this.createZipBuffer(tmpDir);
+
+      // Cleanup
+      await fs.promises.rm(tmpDir, { recursive: true, force: true });
+
+      return zipBuffer;
+   }
+
+   private createZipBuffer(sourceDir: string): Promise<Buffer> {
+      return new Promise((resolve, reject) => {
+         const chunks: Buffer[] = [];
+         const archive = archiver("zip", { zlib: { level: 9 } });
+
+         archive.on("data", (chunk) => chunks.push(chunk));
+         archive.on("end", () => resolve(Buffer.concat(chunks)));
+         archive.on("error", reject);
+
+         archive.directory(sourceDir, false);
+         archive.finalize();
+      });
    }
 }

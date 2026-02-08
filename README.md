@@ -315,3 +315,28 @@ If resolution is rejected, verify the Modeline in xorg.conf matches your target 
 2. Test WHEP endpoint: `curl -I http://localhost:8889/screen/whep`
 3. Check browser console for connection errors
 4. Verify firewall allows port 8889
+
+### Black Screen After Reboot
+
+The stream may show a black screen until mouse movement due to screen blanking. Disable it:
+
+```bash
+xset s off
+xset -dpms
+xset s noblank
+```
+
+To make permanent, add to `~/.xsessionrc`:
+
+```bash
+xset s off
+xset -dpms
+xset s noblank
+```
+
+Or for GNOME:
+
+```bash
+gsettings set org.gnome.desktop.session idle-delay 0
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+```

@@ -15,7 +15,10 @@ import {
    ParseEnumPipe,
    Patch,
    UsePipes,
+   Res,
+   StreamableFile,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { LoggerToDb } from "src/logging";
@@ -302,5 +305,24 @@ export class AdminController {
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    public getTable(@Param("table") table: string, @Body() body: DatabaseGetTableRequest) {
       return this.adminService.getTable(table, body);
+   }
+
+   /**
+    * Server setup backup endpoint
+    */
+   @Post("server-setup")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async getServerSetup(
+      @Body() body: { sudoPassword?: string },
+      @Res({ passthrough: true }) res: Response,
+   ): Promise<StreamableFile> {
+      const result = await this.adminService.generateServerSetupBackup(body.sudoPassword);
+      
+      res.set({
+         "Content-Type": "application/zip",
+         "Content-Disposition": `attachment; filename="server-setup-${Date.now()}.zip"`,
+      });
+      
+      return new StreamableFile(result);
    }
 }
