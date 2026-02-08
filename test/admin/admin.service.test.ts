@@ -9,6 +9,7 @@ import { exec } from "child_process";
 import nodemailer from "nodemailer";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { EmailService } from "../../src/admin/email.service";
+import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 
 jest.mock("child_process", () => ({
    exec: jest.fn(),
@@ -19,6 +20,7 @@ describe("AdminService", () => {
    let service: AdminService;
    let logRepo: Repository<Log>;
    let logger: LoggerToDb;
+   let abstractFs: AbstractFileSystem;
 
    const sendMailMock = jest.fn();
 
@@ -74,6 +76,12 @@ describe("AdminService", () => {
                useValue: {
                   sendEmail: sendMailMock
                }
+            },
+            {
+               provide: AbstractFileSystem,
+               useValue: {
+                  unlinkSync: jest.fn(),
+               }
             }
          ],
       }).compile();
@@ -81,6 +89,7 @@ describe("AdminService", () => {
       service = module.get<AdminService>(AdminService);
       logRepo = module.get<Repository<Log>>(getRepositoryToken(Log));
       logger = module.get<LoggerToDb>(LoggerToDb);
+      abstractFs = module.get<AbstractFileSystem>(AbstractFileSystem);
 
       nodemailer.createTransport.mockReturnValue({ sendMail: sendMailMock });
    });
@@ -274,6 +283,26 @@ describe("AdminService", () => {
          expect(execSyncMock).toHaveBeenCalledWith(expect.stringContaining("echo 'testpass' | sudo -S"));
 
          Object.defineProperty(process, "platform", { value: originalPlatform });
+      });
+   });
+
+   describe("deleteBackupFile", () => {
+      it("should call abstractFs.unlinkSync with file path", () => {
+         service.deleteBackupFile("/tmp/server-backup-123.zip");
+
+         expect(abstractFs.unlinkSync).toHaveBeenCalledWith("/tmp/server-backup-123.zip");
+      });
+
+      it("should log error when unlinkSync fails", () => {
+         (abstractFs.unlinkSync as jest.Mock).mockImplementation(() => {
+            throw new Error("File not found");
+         });
+
+         service.deleteBackupFile("/tmp/server-backup-123.zip");
+
+         expect(logger.error).toHaveBeenCalledWith(
+            expect.stringContaining("Failed to delete backup file")
+         );
       });
    });
 });

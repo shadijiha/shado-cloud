@@ -17,8 +17,12 @@ import {
    UsePipes,
    Res,
    StreamableFile,
+   Sse,
+   MessageEvent,
+   Query,
 } from "@nestjs/common";
 import type { Response } from "express";
+import { Observable } from "rxjs";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { LoggerToDb } from "src/logging";
@@ -324,5 +328,38 @@ export class AdminController {
       });
       
       return new StreamableFile(result);
+   }
+
+   @Sse("server-setup/stream")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public serverSetupStream(): Observable<MessageEvent> {
+      return this.adminService.generateServerSetupBackupStream();
+   }
+
+   @Sse("cloud-backup/stream")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public cloudBackupStream(): Observable<MessageEvent> {
+      return this.adminService.generateCloudBackupStream();
+   }
+
+   @Get("backup/download")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async downloadBackup(
+      @Query("file") file: string,
+      @Res() res: Response,
+   ) {
+      const filePath = decodeURIComponent(file);
+      const stream = await this.adminService.getBackupFile(filePath);
+      const filename = filePath.split("/").pop();
+      
+      res.set({
+         "Content-Type": "application/zip",
+         "Content-Disposition": `attachment; filename="${filename}"`,
+      });
+      
+      stream.pipe(res);
+      stream.on("close", () => {
+         this.adminService.deleteBackupFile(filePath);
+      });
    }
 }

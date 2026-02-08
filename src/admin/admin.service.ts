@@ -1,4 +1,4 @@
-import { Inject, Injectable, HttpException, HttpStatus } from "@nestjs/common";
+import { Inject, Injectable, HttpException, HttpStatus, MessageEvent } from "@nestjs/common";
 import { InjectDataSource, InjectEntityManager, InjectRepository } from "@nestjs/typeorm";
 import { exec } from "child_process";
 import { LoggerToDb } from "../logging";
@@ -16,6 +16,8 @@ import { EmailService } from "./email.service";
 import * as fs from "fs";
 import * as path from "path";
 import archiver from "archiver";
+import { Observable, Subject } from "rxjs";
+import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 
 @Injectable()
 export class AdminService {
@@ -29,6 +31,7 @@ export class AdminService {
       @InjectDataSource() private readonly dataSource: DataSource,
       @InjectEntityManager() private readonly entityManager: EntityManager,
       @Inject() private readonly emailService: EmailService,
+      @Inject() private readonly abstractFs: AbstractFileSystem,
    ) {
 
    }
@@ -262,5 +265,138 @@ export class AdminService {
          archive.directory(sourceDir, false);
          archive.finalize();
       });
+   }
+
+   public generateServerSetupBackupStream(): Observable<MessageEvent> {
+      const subject = new Subject<MessageEvent>();
+
+      this.runServerSetupBackup(subject).catch((e) => {
+         subject.next({ data: { type: "error", message: e.message } });
+         subject.complete();
+      });
+
+      return subject.asObservable();
+   }
+
+   private async runServerSetupBackup(subject: Subject<MessageEvent>) {
+      const tmpDir = `/tmp/server-setup-${Date.now()}`;
+      const zipPath = `/tmp/server-setup-${Date.now()}.zip`;
+      await fs.promises.mkdir(tmpDir, { recursive: true });
+
+      const isMac = process.platform === "darwin";
+      const steps = ["MySQL dump", "Apache config", ".env file", "Creating zip"];
+
+      // Step 1: MySQL dump
+      subject.next({ data: { type: "progress", step: steps[0], percent: 0 } });
+      try {
+         const dbHost = this.config.get("DB_HOST") || "localhost";
+         const dbUser = this.config.get("DB_USERNAME");
+         const dbPass = this.config.get("DB_PASSWORD");
+         const mysqldump = isMac ? "/opt/homebrew/bin/mysqldump" : "mysqldump";
+         await this.execSync(`${mysqldump} -h ${dbHost} -u ${dbUser} -p'${dbPass}' --all-databases > ${tmpDir}/mysql-dump.sql`);
+      } catch (e) {
+         await fs.promises.writeFile(`${tmpDir}/mysql-error.txt`, e.message);
+      }
+
+      // Step 2: Apache config
+      subject.next({ data: { type: "progress", step: steps[1], percent: 25 } });
+      try {
+         const apacheConfPath = isMac ? "/opt/homebrew/etc/httpd/httpd.conf" : "/etc/apache2/sites-available/000-default.conf";
+         const content = await fs.promises.readFile(apacheConfPath, "utf-8");
+         await fs.promises.writeFile(`${tmpDir}/apache-config.conf`, content);
+      } catch (e) {
+         await fs.promises.writeFile(`${tmpDir}/apache-error.txt`, e.message);
+      }
+
+      // Step 3: .env file
+      subject.next({ data: { type: "progress", step: steps[2], percent: 50 } });
+      try {
+         const content = await fs.promises.readFile(path.join(process.cwd(), ".env"), "utf-8");
+         await fs.promises.writeFile(`${tmpDir}/env-file.txt`, content);
+      } catch (e) {
+         await fs.promises.writeFile(`${tmpDir}/env-error.txt`, e.message);
+      }
+
+      // Step 4: Create zip
+      subject.next({ data: { type: "progress", step: steps[3], percent: 75 } });
+      const zipBuffer = await this.createZipBuffer(tmpDir);
+      await fs.promises.writeFile(zipPath, zipBuffer);
+      await fs.promises.rm(tmpDir, { recursive: true, force: true });
+
+      subject.next({ data: { type: "complete", downloadPath: `/admin/backup/download?file=${encodeURIComponent(zipPath)}` } });
+      subject.complete();
+   }
+
+   public generateCloudBackupStream(): Observable<MessageEvent> {
+      const subject = new Subject<MessageEvent>();
+
+      this.runCloudBackup(subject).catch((e) => {
+         subject.next({ data: { type: "error", message: e.message } });
+         subject.complete();
+      });
+
+      return subject.asObservable();
+   }
+
+   private async runCloudBackup(subject: Subject<MessageEvent>) {
+      const cloudDir = this.config.get("CLOUD_DIR");
+      const zipPath = `/tmp/cloud-backup-${Date.now()}.zip`;
+
+      subject.next({ data: { type: "progress", step: "Scanning files", percent: 0 } });
+
+      // Get total size for progress calculation
+      const totalSize = await this.getDirSize(cloudDir);
+      let processedSize = 0;
+
+      await new Promise<void>((resolve, reject) => {
+         const output = fs.createWriteStream(zipPath);
+         const archive = archiver("zip", { zlib: { level: 1 } }); // Fast compression for large files
+
+         archive.on("error", reject);
+         output.on("close", resolve);
+
+         archive.on("progress", (progress) => {
+            processedSize = progress.fs.processedBytes;
+            const percent = Math.min(99, Math.round((processedSize / totalSize) * 100));
+            subject.next({ data: { type: "progress", step: "Compressing", percent, processedBytes: processedSize, totalBytes: totalSize } });
+         });
+
+         archive.pipe(output);
+         archive.directory(cloudDir, "cloud");
+         archive.finalize();
+      });
+
+      subject.next({ data: { type: "complete", downloadPath: `/admin/backup/download?file=${encodeURIComponent(zipPath)}` } });
+      subject.complete();
+   }
+
+   private async getDirSize(dir: string): Promise<number> {
+      let size = 0;
+      const files = await fs.promises.readdir(dir, { withFileTypes: true });
+      for (const file of files) {
+         const filePath = path.join(dir, file.name);
+         if (file.isDirectory()) {
+            size += await this.getDirSize(filePath);
+         } else {
+            const stat = await fs.promises.stat(filePath);
+            size += stat.size;
+         }
+      }
+      return size;
+   }
+
+   public async getBackupFile(filePath: string): Promise<fs.ReadStream> {
+      if (!filePath.startsWith("/tmp/") || !filePath.includes("-backup-")) {
+         throw new HttpException("Invalid file path", HttpStatus.BAD_REQUEST);
+      }
+      return fs.createReadStream(filePath);
+   }
+
+   public deleteBackupFile(filePath: string): void {
+      try {
+         this.abstractFs.unlinkSync(filePath);
+      } catch (e) {
+         this.logger.error(`Failed to delete backup file ${filePath}: ${e.message}`);
+      }
    }
 }

@@ -272,4 +272,38 @@ describe("AdminController", () => {
          });
       });
    });
+
+   describe("downloadBackup", () => {
+      it("should pipe stream and delete file on close", async () => {
+         const mockStream = {
+            pipe: jest.fn(),
+            on: jest.fn((event, cb) => {
+               if (event === "close") cb();
+            }),
+         };
+         adminService.getBackupFile = jest.fn().mockResolvedValue(mockStream);
+         adminService.deleteBackupFile = jest.fn();
+
+         const mockRes = { set: jest.fn() };
+
+         await adminController.downloadBackup("/tmp/server-backup-123.zip", mockRes as any);
+
+         expect(mockStream.pipe).toHaveBeenCalledWith(mockRes);
+         expect(adminService.deleteBackupFile).toHaveBeenCalledWith("/tmp/server-backup-123.zip");
+      });
+
+      it("should set correct headers for download", async () => {
+         const mockStream = { pipe: jest.fn(), on: jest.fn() };
+         adminService.getBackupFile = jest.fn().mockResolvedValue(mockStream);
+
+         const mockRes = { set: jest.fn() };
+
+         await adminController.downloadBackup("/tmp/cloud-backup-456.zip", mockRes as any);
+
+         expect(mockRes.set).toHaveBeenCalledWith({
+            "Content-Type": "application/zip",
+            "Content-Disposition": `attachment; filename="cloud-backup-456.zip"`,
+         });
+      });
+   });
 });
