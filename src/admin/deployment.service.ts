@@ -343,9 +343,10 @@ export class DeploymentService {
 
          // Timeout for steps that might hang
          const timeout = setTimeout(() => {
-            proc.kill("SIGTERM");
+            if (proc && proc.kill) proc.kill("SIGTERM");
             reject(new Error("Step timed out after 60 seconds"));
          }, 60000);
+         timeout.unref();
 
          proc.stdout.on("data", (data) => {
             const output = stripAnsi(data.toString());
