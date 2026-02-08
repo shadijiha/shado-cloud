@@ -7,8 +7,10 @@ import { EnvVariables } from "src/config/config.validator";
 import { EmailService } from "./email.service";
 import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
+import type Redis from "ioredis";
+import { REDIS_CACHE } from "src/util";
 
-export type DeploymentStep = "git_pull" | "npm_install" | "test" | "build" | "migrate" | "restart";
+export type DeploymentStep = "git_pull" | "npm_install" | "test" | "build" | "migrate" | "restart" | "verify";
 export type StepStatus = "pending" | "running" | "success" | "failed" | "skipped";
 
 export interface StepState {
@@ -41,19 +43,22 @@ interface DeploymentEvent {
    deployment?: DeploymentState;
 }
 
+const REDIS_KEY_CURRENT = "deployment:current";
+const REDIS_KEY_LAST = "deployment:last";
+
 @Injectable()
 export class DeploymentService {
-   private currentDeployment: DeploymentState | null = null;
-   private lastDeployment: DeploymentState | null = null;
    private deploymentSubject: Subject<MessageEvent> | null = null;
+   private currentProcess: ReturnType<typeof spawn> | null = null;
 
    private readonly backendSteps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[] = [
       { step: "git_pull", name: "Git Pull", cmd: "git", args: ["pull"] },
       { step: "npm_install", name: "NPM Install", cmd: "npm", args: ["install"] },
-      { step: "test", name: "Run Tests", cmd: "npm", args: ["test", "--", "--runInBand"] },
+      { step: "test", name: "Run Tests", cmd: "npm", args: ["test", "--", "--runInBand", "--no-colors"] },
       { step: "build", name: "Build", cmd: "npm", args: ["run", "build"] },
-      { step: "migrate", name: "Run Migrations", cmd: "npm", args: ["run", "typeorm:migrate", "--", "-d", "ormconfig.js"] },
-      { step: "restart", name: "Restart Service", cmd: "pm2", args: ["reload", "shado-cloud-backend", "--update-env"] },
+      { step: "migrate", name: "Run Migrations", cmd: "npx", args: ["typeorm", "migration:run", "-d", "ormconfig.js"] },
+      { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend", "--update-env"] },
+      { step: "verify", name: "Verify Deployment", cmd: "pm2", args: ["show", "shado-cloud-backend"] },
    ];
 
    private readonly frontendSteps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[] = [
@@ -67,29 +72,117 @@ export class DeploymentService {
       private readonly logger: LoggerToDb,
       private readonly emailService: EmailService,
       private readonly featureFlagService: FeatureFlagService,
+      @Inject(REDIS_CACHE) private readonly redis: Redis,
    ) {}
 
-   public isRunning(): boolean {
-      return this.currentDeployment?.status === "running";
+   private async saveState(deployment: DeploymentState | null, key: string) {
+      if (deployment) {
+         await this.redis.set(key, JSON.stringify(deployment), "EX", 86400); // 24h TTL
+      } else {
+         await this.redis.del(key);
+      }
    }
 
-   public getCurrentDeployment(): DeploymentState | null {
-      return this.currentDeployment;
+   private async getState(key: string): Promise<DeploymentState | null> {
+      const data = await this.redis.get(key);
+      return data ? JSON.parse(data) : null;
    }
 
-   public getLastDeployment(): DeploymentState | null {
-      return this.lastDeployment;
+   public async isRunning(): Promise<boolean> {
+      const current = await this.getState(REDIS_KEY_CURRENT);
+      return current?.status === "running";
+   }
+
+   public async getCurrentDeployment(): Promise<DeploymentState | null> {
+      return this.getState(REDIS_KEY_CURRENT);
+   }
+
+   public async getLastDeployment(): Promise<DeploymentState | null> {
+      return this.getState(REDIS_KEY_LAST);
    }
 
    public getSubject(): Subject<MessageEvent> | null {
       return this.deploymentSubject;
    }
 
-   public startDeployment(
+   public async cancelDeployment(): Promise<void> {
+      const current = await this.getState(REDIS_KEY_CURRENT);
+      if (!current || current.status !== "running") {
+         throw new Error("No deployment in progress");
+      }
+      if (this.currentProcess) {
+         this.currentProcess.kill("SIGTERM");
+         this.currentProcess = null;
+      }
+      const runningStep = current.steps.find(s => s.status === "running");
+      if (runningStep) {
+         runningStep.status = "failed";
+         runningStep.error = "Cancelled by user";
+         runningStep.finishedAt = new Date();
+      }
+      for (const s of current.steps) {
+         if (s.status === "pending") s.status = "skipped";
+      }
+      current.status = "failed";
+      current.finishedAt = new Date();
+      await this.saveState(current, REDIS_KEY_CURRENT);
+      await this.saveState(current, REDIS_KEY_LAST);
+      this.emit({ type: "deployment_complete", deployment: current });
+      this.deploymentSubject?.complete();
+      this.logger.log("Deployment cancelled by user");
+   }
+
+   public async retryStep(step: DeploymentStep): Promise<Subject<MessageEvent>> {
+      if (await this.isRunning()) {
+         throw new Error("Deployment already in progress");
+      }
+      const current = await this.getState(REDIS_KEY_CURRENT);
+      if (!current || current.status !== "failed") {
+         throw new Error("No failed deployment to retry");
+      }
+      const stepState = current.steps.find(s => s.step === step);
+      if (!stepState || stepState.status !== "failed") {
+         throw new Error("Step not found or not failed");
+      }
+
+      // Reset this step and all following steps
+      let found = false;
+      for (const s of current.steps) {
+         if (s.step === step) found = true;
+         if (found) {
+            s.status = "pending";
+            s.output = "";
+            s.error = undefined;
+            s.startedAt = undefined;
+            s.finishedAt = undefined;
+         }
+      }
+
+      current.status = "running";
+      current.finishedAt = undefined;
+      await this.saveState(current, REDIS_KEY_CURRENT);
+      
+      this.deploymentSubject = new Subject<MessageEvent>();
+
+      const steps = current.project === "backend" ? this.backendSteps : this.frontendSteps;
+      const workDir = current.project === "backend"
+         ? process.cwd()
+         : this.config.get("FRONTEND_DEPLOY_PATH")!;
+      
+      const stepsToRun = steps.filter(s => {
+         const state = current.steps.find(st => st.step === s.step);
+         return state?.status === "pending";
+      });
+
+      this.runSteps(stepsToRun, workDir, current.project, current);
+      return this.deploymentSubject;
+   }
+
+   public async startDeployment(
       project: "backend" | "frontend",
       triggeredBy: string,
-   ): Subject<MessageEvent> {
-      if (this.isRunning()) {
+   ): Promise<Subject<MessageEvent>> {
+      if (await this.isRunning()) {
          throw new Error("Deployment already in progress");
       }
 
@@ -103,7 +196,7 @@ export class DeploymentService {
       }
 
       this.deploymentSubject = new Subject<MessageEvent>();
-      this.currentDeployment = {
+      const deployment: DeploymentState = {
          id: `deploy_${Date.now()}`,
          project,
          status: "running",
@@ -111,16 +204,96 @@ export class DeploymentService {
          startedAt: new Date(),
          triggeredBy,
       };
+      await this.saveState(deployment, REDIS_KEY_CURRENT);
 
-      this.runDeployment(steps, workDir!, project);
+      this.runDeployment(steps, workDir!, project, deployment);
 
       return this.deploymentSubject;
+   }
+
+   private async runSteps(
+      steps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[],
+      workDir: string,
+      project: "backend" | "frontend",
+      deployment: DeploymentState,
+   ) {
+      const frontendUrl = this.config.get("FRONTEND_URL") || "";
+      const deployPageUrl = `${frontendUrl}/admin/deploy`;
+
+      for (const stepConfig of steps) {
+         const stepState = deployment.steps.find(s => s.step === stepConfig.step)!;
+         
+         stepState.status = "running";
+         stepState.startedAt = new Date();
+         await this.saveState(deployment, REDIS_KEY_CURRENT);
+         this.emit({ type: "step_start", step: stepConfig.step, startedAt: stepState.startedAt });
+
+         try {
+            await this.runStep(stepConfig.cmd, stepConfig.args, workDir, stepConfig.step, deployment);
+            stepState.status = "success";
+            stepState.finishedAt = new Date();
+            await this.saveState(deployment, REDIS_KEY_CURRENT);
+            this.emit({ type: "step_complete", step: stepConfig.step, status: "success", finishedAt: stepState.finishedAt });
+         } catch (error) {
+            stepState.status = "failed";
+            stepState.error = (error as Error).message;
+            stepState.finishedAt = new Date();
+            this.emit({ type: "step_complete", step: stepConfig.step, status: "failed", error: stepState.error, finishedAt: stepState.finishedAt });
+            
+            for (const s of deployment.steps) {
+               if (s.status === "pending") s.status = "skipped";
+            }
+            
+            deployment.status = "failed";
+            deployment.finishedAt = new Date();
+            await this.saveState(deployment, REDIS_KEY_CURRENT);
+            await this.saveState(deployment, REDIS_KEY_LAST);
+            this.emit({ type: "deployment_complete", deployment });
+            this.deploymentSubject?.complete();
+            this.logger.error(`Deployment failed at ${stepConfig.step}: ${stepState.error}`);
+            this.emailService.sendEmail({
+               subject: `Shado Cloud - ${project} deployment FAILED`,
+               html: this.buildEmailHtml({
+                  title: "Deployment Failed",
+                  status: "failed",
+                  project,
+                  triggeredBy: deployment.triggeredBy,
+                  failedStep: stepConfig.name,
+                  error: stepState.error,
+                  deployPageUrl,
+               }),
+            });
+            return;
+         }
+      }
+
+      deployment.status = "success";
+      deployment.finishedAt = new Date();
+      await this.saveState(deployment, REDIS_KEY_CURRENT);
+      await this.saveState(deployment, REDIS_KEY_LAST);
+      this.emit({ type: "deployment_complete", deployment });
+      this.deploymentSubject?.complete();
+      this.logger.log(`Deployment completed successfully`);
+      
+      const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
+      this.emailService.sendEmail({
+         subject: `Shado Cloud - ${project} deployment SUCCESS`,
+         html: this.buildEmailHtml({
+            title: "Deployment Successful",
+            status: "success",
+            project,
+            triggeredBy: deployment.triggeredBy,
+            duration: `${duration}s`,
+            deployPageUrl,
+         }),
+      });
    }
 
    private async runDeployment(
       steps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[],
       workDir: string,
       project: "backend" | "frontend",
+      deployment: DeploymentState,
    ) {
       const frontendUrl = this.config.get("FRONTEND_URL") || "";
       const deployPageUrl = `${frontendUrl}/admin/deploy`;
@@ -128,11 +301,12 @@ export class DeploymentService {
       // Check feature flag
       if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, `auto_${project}_redeploy`)) {
          this.logger.warn(`Deployment blocked: auto_${project}_redeploy feature flag is disabled`);
-         this.currentDeployment!.status = "failed";
-         this.currentDeployment!.steps[0].status = "failed";
-         this.currentDeployment!.steps[0].error = "Feature flag disabled";
-         this.lastDeployment = this.currentDeployment;
-         this.emit({ type: "deployment_complete", deployment: this.currentDeployment! });
+         deployment.status = "failed";
+         deployment.steps[0].status = "failed";
+         deployment.steps[0].error = "Feature flag disabled";
+         await this.saveState(deployment, REDIS_KEY_CURRENT);
+         await this.saveState(deployment, REDIS_KEY_LAST);
+         this.emit({ type: "deployment_complete", deployment });
          this.deploymentSubject?.complete();
          return;
       }
@@ -144,94 +318,36 @@ export class DeploymentService {
             title: "Deployment Started",
             status: "running",
             project,
-            triggeredBy: this.currentDeployment!.triggeredBy,
+            triggeredBy: deployment.triggeredBy,
             deployPageUrl,
          }),
       });
 
-      for (const stepConfig of steps) {
-         const stepState = this.currentDeployment!.steps.find(s => s.step === stepConfig.step)!;
-         
-         stepState.status = "running";
-         stepState.startedAt = new Date();
-         this.emit({ type: "step_start", step: stepConfig.step, startedAt: stepState.startedAt });
-
-         try {
-            await this.runStep(stepConfig.cmd, stepConfig.args, workDir, stepConfig.step);
-            stepState.status = "success";
-            stepState.finishedAt = new Date();
-            this.emit({ type: "step_complete", step: stepConfig.step, status: "success", finishedAt: stepState.finishedAt });
-         } catch (error) {
-            stepState.status = "failed";
-            stepState.error = (error as Error).message;
-            stepState.finishedAt = new Date();
-            this.emit({ type: "step_complete", step: stepConfig.step, status: "failed", error: stepState.error, finishedAt: stepState.finishedAt });
-            
-            for (const s of this.currentDeployment!.steps) {
-               if (s.status === "pending") s.status = "skipped";
-            }
-            
-            this.currentDeployment!.status = "failed";
-            this.currentDeployment!.finishedAt = new Date();
-            this.lastDeployment = this.currentDeployment;
-            this.emit({ type: "deployment_complete", deployment: this.currentDeployment! });
-            this.deploymentSubject?.complete();
-            this.logger.error(`Deployment failed at ${stepConfig.step}: ${stepState.error}`);
-            this.emailService.sendEmail({
-               subject: `Shado Cloud - ${project} deployment FAILED`,
-               html: this.buildEmailHtml({
-                  title: "Deployment Failed",
-                  status: "failed",
-                  project,
-                  triggeredBy: this.currentDeployment!.triggeredBy,
-                  failedStep: stepConfig.name,
-                  error: stepState.error,
-                  deployPageUrl,
-               }),
-            });
-            return;
-         }
-      }
-
-      this.currentDeployment!.status = "success";
-      this.currentDeployment!.finishedAt = new Date();
-      this.lastDeployment = this.currentDeployment;
-      this.emit({ type: "deployment_complete", deployment: this.currentDeployment! });
-      this.deploymentSubject?.complete();
-      this.logger.log(`Deployment completed successfully`);
-      
-      const duration = Math.round((this.currentDeployment!.finishedAt.getTime() - this.currentDeployment!.startedAt.getTime()) / 1000);
-      this.emailService.sendEmail({
-         subject: `Shado Cloud - ${project} deployment SUCCESS`,
-         html: this.buildEmailHtml({
-            title: "Deployment Successful",
-            status: "success",
-            project,
-            triggeredBy: this.currentDeployment!.triggeredBy,
-            duration: `${duration}s`,
-            deployPageUrl,
-         }),
-      });
+      await this.runSteps(steps, workDir, project, deployment);
    }
 
-   private runStep(cmd: string, args: string[], cwd: string, step: DeploymentStep): Promise<void> {
+   private runStep(cmd: string, args: string[], cwd: string, step: DeploymentStep, deployment: DeploymentState): Promise<void> {
       return new Promise((resolve, reject) => {
-         const proc = spawn(cmd, args, { cwd, shell: true });
-         const stepState = this.currentDeployment!.steps.find(s => s.step === step)!;
+         const proc = spawn(cmd, args, { cwd, shell: true, env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" } });
+         this.currentProcess = proc;
+         const stepState = deployment.steps.find(s => s.step === step)!;
+
+         const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
 
          proc.stdout.on("data", (data) => {
-            const output = data.toString();
+            const output = stripAnsi(data.toString());
             stepState.output += output;
             this.emit({ type: "step_output", step, output });
          });
 
          proc.stderr.on("data", (data) => {
-            const output = data.toString();
+            const output = stripAnsi(data.toString());
             stepState.output += output;
             this.emit({ type: "step_output", step, output });
          });
 
          proc.on("close", (code) => {
+            this.currentProcess = null;
             if (code === 0) {
                resolve();
             } else {
@@ -240,6 +356,7 @@ export class DeploymentService {
          });
 
          proc.on("error", (err) => {
+            this.currentProcess = null;
             reject(err);
          });
       });

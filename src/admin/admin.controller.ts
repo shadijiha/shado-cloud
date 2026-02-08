@@ -415,11 +415,11 @@ export class AdminController {
    // Deployment Pipeline
    @Get("deployment/status")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
-   public getDeploymentStatus() {
+   public async getDeploymentStatus() {
       return {
-         isRunning: this.deploymentService.isRunning(),
-         current: this.deploymentService.getCurrentDeployment(),
-         last: this.deploymentService.getLastDeployment(),
+         isRunning: await this.deploymentService.isRunning(),
+         current: await this.deploymentService.getCurrentDeployment(),
+         last: await this.deploymentService.getLastDeployment(),
       };
    }
 
@@ -437,13 +437,29 @@ export class AdminController {
    @Get("deployment/start/:project")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    @Sse()
-   public startDeployment(
+   public async startDeployment(
       @Param("project") project: "backend" | "frontend",
-   ): Observable<MessageEvent> {
+   ): Promise<Observable<MessageEvent>> {
       if (project !== "backend" && project !== "frontend") {
          throw new HttpException("Invalid project", HttpStatus.BAD_REQUEST);
       }
-      return this.deploymentService.startDeployment(project, "admin");
+      const subject = await this.deploymentService.startDeployment(project, "admin");
+      return subject.asObservable();
+   }
+
+   @Post("deployment/cancel")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async cancelDeployment(): Promise<{ success: boolean }> {
+      await this.deploymentService.cancelDeployment();
+      return { success: true };
+   }
+
+   @Post("deployment/retry/:step")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @Sse()
+   public async retryStep(@Param("step") step: string): Promise<Observable<MessageEvent>> {
+      const subject = await this.deploymentService.retryStep(step as any);
+      return subject.asObservable();
    }
 
    // Environment file management

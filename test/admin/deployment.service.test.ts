@@ -4,6 +4,7 @@ import { DeploymentService } from "src/admin/deployment.service";
 import { LoggerToDb } from "src/logging";
 import { EmailService } from "src/admin/email.service";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
+import { REDIS_CACHE } from "src/util";
 import * as childProcess from "child_process";
 import { EventEmitter } from "events";
 
@@ -14,8 +15,12 @@ describe("DeploymentService", () => {
    let emailService: EmailService;
    let featureFlagService: FeatureFlagService;
    let logger: LoggerToDb;
+   const redisStore: Record<string, string> = {};
 
    beforeEach(async () => {
+      // Clear redis store
+      Object.keys(redisStore).forEach(k => delete redisStore[k]);
+
       const module: TestingModule = await Test.createTestingModule({
          providers: [
             DeploymentService,
@@ -49,6 +54,14 @@ describe("DeploymentService", () => {
                   isFeatureFlagDisabled: jest.fn().mockResolvedValue(false),
                },
             },
+            {
+               provide: REDIS_CACHE,
+               useValue: {
+                  get: jest.fn((key: string) => Promise.resolve(redisStore[key] || null)),
+                  set: jest.fn((key: string, value: string) => { redisStore[key] = value; return Promise.resolve("OK"); }),
+                  del: jest.fn((key: string) => { delete redisStore[key]; return Promise.resolve(1); }),
+               },
+            },
          ],
       }).compile();
 
@@ -63,20 +76,20 @@ describe("DeploymentService", () => {
    });
 
    describe("isRunning", () => {
-      it("should return false when no deployment", () => {
-         expect(service.isRunning()).toBe(false);
+      it("should return false when no deployment", async () => {
+         expect(await service.isRunning()).toBe(false);
       });
    });
 
    describe("getCurrentDeployment", () => {
-      it("should return null when no deployment", () => {
-         expect(service.getCurrentDeployment()).toBeNull();
+      it("should return null when no deployment", async () => {
+         expect(await service.getCurrentDeployment()).toBeNull();
       });
    });
 
    describe("getLastDeployment", () => {
-      it("should return null when no previous deployment", () => {
-         expect(service.getLastDeployment()).toBeNull();
+      it("should return null when no previous deployment", async () => {
+         expect(await service.getLastDeployment()).toBeNull();
       });
    });
 
@@ -87,40 +100,40 @@ describe("DeploymentService", () => {
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         service.startDeployment("backend", "test");
+         await service.startDeployment("backend", "test");
 
-         expect(() => service.startDeployment("backend", "test")).toThrow("Deployment already in progress");
+         await expect(service.startDeployment("backend", "test")).rejects.toThrow("Deployment already in progress");
       });
 
-      it("should throw if frontend path not configured", () => {
+      it("should throw if frontend path not configured", async () => {
          const configService = { get: jest.fn().mockReturnValue(null) } as any;
          // @ts-expect-error
          service.config = configService;
 
-         expect(() => service.startDeployment("frontend", "test")).toThrow("FRONTEND_DEPLOY_PATH not configured");
+         await expect(service.startDeployment("frontend", "test")).rejects.toThrow("FRONTEND_DEPLOY_PATH not configured");
       });
 
-      it("should return a Subject for SSE streaming", () => {
+      it("should return a Subject for SSE streaming", async () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         const subject = service.startDeployment("backend", "admin");
+         const subject = await service.startDeployment("backend", "admin");
 
          expect(subject).toBeDefined();
          expect(typeof subject.subscribe).toBe("function");
       });
 
-      it("should set deployment state correctly", () => {
+      it("should set deployment state correctly", async () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         service.startDeployment("backend", "github-webhook");
+         await service.startDeployment("backend", "github-webhook");
 
-         const deployment = service.getCurrentDeployment();
+         const deployment = await service.getCurrentDeployment();
          expect(deployment).not.toBeNull();
          expect(deployment?.project).toBe("backend");
          expect(deployment?.triggeredBy).toBe("github-webhook");
@@ -138,7 +151,7 @@ describe("DeploymentService", () => {
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         const subject = service.startDeployment("backend", "test");
+         const subject = await service.startDeployment("backend", "test");
          const events: any[] = [];
          subject.subscribe((event) => events.push(JSON.parse((event as any).data)));
 
@@ -146,7 +159,7 @@ describe("DeploymentService", () => {
          await new Promise((r) => setTimeout(r, 50));
 
          expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("feature flag is disabled"));
-         expect(service.getCurrentDeployment()?.status).toBe("failed");
+         expect((await service.getCurrentDeployment())?.status).toBe("failed");
       });
 
       it("should send start email when deployment begins", async () => {
@@ -155,7 +168,7 @@ describe("DeploymentService", () => {
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         service.startDeployment("backend", "admin");
+         await service.startDeployment("backend", "admin");
 
          // Wait for async operations
          await new Promise((r) => setTimeout(r, 50));
@@ -173,7 +186,7 @@ describe("DeploymentService", () => {
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         const subject = service.startDeployment("backend", "test");
+         const subject = await service.startDeployment("backend", "test");
          const events: any[] = [];
          subject.subscribe((event) => events.push(JSON.parse((event as any).data)));
 
@@ -199,7 +212,7 @@ describe("DeploymentService", () => {
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         const subject = service.startDeployment("backend", "test");
+         const subject = await service.startDeployment("backend", "test");
          const events: any[] = [];
          subject.subscribe((event) => events.push(JSON.parse((event as any).data)));
 
@@ -224,7 +237,7 @@ describe("DeploymentService", () => {
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         const subject = service.startDeployment("backend", "test");
+         const subject = await service.startDeployment("backend", "test");
          const events: any[] = [];
          subject.subscribe((event) => events.push(JSON.parse((event as any).data)));
 
@@ -244,13 +257,13 @@ describe("DeploymentService", () => {
          expect(service.getSubject()).toBeNull();
       });
 
-      it("should return subject during deployment", () => {
+      it("should return subject during deployment", async () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
          (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
 
-         service.startDeployment("backend", "test");
+         await service.startDeployment("backend", "test");
 
          expect(service.getSubject()).not.toBeNull();
       });
