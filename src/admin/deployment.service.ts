@@ -1,4 +1,4 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable, Inject, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { spawn } from "child_process";
 import { Subject } from "rxjs";
@@ -9,6 +9,8 @@ import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import type Redis from "ioredis";
 import { REDIS_CACHE } from "src/util";
+import * as fs from "fs";
+import * as path from "path";
 
 export type DeploymentStep = "git_pull" | "npm_install" | "test" | "build" | "migrate" | "restart" | "verify";
 export type StepStatus = "pending" | "running" | "success" | "failed" | "skipped";
@@ -47,7 +49,7 @@ const REDIS_KEY_CURRENT = "deployment:current";
 const REDIS_KEY_LAST = "deployment:last";
 
 @Injectable()
-export class DeploymentService {
+export class DeploymentService implements OnModuleInit {
    private deploymentSubject: Subject<MessageEvent> | null = null;
    private currentProcess: ReturnType<typeof spawn> | null = null;
 
@@ -57,8 +59,8 @@ export class DeploymentService {
       { step: "test", name: "Run Tests", cmd: "npm", args: ["test", "--", "--runInBand", "--no-colors"] },
       { step: "build", name: "Build", cmd: "npm", args: ["run", "build"] },
       { step: "migrate", name: "Run Migrations", cmd: "npx", args: ["typeorm", "migration:run", "-d", "ormconfig.js"] },
-      { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend", "--update-env", "--no-daemon"] },
-      { step: "verify", name: "Verify Deployment", cmd: "pm2", args: ["list", "--no-daemon"] },
+      { step: "restart", name: "Restart Service", cmd: "", args: [] }, // handled specially
+      { step: "verify", name: "Verify Deployment", cmd: "", args: [] }, // runs on startup
    ];
 
    private readonly frontendSteps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[] = [
@@ -74,6 +76,99 @@ export class DeploymentService {
       private readonly featureFlagService: FeatureFlagService,
       @Inject(REDIS_CACHE) private readonly redis: Redis,
    ) {}
+
+   async onModuleInit() {
+      // Check if we need to complete a verify step after restart
+      const deployment = await this.getState(REDIS_KEY_CURRENT);
+      if (deployment?.status === "running" && deployment.project === "backend") {
+         const verifyStep = deployment.steps.find(s => s.step === "verify");
+         const restartStep = deployment.steps.find(s => s.step === "restart");
+         
+         // If restart succeeded and verify is pending, run verification
+         if (restartStep?.status === "success" && verifyStep?.status === "pending") {
+            this.logger.log("Resuming deployment verification after restart...");
+            await this.runVerifyStep(deployment);
+         }
+      }
+   }
+
+   private async runVerifyStep(deployment: DeploymentState) {
+      const verifyStep = deployment.steps.find(s => s.step === "verify")!;
+      const frontendUrl = this.config.get("FRONTEND_URL") || "";
+      const deployPageUrl = `${frontendUrl}/admin/deploy`;
+      
+      verifyStep.status = "running";
+      verifyStep.startedAt = new Date();
+      verifyStep.output = "Verifying deployment after restart...\n";
+      await this.saveState(deployment, REDIS_KEY_CURRENT);
+
+      try {
+         // Check PM2 process is running
+         const pid = await this.getPm2Pid("shado-cloud-backend");
+         if (!pid) throw new Error("PM2 process not running");
+         verifyStep.output += `PM2 process running with PID: ${pid}\n`;
+
+         // Verify .env was loaded (check a known env var)
+         const envCheck = process.env.NODE_ENV ? "OK" : "MISSING";
+         verifyStep.output += `Environment loaded: ${envCheck}\n`;
+
+         verifyStep.status = "success";
+         verifyStep.finishedAt = new Date();
+         deployment.status = "success";
+         deployment.finishedAt = new Date();
+         await this.saveState(deployment, REDIS_KEY_CURRENT);
+         await this.saveState(deployment, REDIS_KEY_LAST);
+
+         const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
+         this.logger.log(`Deployment verified successfully`);
+         this.emailService.sendEmail({
+            subject: `Shado Cloud - ${deployment.project} deployment SUCCESS`,
+            html: this.buildEmailHtml({
+               title: "Deployment Successful",
+               status: "success",
+               project: deployment.project,
+               triggeredBy: deployment.triggeredBy,
+               deployPageUrl,
+               duration: `${Math.floor(duration / 60)}m ${duration % 60}s`,
+            }),
+         });
+      } catch (error) {
+         verifyStep.status = "failed";
+         verifyStep.error = (error as Error).message;
+         verifyStep.finishedAt = new Date();
+         deployment.status = "failed";
+         deployment.finishedAt = new Date();
+         await this.saveState(deployment, REDIS_KEY_CURRENT);
+         await this.saveState(deployment, REDIS_KEY_LAST);
+
+         this.logger.error(`Deployment verification failed: ${verifyStep.error}`);
+         this.emailService.sendEmail({
+            subject: `Shado Cloud - ${deployment.project} deployment FAILED`,
+            html: this.buildEmailHtml({
+               title: "Deployment Failed",
+               status: "failed",
+               project: deployment.project,
+               triggeredBy: deployment.triggeredBy,
+               failedStep: "Verify Deployment",
+               error: verifyStep.error,
+               deployPageUrl,
+            }),
+         });
+      }
+   }
+
+   private getPm2Pid(name: string): Promise<string | null> {
+      return new Promise((resolve) => {
+         const proc = spawn("pm2", ["pid", name], { shell: true });
+         let output = "";
+         proc.stdout.on("data", (data) => output += data.toString());
+         proc.on("close", () => {
+            const pid = output.trim();
+            resolve(pid && /^\d+$/.test(pid) ? pid : null);
+         });
+         proc.on("error", () => resolve(null));
+      });
+   }
 
    private async saveState(deployment: DeploymentState | null, key: string) {
       if (deployment) {
@@ -222,6 +317,34 @@ export class DeploymentService {
 
       for (const stepConfig of steps) {
          const stepState = deployment.steps.find(s => s.step === stepConfig.step)!;
+         
+         // For backend restart: mark restart success, leave verify pending, then restart
+         if (stepConfig.step === "restart" && project === "backend") {
+            stepState.status = "running";
+            stepState.startedAt = new Date();
+            stepState.output = "Initiating PM2 restart...\n";
+            await this.saveState(deployment, REDIS_KEY_CURRENT);
+            this.emit({ type: "step_start", step: stepConfig.step, startedAt: stepState.startedAt });
+            this.emit({ type: "step_output", step: stepConfig.step, output: stepState.output });
+            
+            // Mark restart as success (verify will run after app restarts)
+            stepState.status = "success";
+            stepState.finishedAt = new Date();
+            stepState.output += "Restart command sent. Verification will run after restart.\n";
+            await this.saveState(deployment, REDIS_KEY_CURRENT);
+            this.emit({ type: "step_output", step: stepConfig.step, output: "Restart command sent. Verification will run after restart.\n" });
+            this.emit({ type: "step_complete", step: stepConfig.step, status: "success", finishedAt: stepState.finishedAt });
+            
+            // Trigger restart (this will kill the process, verify runs on startup)
+            const proc = spawn("pm2", ["restart", "shado-cloud-backend", "--update-env"], { detached: true, stdio: "ignore" });
+            if (proc.unref) proc.unref();
+            return;
+         }
+
+         // Skip verify step here - it runs on module init after restart
+         if (stepConfig.step === "verify" && project === "backend") {
+            continue;
+         }
          
          stepState.status = "running";
          stepState.startedAt = new Date();
