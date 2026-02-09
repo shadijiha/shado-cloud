@@ -159,12 +159,17 @@ export class DeploymentService implements OnModuleInit {
 
    private getPm2Pid(name: string): Promise<string | null> {
       return new Promise((resolve) => {
-         const proc = spawn("pm2", ["pid", name], { shell: true });
+         const proc = spawn("pm2", ["jlist"], { shell: true, env: { ...process.env, PM2_HOME: process.env.HOME + "/.pm2" } });
          let output = "";
          proc.stdout.on("data", (data) => output += data.toString());
          proc.on("close", () => {
-            const pid = output.trim();
-            resolve(pid && /^\d+$/.test(pid) ? pid : null);
+            try {
+               const list = JSON.parse(output);
+               const app = list.find((p: any) => p.name === name);
+               resolve(app?.pid?.toString() || null);
+            } catch {
+               resolve(null);
+            }
          });
          proc.on("error", () => resolve(null));
       });
