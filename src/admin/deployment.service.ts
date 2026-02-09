@@ -22,6 +22,8 @@ export interface StepState {
    startedAt?: Date;
    finishedAt?: Date;
    error?: string;
+   attempt?: number;
+   maxAttempts?: number;
 }
 
 export interface DeploymentState {
@@ -43,6 +45,8 @@ interface DeploymentEvent {
    startedAt?: Date;
    finishedAt?: Date;
    deployment?: DeploymentState;
+   attempt?: number;
+   maxAttempts?: number;
 }
 
 const REDIS_KEY_CURRENT = "deployment:current";
@@ -161,25 +165,24 @@ export class DeploymentService implements OnModuleInit {
       return new Promise((resolve) => {
          const proc = spawn("pm2", ["jlist"], { shell: true, env: { ...process.env, PM2_HOME: process.env.HOME + "/.pm2" } });
          let output = "";
-         let stderr = "";
          proc.stdout.on("data", (data) => output += data.toString());
-         proc.stderr.on("data", (data) => stderr += data.toString());
-         proc.on("close", (code) => {
-            this.logger.log(`pm2 jlist exit code: ${code}, stdout length: ${output.length}, stderr: ${stderr.substring(0, 200)}`);
+         proc.on("close", () => {
             try {
-               const list = JSON.parse(output);
+               // PM2 outputs warnings before JSON, extract JSON array
+               const jsonStart = output.indexOf("[");
+               const jsonEnd = output.lastIndexOf("]") + 1;
+               if (jsonStart === -1 || jsonEnd === 0) {
+                  resolve(null);
+                  return;
+               }
+               const list = JSON.parse(output.substring(jsonStart, jsonEnd));
                const app = list.find((p: any) => p.name === name);
-               this.logger.log(`Found app: ${app?.name}, pid: ${app?.pid}, status: ${app?.pm2_env?.status}`);
                resolve(app?.pid?.toString() || null);
-            } catch (e) {
-               this.logger.error(`Failed to parse pm2 jlist: ${(e as Error).message}, output: ${output.substring(0, 200)}`);
+            } catch {
                resolve(null);
             }
          });
-         proc.on("error", (e) => {
-            this.logger.error(`pm2 jlist spawn error: ${e.message}`);
-            resolve(null);
-         });
+         proc.on("error", () => resolve(null));
       });
    }
 
@@ -359,23 +362,44 @@ export class DeploymentService implements OnModuleInit {
             continue;
          }
          
-         stepState.status = "running";
-         stepState.startedAt = new Date();
-         await this.saveState(deployment, REDIS_KEY_CURRENT);
-         this.emit({ type: "step_start", step: stepConfig.step, startedAt: stepState.startedAt });
-
-         try {
-            await this.runStep(stepConfig.cmd, stepConfig.args, workDir, stepConfig.step, deployment);
-            stepState.status = "success";
-            stepState.finishedAt = new Date();
+         const maxAttempts = 3;
+         stepState.attempt = 1;
+         stepState.maxAttempts = maxAttempts;
+         
+         while (stepState.attempt <= maxAttempts) {
+            stepState.status = "running";
+            stepState.startedAt = new Date();
+            stepState.error = undefined;
+            if (stepState.attempt > 1) {
+               stepState.output += `\n--- Retry attempt ${stepState.attempt}/${maxAttempts} ---\n`;
+               this.emit({ type: "step_output", step: stepConfig.step, output: `\n--- Retry attempt ${stepState.attempt}/${maxAttempts} ---\n` });
+            }
             await this.saveState(deployment, REDIS_KEY_CURRENT);
-            this.emit({ type: "step_complete", step: stepConfig.step, status: "success", finishedAt: stepState.finishedAt });
-         } catch (error) {
-            stepState.status = "failed";
-            stepState.error = (error as Error).message;
-            stepState.finishedAt = new Date();
-            this.emit({ type: "step_complete", step: stepConfig.step, status: "failed", error: stepState.error, finishedAt: stepState.finishedAt });
-            
+            this.emit({ type: "step_start", step: stepConfig.step, startedAt: stepState.startedAt, attempt: stepState.attempt, maxAttempts });
+
+            try {
+               await this.runStep(stepConfig.cmd, stepConfig.args, workDir, stepConfig.step, deployment);
+               stepState.status = "success";
+               stepState.finishedAt = new Date();
+               await this.saveState(deployment, REDIS_KEY_CURRENT);
+               this.emit({ type: "step_complete", step: stepConfig.step, status: "success", finishedAt: stepState.finishedAt });
+               break;
+            } catch (error) {
+               stepState.error = (error as Error).message;
+               if (stepState.attempt < maxAttempts) {
+                  stepState.output += `\nAttempt ${stepState.attempt} failed: ${stepState.error}\n`;
+                  this.emit({ type: "step_output", step: stepConfig.step, output: `\nAttempt ${stepState.attempt} failed: ${stepState.error}\n` });
+                  stepState.attempt++;
+                  await new Promise(r => setTimeout(r, 2000)); // Wait 2s before retry
+               } else {
+                  stepState.status = "failed";
+                  stepState.finishedAt = new Date();
+                  this.emit({ type: "step_complete", step: stepConfig.step, status: "failed", error: stepState.error, finishedAt: stepState.finishedAt });
+               }
+            }
+         }
+
+         if (stepState.status === "failed") {
             for (const s of deployment.steps) {
                if (s.status === "pending") s.status = "skipped";
             }
