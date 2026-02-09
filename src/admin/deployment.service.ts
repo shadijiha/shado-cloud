@@ -161,17 +161,25 @@ export class DeploymentService implements OnModuleInit {
       return new Promise((resolve) => {
          const proc = spawn("pm2", ["jlist"], { shell: true, env: { ...process.env, PM2_HOME: process.env.HOME + "/.pm2" } });
          let output = "";
+         let stderr = "";
          proc.stdout.on("data", (data) => output += data.toString());
-         proc.on("close", () => {
+         proc.stderr.on("data", (data) => stderr += data.toString());
+         proc.on("close", (code) => {
+            this.logger.log(`pm2 jlist exit code: ${code}, stdout length: ${output.length}, stderr: ${stderr.substring(0, 200)}`);
             try {
                const list = JSON.parse(output);
                const app = list.find((p: any) => p.name === name);
+               this.logger.log(`Found app: ${app?.name}, pid: ${app?.pid}, status: ${app?.pm2_env?.status}`);
                resolve(app?.pid?.toString() || null);
-            } catch {
+            } catch (e) {
+               this.logger.error(`Failed to parse pm2 jlist: ${(e as Error).message}, output: ${output.substring(0, 200)}`);
                resolve(null);
             }
          });
-         proc.on("error", () => resolve(null));
+         proc.on("error", (e) => {
+            this.logger.error(`pm2 jlist spawn error: ${e.message}`);
+            resolve(null);
+         });
       });
    }
 

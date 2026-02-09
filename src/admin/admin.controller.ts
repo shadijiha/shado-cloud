@@ -454,7 +454,7 @@ export class AdminController {
       return { success: true };
    }
 
-   @Post("deployment/retry/:step")
+   @Get("deployment/retry/:step")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    @Sse()
    public async retryStep(@Param("step") step: string): Promise<Observable<MessageEvent>> {
