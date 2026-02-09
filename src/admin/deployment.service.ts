@@ -464,13 +464,6 @@ export class DeploymentService implements OnModuleInit {
 
          const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
 
-         // Timeout for steps that might hang
-         const timeout = setTimeout(() => {
-            if (proc && proc.kill) proc.kill("SIGTERM");
-            reject(new Error("Step timed out after 60 seconds"));
-         }, 60000);
-         timeout.unref();
-
          proc.stdout.on("data", (data) => {
             const output = stripAnsi(data.toString());
             stepState.output += output;
@@ -484,7 +477,6 @@ export class DeploymentService implements OnModuleInit {
          });
 
          proc.on("close", (code) => {
-            clearTimeout(timeout);
             this.currentProcess = null;
             if (code === 0 || code === null) {
                resolve();
@@ -494,7 +486,6 @@ export class DeploymentService implements OnModuleInit {
          });
 
          proc.on("error", (err) => {
-            clearTimeout(timeout);
             this.currentProcess = null;
             reject(err);
          });
