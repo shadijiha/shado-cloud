@@ -413,6 +413,12 @@ export class AdminController {
    }
 
    // Deployment Pipeline
+   @Get("deployment/steps/:project")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getDeploymentSteps(@Param("project") project: "backend" | "frontend") {
+      return this.deploymentService.getSteps(project);
+   }
+
    @Get("deployment/status")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    public async getDeploymentStatus() {

@@ -101,63 +101,83 @@ export class DeploymentService implements OnModuleInit {
       const frontendUrl = this.config.get("FRONTEND_URL") || "";
       const deployPageUrl = `${frontendUrl}/admin/deploy`;
       
-      verifyStep.status = "running";
-      verifyStep.startedAt = new Date();
-      verifyStep.output = "Verifying deployment after restart...\n";
-      await this.saveState(deployment, REDIS_KEY_CURRENT);
+      const maxAttempts = 3;
+      verifyStep.attempt = 1;
+      verifyStep.maxAttempts = maxAttempts;
 
-      try {
-         // Check PM2 process is running
-         const pid = await this.getPm2Pid("shado-cloud-backend");
-         if (!pid) throw new Error("PM2 process not running");
-         verifyStep.output += `PM2 process running with PID: ${pid}\n`;
-
-         // Verify .env was loaded (check a known env var)
-         const envCheck = process.env.NODE_ENV ? "OK" : "MISSING";
-         verifyStep.output += `Environment loaded: ${envCheck}\n`;
-
-         verifyStep.status = "success";
-         verifyStep.finishedAt = new Date();
-         deployment.status = "success";
-         deployment.finishedAt = new Date();
+      while (verifyStep.attempt <= maxAttempts) {
+         verifyStep.status = "running";
+         verifyStep.startedAt = new Date();
+         verifyStep.error = undefined;
+         if (verifyStep.attempt > 1) {
+            verifyStep.output += `\n--- Retry attempt ${verifyStep.attempt}/${maxAttempts} ---\n`;
+         } else {
+            verifyStep.output = "Verifying deployment after restart...\n";
+         }
          await this.saveState(deployment, REDIS_KEY_CURRENT);
-         await this.saveState(deployment, REDIS_KEY_LAST);
 
-         const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
-         this.logger.log(`Deployment verified successfully`);
-         this.emailService.sendEmail({
-            subject: `Shado Cloud - ${deployment.project} deployment SUCCESS`,
-            html: this.buildEmailHtml({
-               title: "Deployment Successful",
-               status: "success",
-               project: deployment.project,
-               triggeredBy: deployment.triggeredBy,
-               deployPageUrl,
-               duration: `${Math.floor(duration / 60)}m ${duration % 60}s`,
-            }),
-         });
-      } catch (error) {
-         verifyStep.status = "failed";
-         verifyStep.error = (error as Error).message;
-         verifyStep.finishedAt = new Date();
-         deployment.status = "failed";
-         deployment.finishedAt = new Date();
-         await this.saveState(deployment, REDIS_KEY_CURRENT);
-         await this.saveState(deployment, REDIS_KEY_LAST);
+         try {
+            // Check PM2 process is running
+            const pid = await this.getPm2Pid("shado-cloud-backend");
+            if (!pid) throw new Error("PM2 process not running");
+            verifyStep.output += `PM2 process running with PID: ${pid}\n`;
 
-         this.logger.error(`Deployment verification failed: ${verifyStep.error}`);
-         this.emailService.sendEmail({
-            subject: `Shado Cloud - ${deployment.project} deployment FAILED`,
-            html: this.buildEmailHtml({
-               title: "Deployment Failed",
-               status: "failed",
-               project: deployment.project,
-               triggeredBy: deployment.triggeredBy,
-               failedStep: "Verify Deployment",
-               error: verifyStep.error,
-               deployPageUrl,
-            }),
-         });
+            // Verify .env was loaded (check a known env var)
+            const envCheck = process.env.NODE_ENV ? "OK" : "MISSING";
+            verifyStep.output += `Environment loaded: ${envCheck}\n`;
+
+            verifyStep.status = "success";
+            verifyStep.finishedAt = new Date();
+            deployment.status = "success";
+            deployment.finishedAt = new Date();
+            await this.saveState(deployment, REDIS_KEY_CURRENT);
+            await this.saveState(deployment, REDIS_KEY_LAST);
+
+            const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
+            this.logger.log(`Deployment verified successfully`);
+            this.emailService.sendEmail({
+               subject: `Shado Cloud - ${deployment.project} deployment SUCCESS`,
+               html: this.buildEmailHtml({
+                  title: "Deployment Successful",
+                  status: "success",
+                  project: deployment.project,
+                  triggeredBy: deployment.triggeredBy,
+                  deployPageUrl,
+                  duration: `${Math.floor(duration / 60)}m ${duration % 60}s`,
+               }),
+            });
+            return;
+         } catch (error) {
+            const errorMsg = (error as Error).message;
+            if (verifyStep.attempt < maxAttempts) {
+               verifyStep.output += `\nAttempt ${verifyStep.attempt} failed: ${errorMsg}\n`;
+               verifyStep.attempt++;
+               await this.saveState(deployment, REDIS_KEY_CURRENT);
+               await new Promise(r => setTimeout(r, 2000));
+            } else {
+               verifyStep.status = "failed";
+               verifyStep.error = errorMsg;
+               verifyStep.finishedAt = new Date();
+               deployment.status = "failed";
+               deployment.finishedAt = new Date();
+               await this.saveState(deployment, REDIS_KEY_CURRENT);
+               await this.saveState(deployment, REDIS_KEY_LAST);
+
+               this.logger.error(`Deployment verification failed: ${verifyStep.error}`);
+               this.emailService.sendEmail({
+                  subject: `Shado Cloud - ${deployment.project} deployment FAILED`,
+                  html: this.buildEmailHtml({
+                     title: "Deployment Failed",
+                     status: "failed",
+                     project: deployment.project,
+                     triggeredBy: deployment.triggeredBy,
+                     failedStep: "Verify Deployment",
+                     error: verifyStep.error,
+                     deployPageUrl,
+                  }),
+               });
+            }
+         }
       }
    }
 
@@ -202,6 +222,11 @@ export class DeploymentService implements OnModuleInit {
    public async isRunning(): Promise<boolean> {
       const current = await this.getState(REDIS_KEY_CURRENT);
       return current?.status === "running";
+   }
+
+   public getSteps(project: "backend" | "frontend"): { step: DeploymentStep; name: string }[] {
+      const steps = project === "backend" ? this.backendSteps : this.frontendSteps;
+      return steps.map(s => ({ step: s.step, name: s.name }));
    }
 
    public async getCurrentDeployment(): Promise<DeploymentState | null> {
