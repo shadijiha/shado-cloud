@@ -56,4 +56,12 @@ export class DatabaseGetTableRequest {
    @ApiProperty({ description: "The column to order by" })
    @IsOptional()
    order_column?: string;
+
+   @ApiProperty({ description: "Search filter string" })
+   @IsOptional()
+   search?: string;
+
+   @ApiProperty({ description: "Column to search in" })
+   @IsOptional()
+   search_column?: string;
 }

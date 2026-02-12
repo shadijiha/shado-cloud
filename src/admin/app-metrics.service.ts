@@ -114,6 +114,35 @@ export class AppMetricsService {
          }
       } catch {}
 
+      // Disk I/O
+      let diskIO = { readBytes: 0, writeBytes: 0 };
+      try {
+         if (isMac) {
+            const { stdout } = await execAsync("ioreg -c IOBlockStorageDriver -r -w 0");
+            let totalRead = 0, totalWrite = 0;
+            const matches = stdout.matchAll(/"Bytes \(Read\)"=(\d+).*?"Bytes \(Write\)"=(\d+)/g);
+            for (const m of matches) {
+               totalRead += parseInt(m[1]) || 0;
+               totalWrite += parseInt(m[2]) || 0;
+            }
+            diskIO = { readBytes: totalRead, writeBytes: totalWrite };
+         } else {
+            const { stdout } = await execAsync("cat /proc/diskstats");
+            const lines = stdout.trim().split("\n");
+            let totalRead = 0, totalWrite = 0;
+            for (const line of lines) {
+               const parts = line.trim().split(/\s+/);
+               // fields: major minor name ... reads_sectors(5) ... writes_sectors(9)
+               if (parts.length >= 10 && /^(sd|nvme|vd)/.test(parts[2])) {
+                  totalRead += parseInt(parts[5]) || 0;
+                  totalWrite += parseInt(parts[9]) || 0;
+               }
+            }
+            // sectors are typically 512 bytes
+            diskIO = { readBytes: totalRead * 512, writeBytes: totalWrite * 512 };
+         }
+      } catch {}
+
       // Top processes
       let topProcesses: { pid: string; name: string; cpu: number; mem: number }[] = [];
       try {
@@ -142,6 +171,7 @@ export class AppMetricsService {
          },
          memory: memUsage,
          disk: diskUsage,
+         diskIO,
          uptime: os.uptime(),
          loadAvg: os.loadavg(),
          topProcesses

@@ -325,6 +325,29 @@ export class AdminController {
       return this.adminService.getTable(table, body);
    }
 
+   @Get("database/db/tables/:table/count")
+   @ApiParam({ name: "table", description: "Table name" })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getTableCount(@Param("table") table: string) {
+      return this.adminService.getTableCount(table);
+   }
+
+   @Delete("database/db/tables/:table/row/:id")
+   @ApiParam({ name: "table", description: "Table name" })
+   @ApiParam({ name: "id", description: "Row primary key" })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public deleteRow(@Param("table") table: string, @Param("id") id: string) {
+      return this.adminService.deleteRow(table, id);
+   }
+
+   @Patch("database/db/tables/:table/row/:id")
+   @ApiParam({ name: "table", description: "Table name" })
+   @ApiParam({ name: "id", description: "Row primary key" })
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public updateRow(@Param("table") table: string, @Param("id") id: string, @Body() body: Record<string, any>) {
+      return this.adminService.updateRow(table, id, body);
+   }
+
    /**
     * Server setup backup endpoint
     */

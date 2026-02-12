@@ -63,12 +63,55 @@ describe("AdminService", () => {
                provide: getDataSourceToken(),
                useValue: {
                   query: jest.fn(),
+                  entityMetadatas: [
+                     { tableName: "log" },
+                     { tableName: "user" },
+                  ],
+                  createQueryBuilder: jest.fn().mockReturnValue({
+                     select: jest.fn().mockReturnThis(),
+                     from: jest.fn().mockReturnThis(),
+                     where: jest.fn().mockReturnThis(),
+                     orderBy: jest.fn().mockReturnThis(),
+                     limit: jest.fn().mockReturnThis(),
+                     delete: jest.fn().mockReturnThis(),
+                     update: jest.fn().mockReturnThis(),
+                     set: jest.fn().mockReturnThis(),
+                     getRawMany: jest.fn().mockResolvedValue([]),
+                     getRawOne: jest.fn().mockResolvedValue({ count: "5" }),
+                     execute: jest.fn().mockResolvedValue({ affected: 1 }),
+                  }),
                },
             },
             {
                provide: getEntityManagerToken(),
                useValue: {
                   query: jest.fn(),
+                  getRepository: jest.fn().mockImplementation((table: any) => {
+                     const name = typeof table === "string" ? table : table?.name?.toLowerCase() || "unknown";
+                     if (name === "user") {
+                        return {
+                           metadata: {
+                              tableName: "user",
+                              columns: [
+                                 { propertyName: "id" },
+                                 { propertyName: "username" },
+                                 { propertyName: "password" },
+                              ],
+                              primaryColumns: [{ propertyName: "id" }],
+                           },
+                        };
+                     }
+                     if (name === "encryptedpassword") {
+                        return { metadata: { tableName: "encrypted_password" } };
+                     }
+                     return {
+                        metadata: {
+                           tableName: name,
+                           columns: [{ propertyName: "id" }, { propertyName: "message" }],
+                           primaryColumns: [{ propertyName: "id" }],
+                        },
+                     };
+                  }),
                },
             },
             {
@@ -212,6 +255,187 @@ describe("AdminService", () => {
    describe("getBackgroundImageStream", () => {
       it("should throw for path traversal attempt", async () => {
          await expect(service.getBackgroundImageStream("../etc/passwd")).rejects.toThrow("Invalid filename");
+      });
+   });
+
+   describe("getTableCount", () => {
+      it("should return count for a valid table", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
+
+         const result = await service.getTableCount("log");
+         expect(result).toEqual({ count: 5 });
+      });
+
+      it("should throw when db access is disabled", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(true);
+
+         await expect(service.getTableCount("log")).rejects.toThrow("Database API access is disabled");
+      });
+   });
+
+   describe("deleteRow", () => {
+      it("should delete a row by primary key", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
+
+         const result = await service.deleteRow("log", "1");
+         expect(result).toEqual({ success: true });
+      });
+
+      it("should throw when db access is disabled", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(true);
+
+         await expect(service.deleteRow("log", "1")).rejects.toThrow("Database API access is disabled");
+      });
+   });
+
+   describe("updateRow", () => {
+      it("should update a row with valid columns", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
+
+         const result = await service.updateRow("user", "1", { username: "newname" });
+         expect(result).toEqual({ success: true });
+      });
+
+      it("should strip password field from user table updates", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
+
+         const dataSource = service["dataSource"] as any;
+         const qb = dataSource.createQueryBuilder();
+
+         await service.updateRow("user", "1", { username: "test", password: "secret" });
+
+         // set should have been called — password should be stripped
+         expect(qb.set).toHaveBeenCalledWith({ username: "test" });
+      });
+
+      it("should throw when no valid columns provided", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
+
+         await expect(service.updateRow("user", "1", { nonexistent: "value" })).rejects.toThrow();
+      });
+
+      it("should throw when db access is disabled", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(true);
+
+         await expect(service.updateRow("user", "1", { username: "test" })).rejects.toThrow("Database API access is disabled");
+      });
+
+      it("should reject column names with SQL injection patterns", async () => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
+
+         await expect(service.updateRow("user", "1", { "username; DROP TABLE user--": "val" })).rejects.toThrow();
+         await expect(service.updateRow("user", "1", { "1 OR 1=1": "val" })).rejects.toThrow();
+         await expect(service.updateRow("user", "1", { "username' OR '1'='1": "val" })).rejects.toThrow();
+      });
+   });
+
+   describe("SQL injection prevention", () => {
+      beforeEach(() => {
+         const featureFlagService = service["featureFlagService"] as any;
+         featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
+      });
+
+      it("should reject search_column with SQL injection", async () => {
+         await expect(service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            search: "test", search_column: "id; DROP TABLE log--",
+         } as any)).rejects.toThrow("Invalid column name");
+      });
+
+      it("should reject order_column with SQL injection", async () => {
+         await expect(service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            order_column: "id; DROP TABLE log--",
+         } as any)).rejects.toThrow("Invalid column name");
+      });
+
+      it("should reject column names with spaces", async () => {
+         await expect(service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            search: "x", search_column: "id OR 1=1",
+         } as any)).rejects.toThrow("Invalid column name");
+      });
+
+      it("should reject column names with quotes", async () => {
+         await expect(service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            order_column: "id' AND '1'='1",
+         } as any)).rejects.toThrow("Invalid column name");
+      });
+
+      it("should reject column names with parentheses", async () => {
+         await expect(service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            order_column: "COUNT(id)",
+         } as any)).rejects.toThrow("Invalid column name");
+      });
+
+      it("should reject column names starting with numbers", async () => {
+         await expect(service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            order_column: "1; DROP TABLE log",
+         } as any)).rejects.toThrow("Invalid column name");
+      });
+
+      it("should allow valid column names with underscores", async () => {
+         // "message" is a valid column on the log table mock
+         const result = await service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            order_column: "message",
+         } as any);
+         expect(result).toBeDefined();
+      });
+
+      it("should reject column names not in the whitelist even if format is valid", async () => {
+         await expect(service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            order_column: "nonexistent_column",
+         } as any)).rejects.toThrow("does not exist");
+      });
+
+      it("should safely handle SQL injection in search values via parameterized queries", async () => {
+         const dataSource = service["dataSource"] as any;
+         const qb = dataSource.createQueryBuilder();
+
+         await service.getTable("log", {
+            limit: 10, order_by: "ASC",
+            search: "'; DROP TABLE log; --",
+            search_column: "message",
+         } as any);
+
+         // The search value should be passed as a parameter, not interpolated
+         // Column name should be quoted with backticks
+         expect(qb.where).toHaveBeenCalledWith(
+            "t.`message` LIKE :search",
+            { search: "%'; DROP TABLE log; --%" }
+         );
+      });
+
+      it("should safely handle SQL injection in delete row id via parameterized queries", async () => {
+         const dataSource = service["dataSource"] as any;
+         const qb = dataSource.createQueryBuilder();
+
+         await service.deleteRow("log", "1 OR 1=1");
+
+         expect(qb.where).toHaveBeenCalledWith("`id` = :id", { id: "1 OR 1=1" });
+      });
+
+      it("should safely handle SQL injection in update row id via parameterized queries", async () => {
+         const dataSource = service["dataSource"] as any;
+         const qb = dataSource.createQueryBuilder();
+
+         await service.updateRow("log", "1; DROP TABLE log--", { message: "test" });
+
+         expect(qb.where).toHaveBeenCalledWith("`id` = :id", { id: "1; DROP TABLE log--" });
       });
    });
 });

@@ -53,30 +53,25 @@ export class AdminService {
     * Database admin methods
     */
    public async getTables() {
-      if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, "database_api_access")) {
-         throw new Error("Database API access is disabled");
-      }
+      await this.checkDbAccess();
 
       const tables = this.dataSource.entityMetadatas.map((meta) => meta.tableName);
       return tables.map((table) => {
+         const meta = this.entityManager.getRepository(table).metadata;
          return {
             table,
-            columns: this.entityManager.getRepository(table).metadata.columns.map((col) => col.propertyName),
+            columns: meta.columns.map((col) => col.propertyName),
+            primaryKey: meta.primaryColumns[0]?.propertyName || null,
          };
       });
    }
 
    public async getTable(tableName: string, request: DatabaseGetTableRequest) {
-      const { limit, order_by, order_column } = request;
-      const tables = await this.getTables(); // <-- If feature flag is disabled this will throw an error
-      if (!tables.find((entry) => entry.table == tableName)) {
-         throw new Error(`Table ${tableName} does not exist`);
-      }
+      const { limit, order_by, order_column, search, search_column } = request;
+      await this.checkDbAccess();
+      this.validateTableName(tableName);
 
-      // Verify that the table is not a password table
-      if (tableName == this.entityManager.getRepository(EncryptedPassword).metadata.tableName) {
-         throw new Error("Table is encrypted");
-      }
+      const tables = await this.getTables();
 
       // Verify limit
       if ((!Number.isNaN(parseInt(limit as any)) && limit < 1) || limit > 500) {
@@ -90,18 +85,27 @@ export class AdminService {
 
       // Verify order_column
       const columns = tables.find((entry) => entry.table == tableName)?.columns;
-      if (order_column && !columns.includes(order_column)) {
-         throw new Error(`Column ${order_column} does not exist in table ${tableName}`);
+      if (order_column) {
+         this.validateColumnName(order_column, columns);
       }
 
-      const result = await this.dataSource
+      const qb = this.dataSource
          .createQueryBuilder()
          .select()
-         .from(tableName, "")
-         .where("1=1")
-         .orderBy(order_column, order_by)
-         .limit(limit)
-         .getRawMany();
+         .from(tableName, "t");
+
+      if (search && search_column) {
+         this.validateColumnName(search_column, columns);
+         qb.where("t." + this.quoteIdentifier(search_column) + " LIKE :search", { search: `%${search}%` });
+      }
+
+      if (order_column) {
+         qb.orderBy("t." + this.quoteIdentifier(order_column), order_by);
+      }
+
+      qb.limit(limit);
+
+      const result = await qb.getRawMany();
 
       // If table is user remove password
       if (this.entityManager.getRepository(User).metadata.tableName == tableName) {
@@ -111,6 +115,110 @@ export class AdminService {
       }
 
       return result;
+   }
+
+   private validateTableName(tableName: string) {
+      const tables = this.dataSource.entityMetadatas.map((meta) => meta.tableName);
+      if (!tables.includes(tableName)) {
+         throw new HttpException(`Table ${tableName} does not exist`, HttpStatus.BAD_REQUEST);
+      }
+      if (tableName === this.entityManager.getRepository(EncryptedPassword).metadata.tableName) {
+         throw new HttpException("Table is encrypted", HttpStatus.FORBIDDEN);
+      }
+   }
+
+   /**
+    * Validates that a column name is a safe identifier (alphanumeric + underscores only)
+    * and exists in the provided whitelist. This prevents SQL injection via column names.
+    */
+   private validateColumnName(column: string, allowedColumns: string[]): string {
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(column)) {
+         throw new HttpException("Invalid column name", HttpStatus.BAD_REQUEST);
+      }
+      if (!allowedColumns.includes(column)) {
+         throw new HttpException(`Column ${column} does not exist`, HttpStatus.BAD_REQUEST);
+      }
+      return column;
+   }
+
+   public async getTableCount(tableName: string) {
+      await this.checkDbAccess();
+      this.validateTableName(tableName);
+
+      const result = await this.dataSource
+         .createQueryBuilder()
+         .select("COUNT(*)", "count")
+         .from(tableName, "")
+         .getRawOne();
+
+      return { count: parseInt(result?.count || "0") };
+   }
+
+   public async deleteRow(tableName: string, id: string) {
+      await this.checkDbAccess();
+      this.validateTableName(tableName);
+
+      const meta = this.entityManager.getRepository(tableName).metadata;
+      const pk = meta.primaryColumns[0]?.propertyName;
+      if (!pk) throw new HttpException("No primary key found", HttpStatus.BAD_REQUEST);
+      this.validateColumnName(pk, meta.columns.map((c) => c.propertyName));
+
+      await this.dataSource.createQueryBuilder().delete().from(tableName).where(this.quoteIdentifier(pk) + " = :id", { id }).execute();
+      return { success: true };
+   }
+
+   public async updateRow(tableName: string, id: string, data: Record<string, any>) {
+      await this.checkDbAccess();
+      this.validateTableName(tableName);
+
+      const meta = this.entityManager.getRepository(tableName).metadata;
+      const pk = meta.primaryColumns[0]?.propertyName;
+      if (!pk) throw new HttpException("No primary key found", HttpStatus.BAD_REQUEST);
+
+      const validColumns = meta.columns.map((c) => c.propertyName);
+      this.validateColumnName(pk, validColumns);
+
+      // Only allow updating columns that pass validation
+      const filtered: Record<string, any> = {};
+      for (const key of Object.keys(data)) {
+         if (key === pk) continue;
+         try {
+            this.validateColumnName(key, validColumns);
+            filtered[key] = data[key];
+         } catch {
+            // Skip invalid column names silently
+         }
+      }
+
+      if (Object.keys(filtered).length === 0) {
+         throw new HttpException("No valid columns to update", HttpStatus.BAD_REQUEST);
+      }
+
+      // Block updating password fields on user table
+      if (this.entityManager.getRepository(User).metadata.tableName === tableName) {
+         delete filtered["password"];
+      }
+
+      if (Object.keys(filtered).length === 0) {
+         throw new HttpException("No valid columns to update", HttpStatus.BAD_REQUEST);
+      }
+
+      await this.dataSource.createQueryBuilder().update(tableName).set(filtered).where(this.quoteIdentifier(pk) + " = :id", { id }).execute();
+      return { success: true };
+   }
+
+   /**
+    * Wraps a column name in backticks to prevent any possibility of SQL injection.
+    * Must only be called AFTER validateColumnName().
+    */
+   private quoteIdentifier(name: string): string {
+      return "`" + name.replace(/`/g, "``") + "`";
+   }
+
+   private async checkDbAccess() {
+      if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, "database_api_access")) {
+         throw new HttpException("Database API access is disabled", HttpStatus.FORBIDDEN);
+      }
    }
 
    private async execSync(command: string) {

@@ -34,6 +34,9 @@ describe("AdminController", () => {
                   all: jest.fn(),
                   deleteByIds: jest.fn(async () => {}),
                   redeploy: jest.fn(),
+                  getTableCount: jest.fn().mockResolvedValue({ count: 10 }),
+                  deleteRow: jest.fn().mockResolvedValue({ success: true }),
+                  updateRow: jest.fn().mockResolvedValue({ success: true }),
                },
             },
             {
@@ -248,6 +251,27 @@ describe("AdminController", () => {
          // Assertions
          expect(result.message).toBe(`Not a push to ${branchName} branch, ignoring`);
          expect(mockLoggerWarn).toHaveBeenCalledWith(`Ignoring push to non-${branchName} branch`);
+      });
+   });
+
+   describe("database endpoints", () => {
+      it("getTableCount should call service", async () => {
+         const result = await adminController.getTableCount("user");
+         expect(result).toEqual({ count: 10 });
+         expect(adminService.getTableCount).toHaveBeenCalledWith("user");
+      });
+
+      it("deleteRow should call service with table and id", async () => {
+         const result = await adminController.deleteRow("user", "5");
+         expect(result).toEqual({ success: true });
+         expect(adminService.deleteRow).toHaveBeenCalledWith("user", "5");
+      });
+
+      it("updateRow should call service with table, id, and body", async () => {
+         const body = { username: "newname" };
+         const result = await adminController.updateRow("user", "5", body);
+         expect(result).toEqual({ success: true });
+         expect(adminService.updateRow).toHaveBeenCalledWith("user", "5", body);
       });
    });
 
