@@ -132,13 +132,15 @@ export class AppMetricsService {
             let totalRead = 0, totalWrite = 0;
             for (const line of lines) {
                const parts = line.trim().split(/\s+/);
-               // fields: major minor name ... reads_sectors(5) ... writes_sectors(9)
-               if (parts.length >= 10 && /^(sd|nvme|vd)/.test(parts[2])) {
-                  totalRead += parseInt(parts[5]) || 0;
-                  totalWrite += parseInt(parts[9]) || 0;
-               }
+               if (parts.length < 14) continue;
+               const name = parts[2];
+               // Skip loop, ram, and partition devices (ending in digits for sd/vd/xvd, or containing 'p' + digits for nvme/mmcblk)
+               if (/^(loop|ram)/.test(name)) continue;
+               if (/^(sd|vd|xvd)[a-z]+\d/.test(name)) continue;
+               if (/^(nvme|mmcblk)\d+.*p\d+$/.test(name)) continue;
+               totalRead += parseInt(parts[5]) || 0;
+               totalWrite += parseInt(parts[9]) || 0;
             }
-            // sectors are typically 512 bytes
             diskIO = { readBytes: totalRead * 512, writeBytes: totalWrite * 512 };
          }
       } catch {}
