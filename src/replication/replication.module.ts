@@ -7,7 +7,8 @@ import { ReplicationRole, validate } from "src/config/config.validator";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "src/file-system/file-system.service";
 import { ScheduleModule } from "@nestjs/schedule";
-
+import { GoogleDriveBackupService } from "./google-drive-backup.service";
+import { AdminModule } from "src/admin/admin.module";
 /**
  * This module is responsible for replicating data between the primary and secondary PCs
  * Used to ensure that the primary and secondary PCs are in sync
@@ -30,6 +31,7 @@ import { ScheduleModule } from "@nestjs/schedule";
          (env: NodeJS.ProcessEnv) => env.REPLICATION_ROLE == ReplicationRole.Replica,
       ),
       ScheduleModule.forRoot(),
+      AdminModule,
    ],
    controllers: [ReplicationController],
    providers: [
@@ -38,6 +40,7 @@ import { ScheduleModule } from "@nestjs/schedule";
          provide: AbstractFileSystem,
          useClass: NodeFileSystemService,
       },
+      GoogleDriveBackupService,
    ],
 })
 export class ReplicationModule implements NestModule {

@@ -43,7 +43,7 @@ export class EmailService {
                     attachments: options.attachments,
                 });
             } catch (e) {
-                this.logger.warn("Unable to send email " + e.message);
+                this.logger.warn("Unable to send email " + (e as Error).message);
             }
         }
     }
