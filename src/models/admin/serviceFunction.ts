@@ -5,6 +5,9 @@ export class ServiceFunction {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
+    @Column({ nullable: true })
+    name: string;
+
     @Column({ type: "longtext" })
     code: string;
 
@@ -21,9 +24,25 @@ export class ServiceFunction {
     @Column()
     user_id: number;
 
+    @Column({ default: true})
+    enabled: boolean;
+
     @CreateDateColumn()
     created_at: Date;
 
     @UpdateDateColumn()
     updated_at: Date;
+
+    /**
+     * Statistics
+     */
+    @Column({ default: 0})
+    last_execution_time_ms: number;
+
+    @Column({ default: null, nullable: true})
+    avg_execution_time_ms: number | null;
+
+    // Total number of times this function has been executed
+    @Column({default: 0})
+    execution_count: number;
 }

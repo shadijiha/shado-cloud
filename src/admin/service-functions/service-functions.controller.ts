@@ -44,10 +44,11 @@ export class ServiceFunctionsController {
     @Post("/create")
     public async create(
         @AuthUser() userId: number,
-        @Body() body: { code: string }
+        @Body() body: { code: string, name?: string }
     ) {
         const func = new ServiceFunction();
         func.code = body.code;
+        func.name = body.name ?? null;
         func.user_id = userId;
 
         await this.serviceFuncRepo.save(func);
@@ -76,7 +77,7 @@ export class ServiceFunctionsController {
     public async save(
         @AuthUser() userId: number,
         @Param("id") id: string,
-        @Body() body: { code: string }
+        @Body() body: { code: string, name?: string, enabled?: boolean }
     ) {
         const func = await this.serviceFuncRepo.findOne({
             where: {
@@ -90,6 +91,12 @@ export class ServiceFunctionsController {
         }
 
         func.code = body.code;
+        if (body.name) {
+            func.name = body.name
+        }
+        if (body.enabled != null || body.enabled != undefined) {
+            func.enabled = body.enabled;
+        }
         await this.serviceFuncRepo.save(func);
     }
 
@@ -135,8 +142,11 @@ export class ServiceFunctionsController {
     public async executeFunctions() {
         const funcs = await this.serviceFuncRepo.find({
             where: {
-                user_id: 1
-            }
+                enabled: true,
+            },
+            order: {
+                avg_execution_time_ms: 'ASC',
+            },
         });
 
         if (funcs.length <= 0) {
@@ -144,20 +154,32 @@ export class ServiceFunctionsController {
         }
 
         for (const func of funcs) {
-            this.executeFunction(func);
+            // The use await here is deliberate. Some service functions use puppeteer which on rasberry pie CPU spike to 100%.
+            // Tis makes the device unresponsive. By making functions run sequentially, this risk is lowered
+            await this.executeFunction(func);
         }
     }
 
     private async executeFunction(func: ServiceFunction) {
+        // helper function for logging 
+        const formatLog = (level, msg) => {
+            const now = new Date();
+            const timestamp = now.toISOString().replace('T', ' ').split('.')[0];
+            // Example: 2026-02-22 14:32:10
+            const formatted = `[${timestamp}] ${level.toUpperCase()}: ${msg}\n`;
+            return formatted;
+        }
+
         if (!await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Admin, "enable_service_functions_execution")) {
             const msg = `Cannot execute service function ${func.id} for user ${func.user_id}. ${FeatureFlagNamespace.Admin}.enable_service_functions_execution feature flag is disabled`;
             this.logger.log(msg);
-            func.last_execution_logs = msg;
+            func.last_execution_logs = formatLog("Error", msg);
             await this.serviceFuncRepo.save(func);
             return;
         }
 
         this.logger.log(`Running service function ${func.id} for user ${func.user_id}`);
+        const startTime = Date.now();
 
         func.last_execution_logs = "";
         await this.serviceFuncRepo.save(func);
@@ -169,17 +191,17 @@ export class ServiceFunctionsController {
             console: {
                 log: async e => {
                     this.logger.log(e);
-                    func.last_execution_logs += e + "\n";
+                    func.last_execution_logs += formatLog("Info", e);
                     this.serviceFuncRepo.save(func);
                 },
                 error: e => {
                     this.logger.error(e);
-                    func.last_execution_logs += e + "\n";
+                    func.last_execution_logs += formatLog("Error", e);
                     this.serviceFuncRepo.save(func);
                 },
                 warn: e => {
                     this.logger.warn(e);
-                    func.last_execution_logs += e + "\n";
+                    func.last_execution_logs += formatLog("Warn", e);
                     this.serviceFuncRepo.save(func);
                 },
             },
@@ -223,8 +245,13 @@ export class ServiceFunctionsController {
             }
         } catch (error: any) {
             this.logger.error(error.message);
-            func.last_execution_logs += error.message + "\n";
+            func.last_execution_logs += formatLog("Error", error.message);
         } finally {
+            const endTime = Date.now();
+            const execTime = endTime - startTime;
+            func.last_execution_time_ms = execTime;
+            func.avg_execution_time_ms = !func.avg_execution_time_ms ? execTime : (func.avg_execution_time_ms * func.execution_count + execTime) / (func.execution_count + 1);
+            func.execution_count += 1;
             await this.serviceFuncRepo.save(func);
         }
     }
