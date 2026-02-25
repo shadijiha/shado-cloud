@@ -9,8 +9,7 @@ import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import type Redis from "ioredis";
 import { REDIS_CACHE } from "src/util";
-import * as fs from "fs";
-import * as path from "path";
+
 
 export type DeploymentStep = "git_pull" | "npm_install" | "test" | "build" | "migrate" | "restart" | "verify";
 export type StepStatus = "pending" | "running" | "success" | "failed" | "skipped";
@@ -30,7 +29,7 @@ export interface DeploymentState {
    id: string;
    project: "backend" | "frontend";
    status: "running" | "success" | "failed";
-   steps: StepState[];
+   currentStep: StepState;
    startedAt: Date;
    finishedAt?: Date;
    triggeredBy: string;
@@ -57,14 +56,14 @@ export class DeploymentService implements OnModuleInit {
    private deploymentSubject: Subject<MessageEvent> | null = null;
    private currentProcess: ReturnType<typeof spawn> | null = null;
 
-   private readonly backendSteps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[] = [
+   private readonly backendSteps: { step: DeploymentStep; name: string; cmd: string; args: string[], triggerOnModuleInit?: boolean }[] = [
       { step: "git_pull", name: "Git Pull", cmd: "git", args: ["pull"] },
       { step: "npm_install", name: "NPM Install", cmd: "npm", args: ["install"] },
       { step: "test", name: "Run Tests", cmd: "npm", args: ["test", "--", "--runInBand", "--no-colors"] },
       { step: "build", name: "Build", cmd: "npm", args: ["run", "build"] },
       { step: "migrate", name: "Run Migrations", cmd: "npx", args: ["typeorm", "migration:run", "-d", "ormconfig.js"] },
-      { step: "restart", name: "Restart Service", cmd: "", args: [] }, // handled specially
-      { step: "verify", name: "Verify Deployment", cmd: "", args: [] }, // runs on startup
+      { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend"] }, // handled specially
+      { step: "verify", name: "Verify Deployment", cmd: "pm2", args: ["jlist"], triggerOnModuleInit: true }, // runs on startup
    ];
 
    private readonly frontendSteps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[] = [
@@ -84,126 +83,13 @@ export class DeploymentService implements OnModuleInit {
    async onModuleInit() {
       // Check if we need to complete a verify step after restart
       const deployment = await this.getState(REDIS_KEY_CURRENT);
-      if (deployment?.status === "running" && deployment.project === "backend") {
-         const verifyStep = deployment.steps.find(s => s.step === "verify");
-         const restartStep = deployment.steps.find(s => s.step === "restart");
-         
-         // If restart succeeded and verify is pending, run verification
-         if (restartStep?.status === "success" && verifyStep?.status === "pending") {
-            this.logger.log("Resuming deployment verification after restart...");
-            await this.runVerifyStep(deployment);
-         }
+      if (deployment?.status === "running") {
+         const step = deployment.currentStep;
+
+         this.logger.log(`Resuming deployment ${step.step} after restart...`);
+         const remainingSteps = this.getFollowingSteps(step, deployment.project);
+         await this.runSteps(remainingSteps, this.getWorkDir(deployment.project), deployment.project, deployment);
       }
-   }
-
-   private async runVerifyStep(deployment: DeploymentState) {
-      const verifyStep = deployment.steps.find(s => s.step === "verify")!;
-      const frontendUrl = this.config.get("FRONTEND_URL") || "";
-      const deployPageUrl = `${frontendUrl}/admin/deploy`;
-      
-      const maxAttempts = 3;
-      verifyStep.attempt = 1;
-      verifyStep.maxAttempts = maxAttempts;
-
-      while (verifyStep.attempt <= maxAttempts) {
-         verifyStep.status = "running";
-         verifyStep.startedAt = new Date();
-         verifyStep.error = undefined;
-         if (verifyStep.attempt > 1) {
-            verifyStep.output += `\n--- Retry attempt ${verifyStep.attempt}/${maxAttempts} ---\n`;
-         } else {
-            verifyStep.output = "Verifying deployment after restart...\n";
-         }
-         await this.saveState(deployment, REDIS_KEY_CURRENT);
-
-         try {
-            // Check PM2 process is running
-            const pid = await this.getPm2Pid("shado-cloud-backend");
-            if (!pid) throw new Error("PM2 process not running");
-            verifyStep.output += `PM2 process running with PID: ${pid}\n`;
-
-            // Verify .env was loaded (check a known env var)
-            const envCheck = process.env.NODE_ENV ? "OK" : "MISSING";
-            verifyStep.output += `Environment loaded: ${envCheck}\n`;
-
-            verifyStep.status = "success";
-            verifyStep.finishedAt = new Date();
-            deployment.status = "success";
-            deployment.finishedAt = new Date();
-            await this.saveState(deployment, REDIS_KEY_CURRENT);
-            await this.saveState(deployment, REDIS_KEY_LAST);
-
-            const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
-            this.logger.log(`Deployment verified successfully`);
-            this.emailService.sendEmail({
-               subject: `Shado Cloud - ${deployment.project} deployment SUCCESS`,
-               html: this.buildEmailHtml({
-                  title: "Deployment Successful",
-                  status: "success",
-                  project: deployment.project,
-                  triggeredBy: deployment.triggeredBy,
-                  deployPageUrl,
-                  duration: `${Math.floor(duration / 60)}m ${duration % 60}s`,
-               }),
-            });
-            return;
-         } catch (error) {
-            const errorMsg = (error as Error).message;
-            if (verifyStep.attempt < maxAttempts) {
-               verifyStep.output += `\nAttempt ${verifyStep.attempt} failed: ${errorMsg}\n`;
-               verifyStep.attempt++;
-               await this.saveState(deployment, REDIS_KEY_CURRENT);
-               await new Promise(r => setTimeout(r, 2000));
-            } else {
-               verifyStep.status = "failed";
-               verifyStep.error = errorMsg;
-               verifyStep.finishedAt = new Date();
-               deployment.status = "failed";
-               deployment.finishedAt = new Date();
-               await this.saveState(deployment, REDIS_KEY_CURRENT);
-               await this.saveState(deployment, REDIS_KEY_LAST);
-
-               this.logger.error(`Deployment verification failed: ${verifyStep.error}`);
-               this.emailService.sendEmail({
-                  subject: `Shado Cloud - ${deployment.project} deployment FAILED`,
-                  html: this.buildEmailHtml({
-                     title: "Deployment Failed",
-                     status: "failed",
-                     project: deployment.project,
-                     triggeredBy: deployment.triggeredBy,
-                     failedStep: "Verify Deployment",
-                     error: verifyStep.error,
-                     deployPageUrl,
-                  }),
-               });
-            }
-         }
-      }
-   }
-
-   private getPm2Pid(name: string): Promise<string | null> {
-      return new Promise((resolve) => {
-         const proc = spawn("pm2", ["jlist"], { shell: true, env: { ...process.env, PM2_HOME: process.env.HOME + "/.pm2" } });
-         let output = "";
-         proc.stdout.on("data", (data) => output += data.toString());
-         proc.on("close", () => {
-            try {
-               // PM2 outputs warnings before JSON, extract JSON array
-               const jsonStart = output.indexOf("[");
-               const jsonEnd = output.lastIndexOf("]") + 1;
-               if (jsonStart === -1 || jsonEnd === 0) {
-                  resolve(null);
-                  return;
-               }
-               const list = JSON.parse(output.substring(jsonStart, jsonEnd));
-               const app = list.find((p: any) => p.name === name);
-               resolve(app?.pid?.toString() || null);
-            } catch {
-               resolve(null);
-            }
-         });
-         proc.on("error", () => resolve(null));
-      });
    }
 
    private async saveState(deployment: DeploymentState | null, key: string) {
@@ -250,14 +136,11 @@ export class DeploymentService implements OnModuleInit {
          this.currentProcess.kill("SIGTERM");
          this.currentProcess = null;
       }
-      const runningStep = current.steps.find(s => s.status === "running");
+      const runningStep = current.currentStep;
       if (runningStep) {
          runningStep.status = "failed";
          runningStep.error = "Cancelled by user";
          runningStep.finishedAt = new Date();
-      }
-      for (const s of current.steps) {
-         if (s.status === "pending") s.status = "skipped";
       }
       current.status = "failed";
       current.finishedAt = new Date();
@@ -276,22 +159,19 @@ export class DeploymentService implements OnModuleInit {
       if (!current || current.status !== "failed") {
          throw new Error("No failed deployment to retry");
       }
-      const stepState = current.steps.find(s => s.step === step);
+      const stepState = current.currentStep;
       if (!stepState || stepState.status !== "failed") {
          throw new Error("Step not found or not failed");
       }
 
       // Reset this step and all following steps
-      let found = false;
-      for (const s of current.steps) {
-         if (s.step === step) found = true;
-         if (found) {
-            s.status = "pending";
-            s.output = "";
-            s.error = undefined;
-            s.startedAt = undefined;
-            s.finishedAt = undefined;
-         }
+      current.currentStep = {
+         status: "pending",
+         output: "",
+         error: undefined,
+         startedAt: undefined,
+         finishedAt: undefined,
+         step
       }
 
       current.status = "running";
@@ -300,17 +180,8 @@ export class DeploymentService implements OnModuleInit {
       
       this.deploymentSubject = new Subject<MessageEvent>();
 
-      const steps = current.project === "backend" ? this.backendSteps : this.frontendSteps;
-      const workDir = current.project === "backend"
-         ? process.cwd()
-         : this.config.get("FRONTEND_DEPLOY_PATH")!;
-      
-      const stepsToRun = steps.filter(s => {
-         const state = current.steps.find(st => st.step === s.step);
-         return state?.status === "pending";
-      });
-
-      this.runSteps(stepsToRun, workDir, current.project, current);
+      const stepsToRun = this.getFollowingSteps(current.currentStep, current.project);
+      this.runSteps(stepsToRun, this.getWorkDir(current.project), current.project, current);
       return this.deploymentSubject;
    }
 
@@ -323,10 +194,8 @@ export class DeploymentService implements OnModuleInit {
       }
 
       const steps = project === "backend" ? this.backendSteps : this.frontendSteps;
-      const workDir = project === "backend" 
-         ? process.cwd()
-         : this.config.get("FRONTEND_DEPLOY_PATH");
-
+      
+      const workDir = this.getWorkDir(project);
       if (project === "frontend" && !workDir) {
          throw new Error("FRONTEND_DEPLOY_PATH not configured");
       }
@@ -336,7 +205,16 @@ export class DeploymentService implements OnModuleInit {
          id: `deploy_${Date.now()}`,
          project,
          status: "running",
-         steps: steps.map(s => ({ step: s.step, status: "pending" as StepStatus, output: "" })),
+         currentStep: {
+            step: steps[0].step,
+            status: "pending",
+            output: "",
+            startedAt: undefined,
+            finishedAt: undefined,
+            error: "",
+            attempt: 1,
+            maxAttempts: 3,
+         },
          startedAt: new Date(),
          triggeredBy,
       };
@@ -347,7 +225,7 @@ export class DeploymentService implements OnModuleInit {
       return this.deploymentSubject;
    }
 
-   private async runSteps(
+   private async runSteps( 
       steps: { step: DeploymentStep; name: string; cmd: string; args: string[] }[],
       workDir: string,
       project: "backend" | "frontend",
@@ -357,7 +235,7 @@ export class DeploymentService implements OnModuleInit {
       const deployPageUrl = `${frontendUrl}/admin/deploy`;
 
       for (const stepConfig of steps) {
-         const stepState = deployment.steps.find(s => s.step === stepConfig.step)!;
+         const stepState = deployment.currentStep;
          
          // For backend restart: mark restart success, leave verify pending, then restart
          if (stepConfig.step === "restart" && project === "backend") {
@@ -424,11 +302,7 @@ export class DeploymentService implements OnModuleInit {
             }
          }
 
-         if (stepState.status === "failed") {
-            for (const s of deployment.steps) {
-               if (s.status === "pending") s.status = "skipped";
-            }
-            
+         if (stepState.status === "failed") {          
             deployment.status = "failed";
             deployment.finishedAt = new Date();
             await this.saveState(deployment, REDIS_KEY_CURRENT);
@@ -487,8 +361,8 @@ export class DeploymentService implements OnModuleInit {
       if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, `auto_${project}_redeploy`)) {
          this.logger.warn(`Deployment blocked: auto_${project}_redeploy feature flag is disabled`);
          deployment.status = "failed";
-         deployment.steps[0].status = "failed";
-         deployment.steps[0].error = "Feature flag disabled";
+         deployment.currentStep.status = "failed";
+         deployment.currentStep.error = "Feature flag disabled";
          await this.saveState(deployment, REDIS_KEY_CURRENT);
          await this.saveState(deployment, REDIS_KEY_LAST);
          this.emit({ type: "deployment_complete", deployment });
@@ -511,6 +385,18 @@ export class DeploymentService implements OnModuleInit {
       await this.runSteps(steps, workDir, project, deployment);
    }
 
+   private getWorkDir(project: string) {
+      return project === "backend" 
+         ? process.cwd()
+         : this.config.get("FRONTEND_DEPLOY_PATH");
+   }
+
+   private getFollowingSteps(step: StepState, project: "backend" | "frontend") {
+      const allSteps = project == "backend" ? this.backendSteps : this.frontendSteps;
+      const remainingStepsStartIndex = allSteps.findIndex(s => s.step == step.step);
+      return allSteps.slice(remainingStepsStartIndex);
+   }
+
    private runStep(cmd: string, args: string[], cwd: string, step: DeploymentStep, deployment: DeploymentState): Promise<void> {
       return new Promise((resolve, reject) => {
          const env = { 
@@ -522,7 +408,7 @@ export class DeploymentService implements OnModuleInit {
          };
          const proc = spawn(cmd, args, { cwd, shell: true, env, stdio: ["ignore", "pipe", "pipe"] });
          this.currentProcess = proc;
-         const stepState = deployment.steps.find(s => s.step === step)!;
+         const stepState = deployment.currentStep;
 
          const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
 
