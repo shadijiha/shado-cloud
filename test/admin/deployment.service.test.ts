@@ -1,12 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
-import { DeploymentService } from "../deployment.service";
-import { LoggerToDb } from "../../logging";
-import { EmailService } from "../email.service";
-import { FeatureFlagService } from "../feature-flag.service";
-import { REDIS_CACHE } from "../../util";
+import { DeploymentService } from "src/admin/deployment.service";
+import { LoggerToDb } from "src/logging";
+import { EmailService } from "src/admin/email.service";
+import { FeatureFlagService } from "src/admin/feature-flag.service";
+import { REDIS_CACHE } from "src/util";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { DeploymentProject } from "../../models/admin/deploymentProject";
+import { DeploymentProject } from "src/models/admin/deploymentProject";
 import * as childProcess from "child_process";
 import { EventEmitter } from "events";
 

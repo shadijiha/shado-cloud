@@ -80,6 +80,7 @@ describe("AdminController", () => {
                   isRunning: jest.fn().mockReturnValue(false),
                   getCurrentDeployment: jest.fn().mockReturnValue(null),
                   startDeployment: jest.fn(),
+                  getProject: jest.fn().mockResolvedValue({ slug: "backend", branch: "master", enabled: true }),
                },
             },
          ],
@@ -195,7 +196,7 @@ describe("AdminController", () => {
          expect(hmacMock).toHaveBeenCalledWith("sha256", "githubsecret");
          expect(startDeploymentMock).toHaveBeenCalledWith("backend", "github-webhook");
          expect(result.message).toBe("Deployment triggered successfully");
-         expect(logger.log).toHaveBeenCalledWith("Received backend webhook payload");
+         expect(logger.log).toHaveBeenCalledWith("Received webhook payload for backend");
          expect(logger.log).toHaveBeenCalledWith("Starting redeployment...");
       });
 

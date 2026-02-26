@@ -124,6 +124,11 @@ describe("AdminService", () => {
                provide: AbstractFileSystem,
                useValue: {
                   unlinkSync: jest.fn(),
+                  mkdirSync: jest.fn(),
+                  readFileSync: jest.fn().mockReturnValue("mock-content"),
+                  writeFileSync: jest.fn(),
+                  existsSync: jest.fn().mockReturnValue(true),
+                  readdirSync: jest.fn().mockReturnValue([]),
                }
             }
          ],
