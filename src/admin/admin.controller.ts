@@ -112,33 +112,30 @@ export class AdminController {
    }
 
    // Exlude from admin gaurds
-   @Post("redeploy/:type")
+   @Post("redeploy/:slug")
    @HttpCode(HttpStatus.OK)
    @ApiParam({
-      name: "type",
-      description: "Type of deployment to trigger",
-      enum: ["backend", "frontend"],
+      name: "slug",
+      description: "Project slug to deploy",
    })
    async redeploy(
-      @Param("type") type: string,
+      @Param("slug") slug: string,
       @Body() payload: any,
       @Headers("x-hub-signature-256") signature: string,
    ) {
-      if (type != "backend" && type != "frontend") {
-         throw new HttpException("Invalid deployment type", HttpStatus.BAD_REQUEST);
+      const project = await this.deploymentService.getProject(slug);
+      if (!project) {
+         throw new HttpException("Invalid deployment project", HttpStatus.BAD_REQUEST);
       }
 
-      const branchName = "master";
-      this.logger.log("Received backend webhook payload");
+      this.logger.log(`Received webhook payload for ${slug}`);
 
       try {
-         // Check that the push is from the correct branch (optional)
-         if (payload.ref !== `refs/heads/${branchName}`) {
-            this.logger.warn(`Ignoring push to non-${branchName} branch`);
-            return { message: `Not a push to ${branchName} branch, ignoring` };
+         if (payload.ref !== `refs/heads/${project.branch}`) {
+            this.logger.warn(`Ignoring push to non-${project.branch} branch`);
+            return { message: `Not a push to ${project.branch} branch, ignoring` };
          }
 
-         // Verify GitHub signature
          const githubSecret = this.config.get<string>("GITHUB_WEBHOOK_SECRET");
          if (!githubSecret) {
             throw new Error("env var GITHUB_WEBHOOK_SECRET is undefined");
@@ -150,9 +147,8 @@ export class AdminController {
             throw new UnauthorizedException("Invalid signature");
          }
 
-         // Run deployment steps
          this.logger.log("Starting redeployment...");
-         this.deploymentService.startDeployment(type as "backend" | "frontend", "github-webhook");
+         this.deploymentService.startDeployment(slug, "github-webhook");
 
          return { message: "Deployment triggered successfully" };
       } catch (error) {
@@ -436,10 +432,65 @@ export class AdminController {
    }
 
    // Deployment Pipeline
+   @Get("deployment/projects")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getDeploymentProjects() {
+      return this.deploymentService.getProjects();
+   }
+
+   @Post("deployment/projects")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async createDeploymentProject(@Body() body: { slug: string; name: string; workDir: string; pm2ProcessName?: string; branch?: string; steps: any[] }) {
+      const { DeploymentProject } = await import("../models/admin/deploymentProject");
+      const project = new DeploymentProject();
+      project.slug = body.slug;
+      project.name = body.name;
+      project.workDir = body.workDir;
+      project.pm2ProcessName = body.pm2ProcessName || null;
+      project.branch = body.branch || "master";
+      project.setSteps(body.steps);
+      return this.deploymentService.saveProject(project);
+   }
+
+   @Put("deployment/projects/:slug")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async updateDeploymentProject(@Param("slug") slug: string, @Body() body: Partial<{ name: string; workDir: string; pm2ProcessName: string; branch: string; steps: any[]; enabled: boolean }>) {
+      const project = await this.deploymentService.getProject(slug);
+      if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
+      if (body.name !== undefined) project.name = body.name;
+      if (body.workDir !== undefined) project.workDir = body.workDir;
+      if (body.pm2ProcessName !== undefined) project.pm2ProcessName = body.pm2ProcessName;
+      if (body.branch !== undefined) project.branch = body.branch;
+      if (body.steps !== undefined) project.setSteps(body.steps);
+      if (body.enabled !== undefined) project.enabled = body.enabled;
+      return this.deploymentService.saveProject(project);
+   }
+
+   @Delete("deployment/projects/:slug")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async deleteDeploymentProject(@Param("slug") slug: string) {
+      await this.deploymentService.deleteProject(slug);
+      return { success: true };
+   }
+
    @Get("deployment/steps/:project")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
-   public getDeploymentSteps(@Param("project") project: "backend" | "frontend") {
+   public getDeploymentSteps(@Param("project") project: string) {
       return this.deploymentService.getSteps(project);
+   }
+
+   @Patch("deployment/steps/:project/:step/skip")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async toggleStepSkip(@Param("project") projectSlug: string, @Param("step") step: string, @Body("skip") skip: boolean) {
+      const project = await this.deploymentService.getProject(projectSlug);
+      if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
+      const steps = project.getSteps();
+      const target = steps.find(s => s.step === step);
+      if (!target) throw new HttpException("Step not found", HttpStatus.NOT_FOUND);
+      target.skip = skip;
+      project.setSteps(steps);
+      await this.deploymentService.saveProject(project);
+      return { success: true };
    }
 
    @Get("deployment/status")
@@ -467,11 +518,8 @@ export class AdminController {
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    @Sse()
    public async startDeployment(
-      @Param("project") project: "backend" | "frontend",
+      @Param("project") project: string,
    ): Promise<Observable<MessageEvent>> {
-      if (project !== "backend" && project !== "frontend") {
-         throw new HttpException("Invalid project", HttpStatus.BAD_REQUEST);
-      }
       const subject = await this.deploymentService.startDeployment(project, "admin");
       return subject.asObservable();
    }
@@ -487,17 +535,21 @@ export class AdminController {
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    @Sse()
    public async retryStep(@Param("step") step: string): Promise<Observable<MessageEvent>> {
-      const subject = await this.deploymentService.retryStep(step as any);
+      const subject = await this.deploymentService.retryStep(step);
       return subject.asObservable();
    }
 
    // Environment file management
    @Get("env/:project")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
-   public getEnvFile(@Param("project") project: "backend" | "frontend"): string {
-      const envPath = project === "backend" 
-         ? path.join(process.cwd(), ".env")
-         : path.join(this.config.get("FRONTEND_DEPLOY_PATH") || "", ".env");
+   public async getEnvFile(@Param("project") projectSlug: string): Promise<string> {
+      const project = await this.deploymentService.getProject(projectSlug);
+      if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
+      
+      const workDir = project.workDir === "__CWD__" ? process.cwd() 
+         : project.workDir === "__FRONTEND_DEPLOY_PATH__" ? (this.config.get("FRONTEND_DEPLOY_PATH") || "")
+         : project.workDir;
+      const envPath = path.join(workDir, ".env");
       
       if (!fs.existsSync(envPath)) {
          throw new HttpException("Env file not found", HttpStatus.NOT_FOUND);
@@ -507,20 +559,23 @@ export class AdminController {
 
    @Put("env/:project")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
-   public saveEnvFile(
-      @Param("project") project: "backend" | "frontend",
+   public async saveEnvFile(
+      @Param("project") projectSlug: string,
       @Body("content") content: string,
-   ): { success: boolean } {
-      const envPath = project === "backend" 
-         ? path.join(process.cwd(), ".env")
-         : path.join(this.config.get("FRONTEND_DEPLOY_PATH") || "", ".env");
+   ): Promise<{ success: boolean }> {
+      const project = await this.deploymentService.getProject(projectSlug);
+      if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
       
-      if (project === "frontend" && !this.config.get("FRONTEND_DEPLOY_PATH")) {
-         throw new HttpException("FRONTEND_DEPLOY_PATH not configured", HttpStatus.BAD_REQUEST);
+      const workDir = project.workDir === "__CWD__" ? process.cwd() 
+         : project.workDir === "__FRONTEND_DEPLOY_PATH__" ? (this.config.get("FRONTEND_DEPLOY_PATH") || "")
+         : project.workDir;
+      
+      if (!workDir) {
+         throw new HttpException("Working directory not configured", HttpStatus.BAD_REQUEST);
       }
       
-      fs.writeFileSync(envPath, content, "utf-8");
-      this.logger.log(`Env file updated for ${project}`);
+      fs.writeFileSync(path.join(workDir, ".env"), content, "utf-8");
+      this.logger.log(`Env file updated for ${projectSlug}`);
       return { success: true };
    }
 }

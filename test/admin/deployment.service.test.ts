@@ -5,10 +5,35 @@ import { LoggerToDb } from "src/logging";
 import { EmailService } from "src/admin/email.service";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { REDIS_CACHE } from "src/util";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { DeploymentProject } from "src/models/admin/deploymentProject";
 import * as childProcess from "child_process";
 import { EventEmitter } from "events";
 
 jest.mock("child_process");
+
+const backendSteps = [
+   { step: "git_pull", name: "Git Pull", cmd: "git", args: ["pull"] },
+   { step: "npm_install", name: "NPM Install", cmd: "npm", args: ["install"] },
+   { step: "test", name: "Run Tests", cmd: "npm", args: ["test", "--", "--runInBand", "--no-colors"] },
+   { step: "build", name: "Build", cmd: "npm", args: ["run", "build"] },
+   { step: "migrate", name: "Run Migrations", cmd: "npx", args: ["typeorm", "migration:run", "-d", "ormconfig.js"] },
+   { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend"], triggersRestart: true },
+   { step: "verify", name: "Verify Deployment", cmd: "pm2", args: ["jlist"], runsOnModuleInit: true },
+];
+
+function makeProject(slug: string, steps: any[], workDir = "__CWD__"): DeploymentProject {
+   const p = new DeploymentProject();
+   p.id = 1;
+   p.slug = slug;
+   p.name = slug;
+   p.workDir = workDir;
+   p.pm2ProcessName = null;
+   p.branch = "master";
+   p.enabled = true;
+   p.setSteps(steps);
+   return p;
+}
 
 describe("DeploymentService", () => {
    let service: DeploymentService;
@@ -16,10 +41,26 @@ describe("DeploymentService", () => {
    let featureFlagService: FeatureFlagService;
    let logger: LoggerToDb;
    const redisStore: Record<string, string> = {};
+   let projectRepo: any;
 
    beforeEach(async () => {
-      // Clear redis store
       Object.keys(redisStore).forEach(k => delete redisStore[k]);
+
+      projectRepo = {
+         find: jest.fn().mockResolvedValue([makeProject("backend", backendSteps)]),
+         findOneBy: jest.fn().mockImplementation(({ slug }: any) => {
+            if (slug === "backend") return Promise.resolve(makeProject("backend", backendSteps));
+            if (slug === "frontend") return Promise.resolve(makeProject("frontend", [
+               { step: "git_pull", name: "Git Pull", cmd: "git", args: ["pull"] },
+               { step: "npm_install", name: "NPM Install", cmd: "npm", args: ["install"] },
+               { step: "build", name: "Build", cmd: "npm", args: ["run", "build"] },
+            ], "/tmp/frontend"));
+            return Promise.resolve(null);
+         }),
+         create: jest.fn((data: any) => data),
+         save: jest.fn().mockResolvedValue({}),
+         delete: jest.fn().mockResolvedValue({}),
+      };
 
       const module: TestingModule = await Test.createTestingModule({
          providers: [
@@ -36,23 +77,15 @@ describe("DeploymentService", () => {
             },
             {
                provide: LoggerToDb,
-               useValue: {
-                  log: jest.fn(),
-                  warn: jest.fn(),
-                  error: jest.fn(),
-               },
+               useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
             },
             {
                provide: EmailService,
-               useValue: {
-                  sendEmail: jest.fn(),
-               },
+               useValue: { sendEmail: jest.fn() },
             },
             {
                provide: FeatureFlagService,
-               useValue: {
-                  isFeatureFlagDisabled: jest.fn().mockResolvedValue(false),
-               },
+               useValue: { isFeatureFlagDisabled: jest.fn().mockResolvedValue(false) },
             },
             {
                provide: REDIS_CACHE,
@@ -61,6 +94,10 @@ describe("DeploymentService", () => {
                   set: jest.fn((key: string, value: string) => { redisStore[key] = value; return Promise.resolve("OK"); }),
                   del: jest.fn((key: string) => { delete redisStore[key]; return Promise.resolve(1); }),
                },
+            },
+            {
+               provide: getRepositoryToken(DeploymentProject),
+               useValue: projectRepo,
             },
          ],
       }).compile();
@@ -105,12 +142,8 @@ describe("DeploymentService", () => {
          await expect(service.startDeployment("backend", "test")).rejects.toThrow("Deployment already in progress");
       });
 
-      it("should throw if frontend path not configured", async () => {
-         const configService = { get: jest.fn().mockReturnValue(null) } as any;
-         // @ts-expect-error
-         service.config = configService;
-
-         await expect(service.startDeployment("frontend", "test")).rejects.toThrow("FRONTEND_DEPLOY_PATH not configured");
+      it("should throw if project not found", async () => {
+         await expect(service.startDeployment("nonexistent", "test")).rejects.toThrow('Project "nonexistent" not found');
       });
 
       it("should return a Subject for SSE streaming", async () => {
@@ -138,7 +171,8 @@ describe("DeploymentService", () => {
          expect(deployment?.project).toBe("backend");
          expect(deployment?.triggeredBy).toBe("github-webhook");
          expect(deployment?.status).toBe("running");
-         expect(deployment?.steps.length).toBeGreaterThan(0);
+         expect(deployment?.currentStep).toBeDefined();
+         expect(deployment?.currentStep.step).toBe("git_pull");
       });
    });
 
@@ -155,7 +189,6 @@ describe("DeploymentService", () => {
          const events: any[] = [];
          subject.subscribe((event) => events.push(JSON.parse((event as any).data)));
 
-         // Wait for async feature flag check
          await new Promise((r) => setTimeout(r, 50));
 
          expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("feature flag is disabled"));
@@ -170,7 +203,6 @@ describe("DeploymentService", () => {
 
          await service.startDeployment("backend", "admin");
 
-         // Wait for async operations
          await new Promise((r) => setTimeout(r, 50));
 
          expect(emailService.sendEmail).toHaveBeenCalledWith(
@@ -190,24 +222,17 @@ describe("DeploymentService", () => {
          const events: any[] = [];
          subject.subscribe((event) => events.push(JSON.parse((event as any).data)));
 
-         // Wait for first step to start
          await new Promise((r) => setTimeout(r, 50));
 
-         // Simulate successful process completion for all steps
          for (let i = 0; i < 6; i++) {
             mockProc.emit("close", 0);
             await new Promise((r) => setTimeout(r, 20));
          }
 
-         // Check events were emitted
          const stepStarts = events.filter((e) => e.type === "step_start");
          const stepCompletes = events.filter((e) => e.type === "step_complete");
          expect(stepStarts.length).toBeGreaterThan(0);
          expect(stepCompletes.length).toBeGreaterThan(0);
-      });
-
-      it.skip("should send failure email on step failure after retries", async () => {
-         // Skipped: retry logic makes this test slow (3 attempts with 2s delays)
       });
 
       it("should capture stdout output", async () => {

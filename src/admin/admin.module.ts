@@ -15,10 +15,11 @@ import { DirectoriesModule } from "../directories/directories.module";
 import { RemoteDesktopGateway } from "./remote-desktop.gateway";
 import { AuthService } from "../auth/auth.service";
 import { DeploymentService } from "./deployment.service";
+import { DeploymentProject } from "../models/admin/deploymentProject";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController],
-   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction]), FilesModule, DirectoriesModule],
+   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]), FilesModule, DirectoriesModule],
    providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService, RemoteDesktopGateway, AuthService, DeploymentService],
    exports: [AdminService],
 })
