@@ -119,7 +119,8 @@ export class LoggerToDb extends ConsoleLogger {
 
    private getIp(): string {
       try {
-         const req: Request = RequestContext.currentContext.req;
+         const req: Request = RequestContext.currentContext?.req;
+         if (!req) return undefined;
 
          if (req.ip.includes("127.0.0.1") || req.ip.includes("localhost") || req.ip == "::1") {
             const ips = req.headers["x-forwarded-for"];
