@@ -595,6 +595,7 @@ export class AdminController {
    }
 
    @Get("version")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
    async getVersion() {
       const { version } = await import("../../package.json");
       return { version, env: isDev(this.config) ? "dev" : "prod" };
