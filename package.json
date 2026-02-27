@@ -7,7 +7,8 @@
     "license": "UNLICENSED",
     "scripts": {
         "prebuild": "rimraf dist",
-        "build": "npm version patch --no-git-tag-version && git add package.json && git commit -m \"chore: bump version [skip deploy]\" && git push && nest build",
+        "build": "nest build",
+        "postbuild": "npm version patch --no-git-tag-version && git add package.json && git commit -m \"chore: bump version [skip deploy]\" && git push",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
         "start": "nest start",
         "start:dev": "nest start --watch",
