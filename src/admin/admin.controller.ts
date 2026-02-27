@@ -137,6 +137,12 @@ export class AdminController {
             return { message: `Not a push to ${project.branch} branch, ignoring` };
          }
 
+         const headCommitMsg = payload.head_commit?.message || "";
+         if (headCommitMsg.includes("[skip deploy]")) {
+            this.logger.log("Skipping deployment: commit message contains [skip deploy]");
+            return { message: "Skipped: commit contains [skip deploy]" };
+         }
+
          const githubSecret = this.config.get<string>("GITHUB_WEBHOOK_SECRET");
          if (!githubSecret) {
             throw new Error("env var GITHUB_WEBHOOK_SECRET is undefined");

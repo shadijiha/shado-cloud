@@ -1,13 +1,13 @@
 {
     "name": "my-project",
-    "version": "0.0.1",
+    "version": "2.0.0",
     "description": "",
     "author": "",
     "private": true,
     "license": "UNLICENSED",
     "scripts": {
         "prebuild": "rimraf dist",
-        "build": "npm version patch --no-git-tag-version && nest build",
+        "build": "npm version patch --no-git-tag-version && git add package.json && git commit -m \"chore: bump version [skip deploy]\" && git push && nest build",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
         "start": "nest start",
         "start:dev": "nest start --watch",
