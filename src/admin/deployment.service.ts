@@ -31,6 +31,7 @@ export interface DeploymentState {
    project: string;
    status: "running" | "success" | "failed";
    currentStep: StepState;
+   completedSteps: Record<string, StepState>;
    startedAt: Date;
    finishedAt?: Date;
    triggeredBy: string;
@@ -271,6 +272,7 @@ export class DeploymentService implements OnModuleInit {
             attempt: 1,
             maxAttempts: 3,
          },
+         completedSteps: {},
          startedAt: new Date(),
          triggeredBy,
       };
@@ -310,6 +312,7 @@ export class DeploymentService implements OnModuleInit {
          if (stepConfig.skip) {
             stepState.status = "skipped";
             stepState.output = "Skipped (permanently disabled)\n";
+            deployment.completedSteps[stepConfig.step] = { ...stepState };
             await this.saveState(deployment, REDIS_KEY_CURRENT);
             this.emit({ type: "step_complete", step: stepConfig.step, status: "skipped" });
             continue;
@@ -327,6 +330,7 @@ export class DeploymentService implements OnModuleInit {
             stepState.status = "success";
             stepState.finishedAt = new Date();
             stepState.output += "Restart command sent. Remaining steps will run after restart.\n";
+            deployment.completedSteps[stepConfig.step] = { ...stepState };
             await this.saveState(deployment, REDIS_KEY_CURRENT);
             this.emit({ type: "step_output", step: stepConfig.step, output: "Restart command sent. Remaining steps will run after restart.\n" });
             this.emit({ type: "step_complete", step: stepConfig.step, status: "success", finishedAt: stepState.finishedAt });
@@ -355,6 +359,7 @@ export class DeploymentService implements OnModuleInit {
                await this.runStep(stepConfig.cmd, stepConfig.args, workDir, stepConfig.step, deployment);
                stepState.status = "success";
                stepState.finishedAt = new Date();
+               deployment.completedSteps[stepConfig.step] = { ...stepState };
                await this.saveState(deployment, REDIS_KEY_CURRENT);
                this.emit({ type: "step_complete", step: stepConfig.step, status: "success", finishedAt: stepState.finishedAt });
                break;
@@ -368,6 +373,7 @@ export class DeploymentService implements OnModuleInit {
                } else {
                   stepState.status = "failed";
                   stepState.finishedAt = new Date();
+                  deployment.completedSteps[stepConfig.step] = { ...stepState };
                   this.emit({ type: "step_complete", step: stepConfig.step, status: "failed", error: stepState.error, finishedAt: stepState.finishedAt });
                   break;
                }
