@@ -88,6 +88,7 @@ const DEFAULT_PROJECTS: Partial<DeploymentProject>[] = [
 export class DeploymentService implements OnModuleInit {
    private deploymentSubject: Subject<MessageEvent> | null = null;
    private currentProcess: ReturnType<typeof spawn> | null = null;
+   private cancelled = false;
 
    constructor(
       private readonly config: ConfigService<EnvVariables>,
@@ -108,6 +109,7 @@ export class DeploymentService implements OnModuleInit {
          if (!project) return;
          const step = deployment.currentStep;
          this.logger.log(`Resuming deployment ${step.step} after restart...`);
+         this.cancelled = false;
          const remainingSteps = this.getFollowingSteps(step, project.getSteps());
          if (remainingSteps.length > 0) {
             deployment.currentStep = { step: remainingSteps[0].step, status: "running", output: "", startedAt: new Date() };
@@ -146,7 +148,10 @@ export class DeploymentService implements OnModuleInit {
 
    private async getState(key: string): Promise<DeploymentState | null> {
       const data = await this.redis.get(key);
-      return data ? JSON.parse(data) : null;
+      if (!data) return null;
+      const state = JSON.parse(data);
+      state.completedSteps = state.completedSteps || {};
+      return state;
    }
 
    // --- Public API ---
@@ -195,6 +200,7 @@ export class DeploymentService implements OnModuleInit {
       if (!current || current.status !== "running") {
          throw new Error("No deployment in progress");
       }
+      this.cancelled = true;
       if (this.currentProcess) {
          this.currentProcess.kill("SIGTERM");
          this.currentProcess = null;
@@ -233,6 +239,7 @@ export class DeploymentService implements OnModuleInit {
       await this.saveState(current, REDIS_KEY_CURRENT);
 
       this.deploymentSubject = new Subject<MessageEvent>();
+      this.cancelled = false;
 
       const project = await this.projectRepo.findOneBy({ slug: current.project });
       if (!project) throw new Error(`Project ${current.project} not found`);
@@ -258,6 +265,7 @@ export class DeploymentService implements OnModuleInit {
       }
 
       this.deploymentSubject = new Subject<MessageEvent>();
+      this.cancelled = false;
       const deployment: DeploymentState = {
          id: `deploy_${Date.now()}`,
          project: projectSlug,
@@ -304,6 +312,8 @@ export class DeploymentService implements OnModuleInit {
       const deployPageUrl = `${frontendUrl}/admin/deploy`;
 
       for (const stepConfig of steps) {
+         if (this.cancelled) return;
+
          const stepState = deployment.currentStep;
          stepState.step = stepConfig.step;
          stepState.output = "";
@@ -344,7 +354,7 @@ export class DeploymentService implements OnModuleInit {
          stepState.attempt = 1;
          stepState.maxAttempts = maxAttempts;
 
-         while (stepState.attempt <= maxAttempts) {
+         while (stepState.attempt <= maxAttempts && !this.cancelled) {
             stepState.status = "running";
             stepState.startedAt = new Date();
             stepState.error = undefined;
@@ -435,11 +445,11 @@ export class DeploymentService implements OnModuleInit {
       const frontendUrl = this.config.get("FRONTEND_URL") || "";
       const deployPageUrl = `${frontendUrl}/admin/deploy`;
 
-      if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, `auto_${projectSlug}_redeploy`)) {
-         this.logger.warn(`Deployment blocked: auto_${projectSlug}_redeploy feature flag is disabled`);
+      if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, "enable_pipeline_deployment")) {
+         this.logger.warn("Deployment blocked: enable_pipeline_deployment feature flag is disabled");
          deployment.status = "failed";
          deployment.currentStep.status = "failed";
-         deployment.currentStep.error = "Feature flag disabled";
+         deployment.currentStep.error = "Deployments are disabled (feature flag: enable_pipeline_deployment)";
          await this.saveState(deployment, REDIS_KEY_CURRENT);
          await this.saveState(deployment, REDIS_KEY_LAST);
          this.emit({ type: "deployment_complete", deployment });
