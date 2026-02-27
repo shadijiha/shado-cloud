@@ -31,6 +31,7 @@ import { EnvVariables } from "src/config/config.validator";
 @Controller("auth")
 @ApiTags("Authentication")
 export class AuthController {
+   static readonly AUTH_EXPIRY_DAYS = 180;
    constructor(
       private readonly jwtService: JwtService,
       private readonly authService: AuthService,
@@ -128,7 +129,7 @@ export class AuthController {
          .cookie(this.config.get("COOKIE_NAME"), token, {
             httpOnly: true,
             domain: this.getDomain(headers), // your domain here!
-            expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 180), // 180 days
+            expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * AuthController.AUTH_EXPIRY_DAYS),
             secure: isDev(this.config) ? false : headers.origin.startsWith("https"),
             sameSite: isDev(this.config) ? "lax" : "none",
          })

@@ -23,7 +23,7 @@ import { EnvVariables } from "src/config/config.validator";
             return {
                secret: config.get("JWT_SECRET"),
                signOptions: {
-                  expiresIn: "24h",
+                  expiresIn: `${AuthController.AUTH_EXPIRY_DAYS}d`,
                },
             };
          },
