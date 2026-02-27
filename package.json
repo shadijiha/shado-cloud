@@ -1,12 +1,11 @@
 {
     "name": "my-project",
-    "version": "2.0.4",
+    "version": "2.0.5",
     "description": "",
     "author": "",
     "private": true,
     "license": "UNLICENSED",
     "scripts": {
-        "prebuild": "rimraf dist",
         "build": "nest build",
         "postbuild": "npm version patch --no-git-tag-version && git add package.json && git commit -m \"chore: bump version [skip deploy]\" && git push",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
