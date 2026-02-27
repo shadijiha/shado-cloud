@@ -184,6 +184,10 @@ export class AppMetricsService {
       return await this.redis.info(section);
    }
 
+   public async flushRedis(): Promise<string> {
+      return await this.redis.flushdb();
+   }
+
    // Method to dump all Redis keys and their values
    public async dumpRedisCache() {
       const allKeys: string[] = await this.getAllKeys();

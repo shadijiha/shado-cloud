@@ -44,6 +44,7 @@ import { ValidationPipeline } from "src/auth/ValidationPipeline";
 import { DeploymentService } from "./deployment.service";
 import * as fs from "fs";
 import * as path from "path";
+import { isDev } from "src/util";
 
 /**
  * Each function of this controller needs to be decorated with
@@ -178,6 +179,14 @@ export class AdminController {
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    public redisDumb() {
       return this.metrics.dumpRedisCache();
+   }
+
+   @Delete("redis/flush")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public async redisFlush() {
+      await this.metrics.flushRedis();
+      this.logger.log("Redis cache flushed by admin");
+      return { success: true };
    }
 
    /**
@@ -577,5 +586,11 @@ export class AdminController {
       fs.writeFileSync(path.join(workDir, ".env"), content, "utf-8");
       this.logger.log(`Env file updated for ${projectSlug}`);
       return { success: true };
+   }
+
+   @Get("version")
+   async getVersion() {
+      const { version } = await import("../../package.json");
+      return { version, env: isDev(this.config) ? "dev" : "prod" };
    }
 }
