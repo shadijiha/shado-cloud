@@ -192,17 +192,17 @@ export class ServiceFunctionsController {
                 log: async e => {
                     this.logger.log(e);
                     func.last_execution_logs += formatLog("Info", e);
-                    this.serviceFuncRepo.save(func);
+                    await this.serviceFuncRepo.save(func);
                 },
-                error: e => {
+                error: async e => {
                     this.logger.error(e);
                     func.last_execution_logs += formatLog("Error", e);
-                    this.serviceFuncRepo.save(func);
+                    await this.serviceFuncRepo.save(func);
                 },
-                warn: e => {
+                warn: async e => {
                     this.logger.warn(e);
                     func.last_execution_logs += formatLog("Warn", e);
-                    this.serviceFuncRepo.save(func);
+                    await this.serviceFuncRepo.save(func);
                 },
             },
             fs: {
@@ -240,7 +240,7 @@ export class ServiceFunctionsController {
                 ...context,
                 global: this.safeStringify(context)
             });
-            if (result instanceof Promise) {
+            if (result && typeof result.then === 'function') {
                 await result;
             }
         } catch (error: any) {
