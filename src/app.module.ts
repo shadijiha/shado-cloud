@@ -24,6 +24,7 @@ import Redis from "ioredis";
 import { FeatureFlagService } from "./admin/feature-flag.service";
 import { FeatureFlag } from "./models/admin/featureFlag";
 import { ReplicationModule } from "./replication/replication.module";
+import { MusicClientModule } from "./music-client/music-client.module";
 
 @Global()
 @Module({
@@ -117,6 +118,7 @@ export class GlobalUtilityModule {}
       AdminModule,
       UserProfileModule,
       ReplicationModule,
+      MusicClientModule,
    ],
    controllers: [AppController],
    providers: [

@@ -144,9 +144,15 @@ export class AuthController {
 
    private getDomain(headers: IncomingHttpHeaders): string {
       let domain = headers.host;
-      // Remove post number
+      // Remove port number
       if (domain.includes(":")) {
          domain = domain.split(":")[0];
+      }
+      // Use root domain for cross-subdomain cookie sharing
+      // e.g. music.shadijiha.com -> shadijiha.com
+      const parts = domain.split(".");
+      if (parts.length > 2) {
+         domain = parts.slice(-2).join(".");
       }
       return domain;
    }

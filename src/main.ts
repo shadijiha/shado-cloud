@@ -30,7 +30,11 @@ async function bootstrap() {
          envConfig.get<string>("FRONTEND_URL"),
          /\.shadijiha\.com$/,
          "http://shadijiha.com",
-         /https:\/\/\.shadijiha\.com$/,
+         "https://shadijiha.com",
+         /https?:\/\/(.+\.)?shadijiha\.com$/,
+         /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
+         /^http:\/\/localhost:\d+$/,
+         /^capacitor:\/\//,
       ],
       credentials: true,
    });
@@ -61,6 +65,6 @@ async function bootstrap() {
       app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb)));
    }
 
-   await app.listen(envConfig.get("APP_PORT") ?? 9000);
+   await app.listen(envConfig.get("APP_PORT") ?? 9000, "0.0.0.0");
 }
 bootstrap();
