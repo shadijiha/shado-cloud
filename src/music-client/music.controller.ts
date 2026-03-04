@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ClientProxy } from "@nestjs/microservices";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { type Request, type Response } from "express";
 import { AuthUser } from "src/util";
 import { MUSIC_SERVICE } from "./constants";
@@ -33,6 +33,7 @@ export class MusicController {
    // ── Search ──────────────────────────────────────────────
 
    @Get("search")
+   @ApiQuery({ name: "q", type: String })
    async search(@AuthUser() userId: number, @Query("q") query: string) {
       return firstValueFrom(this.client.send("music.search", { userId, query }));
    }
@@ -94,6 +95,7 @@ export class MusicController {
    // ── Pull from YouTube ───────────────────────────────────
 
    @Post("pull")
+   @ApiBody({ schema: { properties: { youtubeUrl: { type: "string" }, title: { type: "string" }, artist: { type: "string" } }, required: ["youtubeUrl"] } })
    async pull(@Body() body: { youtubeUrl: string; title?: string; artist?: string }) {
       return firstValueFrom(this.client.send("music.pull", body));
    }
@@ -106,6 +108,7 @@ export class MusicController {
    // ── Pull/Import playlist (SSE via Observable over TCP) ──
 
    @Post("pull-playlist")
+   @ApiBody({ schema: { properties: { playlistUrl: { type: "string" }, playlistName: { type: "string" } }, required: ["playlistUrl"] } })
    async pullPlaylist(
       @AuthUser() userId: number,
       @Body() body: { playlistUrl: string; playlistName?: string },
@@ -127,6 +130,7 @@ export class MusicController {
    }
 
    @Post("import-playlist")
+   @ApiBody({ schema: { properties: { url: { type: "string" } }, required: ["url"] } })
    async importPlaylist(@AuthUser() userId: number, @Body() body: { url: string }, @Res() res: Response) {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -161,6 +165,7 @@ export class MusicController {
    }
 
    @Post("playlists")
+   @ApiBody({ schema: { properties: { name: { type: "string" } }, required: ["name"] } })
    async createPlaylist(@AuthUser() userId: number, @Body() body: { name: string }) {
       return firstValueFrom(this.client.send("music.createPlaylist", { userId, name: body.name }));
    }
@@ -171,6 +176,7 @@ export class MusicController {
    }
 
    @Post("playlists/:id/songs")
+   @ApiBody({ schema: { properties: { songId: { type: "number" } }, required: ["songId"] } })
    async addSong(@AuthUser() userId: number, @Param("id", ParseIntPipe) id: number, @Body() body: { songId: number }) {
       return firstValueFrom(this.client.send("music.addSong", { userId, playlistId: id, songId: body.songId }));
    }
