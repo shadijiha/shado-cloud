@@ -8,6 +8,34 @@ A fully featured cloud drive with remote desktop streaming.
 - Secure JWT authentication
 - Remote desktop streaming via WebRTC
 - Admin panel
+- Music streaming via [Smusic](https://github.com/shadijiha/shado-music-api) microservice
+
+## Architecture
+
+```
+┌─────────────────────────────────────┐              ┌──────────────────────────────────┐
+│     shado-cloud (HTTP :9000)        │  TCP :9001   │   shado-music-api                │
+│                                     │ ────────────►│                                  │
+│  MusicController ──► ClientProxy    │  RPC (JSON)  │  MusicMicroserviceController     │
+│    search, playlists, pull, etc.    │              │    @MessagePattern handlers       │
+│                                     │              │    Observable<event> for SSE      │
+│  streamSong/thumbnail               │  TCP :9002   │                                  │
+│    ──► requestStream() ─────────────┼─────────────►│  StreamServer (raw TCP)           │
+│    socket.pipe(res)  ◄──────────────┤  raw binary  │    fs.createReadStream().pipe()   │
+│                                     │              │                                  │
+│  FilesController                    │              │  No HTTP server                   │
+│  DirsController                     │              │  Own DB / FS connections           │
+│  TempUrlController                  │              │  HeartbeatService → /admin         │
+│  AuthController                     │              └──────────────────────────────────┘
+│  AdminModule (Remote Desktop, etc.) │
+│  UserProfileModule                  │
+│  Swagger + JWT Auth (HTTP layer)    │
+└─────────────────────────────────────┘
+```
+
+Shado Cloud acts as the HTTP API gateway. The music microservice communicates over two TCP channels:
+- **`:9001`** — NestJS `@nestjs/microservices` TCP transport for JSON RPC (search, CRUD, YouTube pull, etc.) and Observable-based SSE streaming (playlist import progress)
+- **`:9002`** — Raw TCP stream server for true binary streaming (audio files with range requests, thumbnails). File data is piped directly from disk to socket with zero serialization.
 
 ## Screenshots
 
@@ -196,6 +224,14 @@ sudo systemctl restart apache2
 ### 4. Environment Variables
 
 Create `.env` in the shado-cloud directory with required variables (see `.env.example`).
+
+Music microservice variables:
+
+| Variable | Description |
+|---|---|
+| `MUSIC_SERVICE_HOST` | Hostname of the music microservice (default: `localhost`) |
+| `MUSIC_API_PORT` | TCP port for music RPC (default: `9001`) |
+| `MUSIC_STREAM_PORT` | TCP port for binary audio/thumbnail streaming (default: `MUSIC_API_PORT + 1`) |
 
 ### 5. Running the Application
 
