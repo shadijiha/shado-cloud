@@ -7,6 +7,22 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
+export interface MicroserviceConfig {
+   name: string;
+   host: string;
+   port: number;
+   healthPath: string;
+}
+
+const MICROSERVICES: MicroserviceConfig[] = [
+   {
+      name: "shado-music-api",
+      host: process.env.MUSIC_SERVICE_HOST || "localhost",
+      port: Number(process.env.MUSIC_API_PORT) || 9001,
+      healthPath: "/music",
+   },
+];
+
 @Injectable()
 export class AppMetricsService {
    // Max length of string values to dump
@@ -178,6 +194,25 @@ export class AppMetricsService {
          loadAvg: os.loadavg(),
          topProcesses
       };
+   }
+
+   public async getMicroserviceStatuses() {
+      const results = await Promise.all(
+         MICROSERVICES.map(async (svc) => {
+            const url = `http://${svc.host}:${svc.port}${svc.healthPath}`;
+            const start = Date.now();
+            try {
+               const controller = new AbortController();
+               const timeout = setTimeout(() => controller.abort(), 3000);
+               const res = await fetch(url, { signal: controller.signal });
+               clearTimeout(timeout);
+               return { name: svc.name, status: res.ok ? "up" as const : "degraded" as const, latencyMs: Date.now() - start, port: svc.port };
+            } catch {
+               return { name: svc.name, status: "down" as const, latencyMs: Date.now() - start, port: svc.port };
+            }
+         }),
+      );
+      return results;
    }
 
    public async redisInfo(section: string): Promise<string> {

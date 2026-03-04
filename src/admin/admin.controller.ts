@@ -171,6 +171,12 @@ export class AdminController {
       return this.metrics.getSystemMetrics();
    }
 
+   @Get("metrics/microservices")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getMicroserviceStatuses() {
+      return this.metrics.getMicroserviceStatuses();
+   }
+
    @Get("redis/info/:section")
    @ApiParam({
       name: "section",
