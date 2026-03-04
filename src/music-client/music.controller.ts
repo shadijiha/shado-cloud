@@ -17,7 +17,7 @@ import { ClientProxy } from "@nestjs/microservices";
 import { ApiTags } from "@nestjs/swagger";
 import { type Request, type Response } from "express";
 import { AuthUser } from "src/util";
-import { MUSIC_SERVICE } from "./music-client.module";
+import { MUSIC_SERVICE } from "./constants";
 import { firstValueFrom } from "rxjs";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";

@@ -3,8 +3,7 @@ import { ClientsModule, Transport } from "@nestjs/microservices";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { MusicController } from "./music.controller";
-
-export const MUSIC_SERVICE = "MUSIC_SERVICE";
+import { MUSIC_SERVICE } from "./constants";
 
 @Module({
    imports: [
