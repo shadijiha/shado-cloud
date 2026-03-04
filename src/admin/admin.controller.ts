@@ -177,6 +177,13 @@ export class AdminController {
       return this.metrics.getMicroserviceStatuses();
    }
 
+   @Post("microservices/heartbeat")
+   @HttpCode(HttpStatus.OK)
+   public microserviceHeartbeat(@Body() body: { name: string; port: number }) {
+      this.metrics.heartbeat(body.name, body.port);
+      return { ok: true };
+   }
+
    @Get("redis/info/:section")
    @ApiParam({
       name: "section",

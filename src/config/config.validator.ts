@@ -194,6 +194,26 @@ export class EnvVariables {
    REDIS_PORT: number;
 
    REDIS_PASSWORD: string;
+
+   /**
+    * Music microservice
+    */
+   @IsOptional()
+   @IsString()
+   MUSIC_SERVICE_HOST: string;
+
+   @IsOptional()
+   @IsNumber()
+   @Min(0)
+   @Max(65535)
+   MUSIC_API_PORT: number;
+
+   /**
+    * Display
+    */
+   @IsOptional()
+   @IsString()
+   DISPLAY: string;
 }
 
 export function validate(config: Record<string, unknown>) {

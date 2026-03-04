@@ -7,28 +7,45 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
-export interface MicroserviceConfig {
+export interface MicroserviceEntry {
    name: string;
-   host: string;
    port: number;
-   healthPath: string;
+   lastHeartbeat: Date;
 }
 
-const MICROSERVICES: MicroserviceConfig[] = [
-   {
-      name: "shado-music-api",
-      host: process.env.MUSIC_SERVICE_HOST || "localhost",
-      port: Number(process.env.MUSIC_API_PORT) || 9001,
-      healthPath: "/music",
-   },
-];
+const HEARTBEAT_TIMEOUT_MS = 60_000; // consider dead after 60s without heartbeat
 
 @Injectable()
 export class AppMetricsService {
    // Max length of string values to dump
    private readonly maxLength = 150;
+   private readonly microservices = new Map<string, MicroserviceEntry>();
 
    constructor(@Inject(REDIS_CACHE) private readonly redis: Redis) {}
+
+   public heartbeat(name: string, port: number) {
+      this.microservices.set(name, { name, port, lastHeartbeat: new Date() });
+   }
+
+   public unregisterMicroservice(name: string) {
+      this.microservices.delete(name);
+   }
+
+   public getMicroserviceStatuses() {
+      const now = Date.now();
+      for (const [name, svc] of this.microservices) {
+         if (now - svc.lastHeartbeat.getTime() > EVICT_AFTER_MS) this.microservices.delete(name);
+      }
+      return [...this.microservices.values()].map((svc) => {
+         const age = now - svc.lastHeartbeat.getTime();
+         return {
+            name: svc.name,
+            port: svc.port,
+            status: age < HEARTBEAT_TIMEOUT_MS ? "up" as const : "down" as const,
+            lastHeartbeat: svc.lastHeartbeat,
+         };
+      });
+   }
 
    public async getSystemMetrics() {
       const isMac = process.platform === "darwin";
@@ -196,24 +213,7 @@ export class AppMetricsService {
       };
    }
 
-   public async getMicroserviceStatuses() {
-      const results = await Promise.all(
-         MICROSERVICES.map(async (svc) => {
-            const url = `http://${svc.host}:${svc.port}${svc.healthPath}`;
-            const start = Date.now();
-            try {
-               const controller = new AbortController();
-               const timeout = setTimeout(() => controller.abort(), 3000);
-               const res = await fetch(url, { signal: controller.signal });
-               clearTimeout(timeout);
-               return { name: svc.name, status: res.ok ? "up" as const : "degraded" as const, latencyMs: Date.now() - start, port: svc.port };
-            } catch {
-               return { name: svc.name, status: "down" as const, latencyMs: Date.now() - start, port: svc.port };
-            }
-         }),
-      );
-      return results;
-   }
+
 
    public async redisInfo(section: string): Promise<string> {
       return await this.redis.info(section);
