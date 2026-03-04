@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { FilesConstoller } from "./files.controller";
 import { FilesService } from "./files.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -9,7 +9,7 @@ import { InternalController } from "./internal.controller";
 import { DirectoriesModule } from "src/directories/directories.module";
 
 @Module({
-   imports: [TypeOrmModule.forFeature([SearchStat]), AuthModule, DirectoriesModule],
+   imports: [TypeOrmModule.forFeature([SearchStat]), AuthModule, forwardRef(() => DirectoriesModule)],
    controllers: [FilesConstoller, InternalController],
    providers: [FilesService, ThumbnailCacheInterceptor],
    exports: [FilesService],

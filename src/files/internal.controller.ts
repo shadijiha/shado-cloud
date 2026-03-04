@@ -60,4 +60,14 @@ export class InternalController {
          return { success: false };
       }
    }
+
+   @Get("file/absolute-path/:userId/:path")
+   async absolutePath(@Param("userId") userId: string, @Param("path") filePath: string) {
+      try {
+         const abs = await this.fileService.absolutePath(Number(userId), filePath);
+         return { success: true, path: abs };
+      } catch {
+         return { success: false };
+      }
+   }
 }

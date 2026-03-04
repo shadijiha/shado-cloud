@@ -19,24 +19,16 @@ import { type Request, type Response } from "express";
 import { AuthUser } from "src/util";
 import { MUSIC_SERVICE } from "./constants";
 import { firstValueFrom } from "rxjs";
-import { ConfigService } from "@nestjs/config";
-import { EnvVariables } from "src/config/config.validator";
-import { requestStream } from "./stream-client";
+import { FilesService } from "src/files/files.service";
 
 @Controller("music")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Music")
 export class MusicController {
-   private readonly streamHost: string;
-   private readonly streamPort: number;
-
    constructor(
       @Inject(MUSIC_SERVICE) private readonly client: ClientProxy,
-      config: ConfigService<EnvVariables>,
-   ) {
-      this.streamHost = config.get("MUSIC_SERVICE_HOST") || "localhost";
-      this.streamPort = Number(config.get("MUSIC_STREAM_PORT")) || (Number(config.get("MUSIC_API_PORT")) || 9001) + 1;
-   }
+      private readonly fileService: FilesService,
+   ) {}
 
    // ── Search ──────────────────────────────────────────────
 
@@ -64,77 +56,39 @@ export class MusicController {
       return firstValueFrom(this.client.send("music.library", { userId }));
    }
 
-   // ── True binary streaming via raw TCP ───────────────────
+   // ── Streaming (FilesService reads directly) ─────────────
 
    @Get("songs/:id/stream")
    async streamSong(@Param("id", ParseIntPipe) id: number, @Req() req: Request, @Res() res: Response) {
-      // Ask microservice for file path + metadata via RPC
       const info = await firstValueFrom(this.client.send("music.streamSong", { songId: id }));
       if (info.error) return res.status(info.status).json({ error: info.error });
 
-      // Parse range from HTTP request
-      let start: number | undefined;
-      let end: number | undefined;
+      const total = info.total;
+
       if (req.headers.range) {
          const parts = req.headers.range.replace(/bytes=/, "").split("-");
-         start = parseInt(parts[0], 10);
-         end = parts[1] ? parseInt(parts[1], 10) : undefined;
-      }
-
-      try {
-         const { header, socket } = await requestStream(this.streamHost, this.streamPort, {
-            action: "stream",
-            filePath: info.filePath,
-            start,
-            end,
+         const start = parseInt(parts[0], 10);
+         const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+         res.writeHead(206, {
+            "Content-Range": `bytes ${start}-${end}/${total}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": end - start + 1,
+            "Content-Type": info.contentType,
          });
-
-         if (header.status === 404) {
-            socket.destroy();
-            return res.status(404).json({ error: header.error });
-         }
-
-         if (header.status === 206) {
-            res.writeHead(206, {
-               "Content-Range": `bytes ${header.start}-${header.end}/${header.total}`,
-               "Accept-Ranges": "bytes",
-               "Content-Length": header.contentLength,
-               "Content-Type": info.contentType,
-            });
-         } else {
-            res.writeHead(200, {
-               "Content-Length": header.contentLength,
-               "Content-Type": info.contentType,
-            });
-         }
-
-         socket.pipe(res);
-      } catch {
-         res.status(502).json({ error: "Music service unavailable" });
+         (await this.fileService.asStream(info.userId, info.relativePath, req.headers["user-agent"], { start, end })).pipe(res);
+      } else {
+         res.writeHead(200, { "Content-Length": total, "Content-Type": info.contentType });
+         (await this.fileService.asStream(info.userId, info.relativePath, req.headers["user-agent"])).pipe(res);
       }
    }
 
    @Get("songs/:id/thumbnail")
-   async songThumbnail(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+   async songThumbnail(@Param("id", ParseIntPipe) id: number, @Req() req: Request, @Res() res: Response) {
       const info = await firstValueFrom(this.client.send("music.songThumbnail", { songId: id }));
       if (info.error) return res.status(info.status || 404).json({ error: info.error });
 
-      try {
-         const { header, socket } = await requestStream(this.streamHost, this.streamPort, {
-            action: "stream",
-            filePath: info.filePath,
-         });
-
-         if (header.status === 404) {
-            socket.destroy();
-            return res.status(404).json({ error: header.error });
-         }
-
-         res.writeHead(200, { "Content-Type": info.contentType });
-         socket.pipe(res);
-      } catch {
-         res.status(502).json({ error: "Music service unavailable" });
-      }
+      res.writeHead(200, { "Content-Type": info.contentType });
+      (await this.fileService.asStream(info.userId, info.relativePath, req.headers["user-agent"])).pipe(res);
    }
 
    // ── Pull from YouTube ───────────────────────────────────

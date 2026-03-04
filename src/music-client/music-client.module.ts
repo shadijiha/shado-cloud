@@ -4,9 +4,11 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { MusicController } from "./music.controller";
 import { MUSIC_SERVICE } from "./constants";
+import { FilesModule } from "src/files/files.module";
 
 @Module({
    imports: [
+      FilesModule,
       ClientsModule.registerAsync([
          {
             name: MUSIC_SERVICE,

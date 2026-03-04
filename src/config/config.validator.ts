@@ -208,12 +208,6 @@ export class EnvVariables {
    @Max(65535)
    MUSIC_API_PORT: number;
 
-   @IsOptional()
-   @IsNumber()
-   @Min(0)
-   @Max(65535)
-   MUSIC_STREAM_PORT: number;
-
    /**
     * Display
     */
