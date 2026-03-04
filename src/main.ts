@@ -43,7 +43,12 @@ async function bootstrap() {
 
    const config = new DocumentBuilder()
       .setTitle("Shado Cloud")
-      .setDescription("The Shado Cloud API description")
+      .setDescription(
+         "The Shado Cloud API description\n\n" +
+         "### Music API\n" +
+         "All `/music/*` endpoints are proxied to the [shado-music-api](https://github.com/shadijiha/shado-music-api) microservice over TCP. " +
+         "See the microservice repo for the full API reference.",
+      )
       .setVersion("1.0")
       .addTag("")
       .addServer(
