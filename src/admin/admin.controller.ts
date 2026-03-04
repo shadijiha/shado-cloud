@@ -179,6 +179,16 @@ export class AdminController {
 
    @Post("microservices/heartbeat")
    @HttpCode(HttpStatus.OK)
+   @ApiBody({
+      schema: {
+         type: "object",
+         required: ["name", "port"],
+         properties: {
+            name: { type: "string", example: "shado-music-api" },
+            port: { type: "number", example: 9001 },
+         },
+      },
+   })
    public microserviceHeartbeat(@Body() body: { name: string; port: number }, @Headers("x-service-key") key: string) {
       if (key !== this.config.get("JWT_SECRET")) {
          throw new UnauthorizedException();
