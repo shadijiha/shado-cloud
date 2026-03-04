@@ -33,9 +33,6 @@ export class AppMetricsService {
 
    public getMicroserviceStatuses() {
       const now = Date.now();
-      for (const [name, svc] of this.microservices) {
-         if (now - svc.lastHeartbeat.getTime() > EVICT_AFTER_MS) this.microservices.delete(name);
-      }
       return [...this.microservices.values()].map((svc) => {
          const age = now - svc.lastHeartbeat.getTime();
          return {

@@ -179,7 +179,10 @@ export class AdminController {
 
    @Post("microservices/heartbeat")
    @HttpCode(HttpStatus.OK)
-   public microserviceHeartbeat(@Body() body: { name: string; port: number }) {
+   public microserviceHeartbeat(@Body() body: { name: string; port: number }, @Headers("x-service-key") key: string) {
+      if (key !== this.config.get("JWT_SECRET")) {
+         throw new UnauthorizedException();
+      }
       this.metrics.heartbeat(body.name, body.port);
       return { ok: true };
    }
