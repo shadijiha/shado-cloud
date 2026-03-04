@@ -24,7 +24,6 @@
         "typeorm:migrate": "typeorm migration:run"
     },
     "dependencies": {
-        "@nestjs/axios": "^4.0.1",
         "@nestjs/common": "^11.1.6",
         "@nestjs/config": "^4.0.2",
         "@nestjs/core": "^11.1.6",
@@ -49,7 +48,6 @@
         "extract-zip": "^2.0.1",
         "fs": "0.0.1-security",
         "fs-thumbnail": "^1.0.9",
-        "googleapis": "^171.4.0",
         "helmet": "^8.1.0",
         "ioredis": "^5.8.0",
         "mime-types": "^3.0.1",

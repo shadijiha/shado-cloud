@@ -7,7 +7,6 @@ import { ReplicationRole, validate } from "src/config/config.validator";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "src/file-system/file-system.service";
 import { ScheduleModule } from "@nestjs/schedule";
-import { GoogleDriveBackupService } from "./google-drive-backup.service";
 import { AdminModule } from "src/admin/admin.module";
 /**
  * This module is responsible for replicating data between the primary and secondary PCs
@@ -40,7 +39,6 @@ import { AdminModule } from "src/admin/admin.module";
          provide: AbstractFileSystem,
          useClass: NodeFileSystemService,
       },
-      GoogleDriveBackupService,
    ],
 })
 export class ReplicationModule implements NestModule {
