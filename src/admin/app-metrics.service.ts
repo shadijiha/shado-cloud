@@ -14,27 +14,32 @@ export interface MicroserviceEntry {
 }
 
 const HEARTBEAT_TIMEOUT_MS = 60_000; // consider dead after 60s without heartbeat
+const REDIS_MS_KEY = "microservices:registry";
+const REDIS_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
 @Injectable()
 export class AppMetricsService {
    // Max length of string values to dump
    private readonly maxLength = 150;
-   private readonly microservices = new Map<string, MicroserviceEntry>();
 
    constructor(@Inject(REDIS_CACHE) private readonly redis: Redis) {}
 
-   public heartbeat(name: string, port: number) {
-      this.microservices.set(name, { name, port, lastHeartbeat: new Date() });
+   public async heartbeat(name: string, port: number) {
+      const entry: MicroserviceEntry = { name, port, lastHeartbeat: new Date() };
+      await this.redis.hset(REDIS_MS_KEY, name, JSON.stringify(entry));
+      await this.redis.expire(REDIS_MS_KEY, REDIS_TTL_SECONDS);
    }
 
-   public unregisterMicroservice(name: string) {
-      this.microservices.delete(name);
+   public async unregisterMicroservice(name: string) {
+      await this.redis.hdel(REDIS_MS_KEY, name);
    }
 
-   public getMicroserviceStatuses() {
+   public async getMicroserviceStatuses() {
+      const all = await this.redis.hgetall(REDIS_MS_KEY);
       const now = Date.now();
-      return [...this.microservices.values()].map((svc) => {
-         const age = now - svc.lastHeartbeat.getTime();
+      return Object.values(all).map((raw) => {
+         const svc: MicroserviceEntry = JSON.parse(raw);
+         const age = now - new Date(svc.lastHeartbeat).getTime();
          return {
             name: svc.name,
             port: svc.port,
