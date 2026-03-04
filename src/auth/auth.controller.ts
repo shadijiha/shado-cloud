@@ -16,8 +16,6 @@ import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response, Request } from "express";
-import { DirectoriesService } from "./../directories/directories.service";
-import { FilesService } from "./../files/files.service";
 import { LoggerToDb } from "./../logging";
 import { User } from "./../models/user";
 import { AuthUser, isDev } from "./../util";
@@ -27,6 +25,7 @@ import { ValidationPipeline } from "./ValidationPipeline";
 import { IncomingHttpHeaders } from "http";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
+import { StorageClient } from "../storage/storage.client";
 
 @Controller("auth")
 @ApiTags("Authentication")
@@ -35,8 +34,7 @@ export class AuthController {
    constructor(
       private readonly jwtService: JwtService,
       private readonly authService: AuthService,
-      private readonly directoryService: DirectoriesService,
-      private readonly fileService: FilesService,
+      private readonly storage: StorageClient,
       @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly config: ConfigService<EnvVariables>,
    ) {}
@@ -88,7 +86,7 @@ export class AuthController {
       user = await this.authService.new(body.name, body.email, body.password);
 
       // Create his directory
-      await this.directoryService.createNewUserDir(user);
+      await this.storage.dirCreateUserDir(user.email);
 
       // Otherwise OK
       this.createAuthCookie(headers, user, response);
@@ -112,7 +110,7 @@ export class AuthController {
          const user = await this.authService.getById(userId);
          return {
             ...user,
-            profPic: await this.fileService.profilePictureInfo(userId),
+            profPic: await this.storage.profilePictureInfo(userId),
          };
       } catch (e) {
          this.logger.logException(e);
@@ -136,7 +134,7 @@ export class AuthController {
          .send({
             user: {
                ...user,
-               profPic: await this.fileService.profilePictureInfo(userId),
+               profPic: await this.storage.profilePictureInfo(userId),
             },
             errors: [],
          });

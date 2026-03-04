@@ -9,18 +9,17 @@ import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlag } from "src/models/admin/featureFlag";
 import { ServiceFunctionsController } from "./service-functions/service-functions.controller";
 import { ServiceFunction } from "../models/admin/serviceFunction";
-import { FilesModule } from "../files/files.module";
 import { EmailService } from "./email.service";
-import { DirectoriesModule } from "../directories/directories.module";
 import { RemoteDesktopGateway } from "./remote-desktop.gateway";
 import { AuthService } from "../auth/auth.service";
 import { DeploymentService } from "./deployment.service";
 import { DeploymentProject } from "../models/admin/deploymentProject";
+import { StorageClientModule } from "../storage/storage-client.module";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController],
-   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]), FilesModule, DirectoriesModule],
+   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]), StorageClientModule],
    providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService, RemoteDesktopGateway, AuthService, DeploymentService],
    exports: [AdminService],
 })
-export class AdminModule { }
+export class AdminModule {}

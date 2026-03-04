@@ -17,29 +17,25 @@ import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTyp
 import { LoggerToDb } from "./../logging";
 import { UploadedFile } from "./../models/uploadedFile";
 import { AuthUser } from "./../util";
-import { DirectoriesService } from "./directories.service";
 import { DirListResponse, NewDirRequest, RenameDirRequest } from "./directoriesApiTypes";
+import { StorageClient } from "../storage/storage.client";
 
 @Controller("directory")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Directories")
 export class DirectoriesController {
    constructor(
-      private readonly directoriesService: DirectoriesService,
+      private readonly storage: StorageClient,
       @Inject() private readonly logger: LoggerToDb,
-   ) { }
+   ) {}
 
    @Get("root")
    public async root(@AuthUser() userId: number) {
       try {
-         return {
-            rootDir: await this.directoriesService.root(userId),
-         };
+         return { rootDir: await this.storage.dirRoot(userId) };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            rootDir: "",
-         };
+         return { rootDir: "" };
       }
    }
 
@@ -55,14 +51,10 @@ export class DirectoriesController {
       @Query("fetch_db_records") fetch_db_records: boolean,
    ): Promise<DirListResponse> {
       try {
-         const list = await this.directoriesService.list(userId, path ?? "", fetch_related_keys_in_redis, fetch_db_records);
-
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-            parent: this.directoriesService.parent(path),
-            data: list,
-            errors: [],
-         };
+         const list = await this.storage.dirList(userId, path ?? "", fetch_related_keys_in_redis, fetch_db_records);
+         // Compute parent from path
+         const parent = path ? require("path").join(path, "..") : "";
+         return { status: OperationStatus[OperationStatus.SUCCESS], parent, data: list, errors: [] };
       } catch (e) {
          this.logger.logException(e);
          return {
@@ -81,7 +73,7 @@ export class DirectoriesController {
       @Query("showHidden", new ValidationPipe({ transform: true })) showHidden: boolean,
    ) {
       try {
-         return await this.directoriesService.listrecursive(userId, showHidden);
+         return await this.storage.dirListRecursive(userId, showHidden);
       } catch (e) {
          this.logger.logException(e);
          return [];
@@ -92,17 +84,11 @@ export class DirectoriesController {
    @ApiResponse({ type: OperationStatusResponse })
    public async new(@AuthUser() userId: number, @Body() body: NewDirRequest): Promise<OperationStatusResponse> {
       try {
-         await this.directoriesService.new(userId, body.name);
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-            errors: [],
-         };
+         await this.storage.dirNew(userId, body.name);
+         return { status: OperationStatus[OperationStatus.SUCCESS], errors: [] };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "path", message: (e as Error).message }],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "path", message: (e as Error).message }] };
       }
    }
 
@@ -110,16 +96,11 @@ export class DirectoriesController {
    @ApiResponse({ type: OperationStatusResponse })
    public async delete(@AuthUser() userId: number, @Body() body: NewDirRequest) {
       try {
-         await this.directoriesService.delete(userId, body.name);
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-         };
+         await this.storage.dirDelete(userId, body.name);
+         return { status: OperationStatus[OperationStatus.SUCCESS] };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "", message: (e as Error).message }],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "", message: (e as Error).message }] };
       }
    }
 
@@ -127,16 +108,11 @@ export class DirectoriesController {
    @ApiResponse({ type: OperationStatusResponse })
    public async rename(@AuthUser() userId: number, @Body() body: RenameDirRequest) {
       try {
-         await this.directoriesService.rename(userId, body.name, body.newName);
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-         };
+         await this.storage.dirRename(userId, body.name, body.newName);
+         return { status: OperationStatus[OperationStatus.SUCCESS] };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "", message: (e as Error).message }],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "", message: (e as Error).message }] };
       }
    }
 
@@ -145,7 +121,7 @@ export class DirectoriesController {
    @ApiResponse({ type: [UploadedFile] })
    public async search(@AuthUser() userId: number, @Query("val") searchText: string) {
       try {
-         return await this.directoriesService.search(userId, searchText);
+         return await this.storage.dirSearch(userId, searchText);
       } catch (e) {
          this.logger.logException(e);
          return [];
@@ -156,19 +132,11 @@ export class DirectoriesController {
    @ApiResponse({ type: OperationStatusResponse })
    public zip(@AuthUser() userId: number, @Body() body: NewDirRequest): OperationStatusResponse {
       try {
-         this.directoriesService.zip(userId, body.name).catch((e) => {
-            this.logger.logException(e);
-         });
-         return {
-            status: OperationStatus[OperationStatus.ONGOING],
-            errors: [],
-         };
+         this.storage.dirZip(userId, body.name);
+         return { status: OperationStatus[OperationStatus.ONGOING], errors: [] };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "", message: (e as Error).message }],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "", message: (e as Error).message }] };
       }
    }
 
@@ -176,20 +144,11 @@ export class DirectoriesController {
    @ApiResponse({ type: OperationStatusResponse })
    public unzip(@AuthUser() userId: number, @Body() body: NewDirRequest) {
       try {
-         this.directoriesService.unzip(userId, body.name).catch((e) => {
-            this.logger.logException(e);
-         });
-
-         return {
-            status: OperationStatus[OperationStatus.ONGOING],
-            errors: [],
-         };
+         this.storage.dirUnzip(userId, body.name);
+         return { status: OperationStatus[OperationStatus.ONGOING], errors: [] };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "", message: (e as Error).message }],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "", message: (e as Error).message }] };
       }
    }
 }

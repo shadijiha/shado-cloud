@@ -209,6 +209,19 @@ export class EnvVariables {
    MUSIC_API_PORT: number;
 
    /**
+    * Storage Microservice
+    */
+   @IsOptional()
+   @IsString()
+   STORAGE_SERVICE_HOST: string;
+
+   @IsOptional()
+   @IsNumber()
+   @Min(0)
+   @Max(65535)
+   STORAGE_SERVICE_PORT: number;
+
+   /**
     * Display
     */
    @IsOptional()

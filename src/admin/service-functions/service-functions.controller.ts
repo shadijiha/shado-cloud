@@ -8,13 +8,12 @@ import { AuthUser } from "src/util";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { type Readable } from "stream";
 import vm from "vm";
-import { FilesService } from "../../files/files.service";
+import { StorageClient } from "../../storage/storage.client";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { EmailService } from "../email.service";
 import { FeatureFlagService } from "../feature-flag.service";
 import { FeatureFlagNamespace } from "../../models/admin/featureFlag";
-import { DirectoriesService } from "../../directories/directories.service";
 import { basename, dirname } from "path";
 
 puppeteer.use(StealthPlugin());
@@ -26,10 +25,9 @@ export class ServiceFunctionsController {
 
     constructor(
         @InjectRepository(ServiceFunction) private readonly serviceFuncRepo: Repository<ServiceFunction>,
-        @Inject() private readonly fileService: FilesService,
+        @Inject() private readonly storage: StorageClient,
         @Inject() private readonly emailService: EmailService,
         @Inject() private readonly featureFlag: FeatureFlagService,
-        @Inject() private readonly directoriesService: DirectoriesService,
     ) { }
 
     @Get("all")
@@ -206,20 +204,26 @@ export class ServiceFunctionsController {
                 },
             },
             fs: {
-                readFileAsync: async (path: string) => this.streamToString(await this.fileService.asStream(func.user_id, path, `service-func-${func.id}`)),
-                writeFileAsync: (path: string, content: string, append?: boolean) => this.fileService.save(func.user_id, path, content, append),
-                writeImageAsync: (path: string, content: Buffer, mime?: string) => this.fileService.upload(func.user_id, {
+                readFileAsync: async (path: string) => {
+                    const result = await this.storage.fileStream(func.user_id, path, `service-func-${func.id}`);
+                    return Buffer.from(result.buffer).toString();
+                },
+                writeFileAsync: (path: string, content: string, append?: boolean) => this.storage.fileSave(func.user_id, path, content, append),
+                writeImageAsync: (path: string, content: Buffer, mime?: string) => this.storage.fileUpload(func.user_id, {
                     originalname: basename(path),
                     buffer: content,
                     mimetype: mime ?? 'image/png',
                     size: content.length,
                 } as any, dirname(path)),
-                readImageAsync: async (path: string) => this.streamToBuffer(await this.fileService.asStream(func.user_id, path, `service-func-${func.id}`)),
-                deleteFileAsync: (path: string) => this.fileService.delete(func.user_id, path),
-                existsAsync: (path: string) => this.fileService.exists(func.user_id, path),
-                mkdirAsync: (path: string) => this.directoriesService.new(func.user_id, path),
-                deleteDirAsync: (path: string) => this.directoriesService.delete(func.user_id, path),
-                listFilesAsync: (path: string) => this.directoriesService.list(func.user_id, path),
+                readImageAsync: async (path: string) => {
+                    const result = await this.storage.fileStream(func.user_id, path, `service-func-${func.id}`);
+                    return Buffer.from(result.buffer);
+                },
+                deleteFileAsync: (path: string) => this.storage.fileDelete(func.user_id, path),
+                existsAsync: (path: string) => this.storage.fileExists(func.user_id, path),
+                mkdirAsync: (path: string) => this.storage.dirNew(func.user_id, path),
+                deleteDirAsync: (path: string) => this.storage.dirDelete(func.user_id, path),
+                listFilesAsync: (path: string) => this.storage.dirList(func.user_id, path),
             },
             puppeteer: puppeteer,
             sendEmail: e => this.emailService.sendEmail(e),

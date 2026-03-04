@@ -19,6 +19,54 @@ A fully featured cloud drive with remote desktop streaming.
 
 ---
 
+## Storage Microservice
+
+File and directory management is extracted into a standalone NestJS microservice that communicates over TCP (port `9002` by default). The main app's HTTP controllers become thin proxies that forward requests via `StorageClient`.
+
+### Architecture
+
+```
+┌─────────────────────────────────────┐     TCP      ┌──────────────────────────────────┐
+│         Main App (HTTP API)         │ ──────────── │     Storage Microservice          │
+│                                     │   :9002      │                                  │
+│  FilesController ─┐                 │              │  StorageMicroserviceController    │
+│  DirsController  ─┼─► StorageClient │  ◄────────►  │    ├── FilesService               │
+│  TempUrlController┘                 │              │    ├── DirectoriesService          │
+│  AuthController ──► StorageClient   │              │    ├── TempUrlService              │
+│  AdminModule ─────► StorageClient   │              │    └── ThumbnailCacheInterceptor   │
+│  UserProfileModule► StorageClient   │              │                                  │
+│                                     │              │  Own DB/Redis/FS connections      │
+│  Swagger stays here (HTTP layer)    │              │  Heartbeat → main app /admin      │
+└─────────────────────────────────────┘              └──────────────────────────────────┘
+```
+
+### Running
+
+```bash
+# Build everything
+npm run build
+
+# Start storage microservice (must start first)
+npm run start:storage
+
+# Start main app
+npm run start:prod
+
+# Or start both at once
+npm run start:all
+```
+
+The storage microservice sends a heartbeat to the main app every 30 seconds, registering itself at `POST /admin/microservice/heartbeat`. Its status is visible via `GET /admin/microservice/statuses`.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `STORAGE_SERVICE_HOST` | `127.0.0.1` | Host the microservice binds to / client connects to |
+| `STORAGE_SERVICE_PORT` | `9002` | TCP port |
+
+---
+
 ## Remote Desktop Streaming Setup
 
 This guide explains how to set up remote desktop streaming on a fresh Linux (Ubuntu/Debian) machine.

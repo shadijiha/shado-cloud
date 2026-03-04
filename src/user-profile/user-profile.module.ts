@@ -6,11 +6,10 @@ import { UserProfileService } from "./UserProfile.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { EncryptedPassword } from "./../models/EncryptedPassword";
 import { AuthModule } from "src/auth/auth.module";
-import { FilesModule } from "src/files/files.module";
-import { DirectoriesModule } from "src/directories/directories.module";
+import { StorageClientModule } from "../storage/storage-client.module";
 
 @Module({
-   imports: [TypeOrmModule.forFeature([EncryptedPassword]), AuthModule, FilesModule, DirectoriesModule],
+   imports: [TypeOrmModule.forFeature([EncryptedPassword]), AuthModule, StorageClientModule],
    controllers: [UserProfileController, PasswordsVaultController],
    providers: [UserProfileService, PasswordsVaultService],
 })

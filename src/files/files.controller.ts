@@ -4,7 +4,6 @@ import {
    Delete,
    Get,
    Inject,
-   Logger,
    Param,
    Patch,
    Post,
@@ -18,11 +17,10 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiConsumes, ApiParam, ApiProduces, ApiProperty, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiConsumes, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { LoggerToDb } from "./../logging";
 import { ApiFile, AuthUser } from "src/util";
-import { FilesService } from "./files.service";
 import {
    FileInfoResponse,
    NewFileRequest,
@@ -32,13 +30,16 @@ import {
    RenameFileRequest,
    SaveFileRequest,
 } from "./filesApiTypes";
-import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
+import { StorageClient } from "../storage/storage.client";
 
 @Controller("file")
 @UseGuards(AuthGuard("jwt"))
 @ApiTags("Files")
 export class FilesConstoller {
-   constructor(private readonly fileService: FilesService, @Inject() private readonly logger: LoggerToDb) {}
+   constructor(
+      private readonly storage: StorageClient,
+      @Inject() private readonly logger: LoggerToDb,
+   ) {}
 
    @Post("upload")
    @ApiResponse({ type: OperationStatusResponse })
@@ -51,7 +52,7 @@ export class FilesConstoller {
       @Body() body: { dest: string },
    ) {
       return await this.logger.errorWrapper(async () => {
-         await this.fileService.upload(userId, file, body.dest);
+         await this.storage.fileUpload(userId, file, body.dest);
       });
    }
 
@@ -59,43 +60,31 @@ export class FilesConstoller {
    @ApiResponse({ type: OperationStatusResponse })
    public async new(@Body() body: NewFileRequest, @AuthUser() userId: number): Promise<OperationStatusResponse> {
       return await this.logger.errorWrapper(async () => {
-         await this.fileService.new(userId, body.name);
+         await this.storage.fileNew(userId, body.name);
       });
    }
 
    @Patch("save")
    @ApiResponse({ type: OperationStatusResponse })
    public async save(@Body() body: SaveFileRequest, @AuthUser() userId: number): Promise<OperationStatusResponse> {
-      const [success, message] = await this.fileService.save(userId, body.name, body.content, body.append);
-      if (success) {
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-            errors: [],
-         };
+      const result = await this.storage.fileSave(userId, body.name, body.content, body.append);
+      if (result.success) {
+         return { status: OperationStatus[OperationStatus.SUCCESS], errors: [] };
       } else {
-         this.logger.logException(new Error(message));
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "", message }],
-         };
+         this.logger.logException(new Error(result.message));
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "", message: result.message }] };
       }
    }
 
    @Delete("delete")
    @ApiResponse({ type: OperationStatusResponse })
    public async delete(@Body() body: NewFileRequest, @AuthUser() userId: number) {
-      const [success, message] = await this.fileService.delete(userId, body.name);
-      if (success) {
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-            errors: [],
-         };
+      const result = await this.storage.fileDelete(userId, body.name);
+      if (result.success) {
+         return { status: OperationStatus[OperationStatus.SUCCESS], errors: [] };
       } else {
-         this.logger.logException(new Error(message));
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "", message }],
-         };
+         this.logger.logException(new Error(result.message));
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "", message: result.message }] };
       }
    }
 
@@ -103,7 +92,7 @@ export class FilesConstoller {
    @ApiResponse({ type: OperationStatusResponse })
    public async rename(@Body() body: RenameFileRequest, @AuthUser() userId: number) {
       return await this.logger.errorWrapper(async () => {
-         await this.fileService.rename(userId, body.name, body.newName);
+         await this.storage.fileRename(userId, body.name, body.newName);
       });
    }
 
@@ -112,19 +101,11 @@ export class FilesConstoller {
    @ApiResponse({ type: FileInfoResponse })
    public async info(@Param("path") path: string, @AuthUser() userId: number): Promise<FileInfoResponse> {
       try {
-         const info = await this.fileService.info(userId, path, true, true);
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-            data: info,
-            errors: [],
-         };
+         const info = await this.storage.fileInfo(userId, path, true, true);
+         return { status: OperationStatus[OperationStatus.SUCCESS], data: info, errors: [] };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            data: null,
-            errors: [],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], data: null, errors: [] };
       }
    }
 
@@ -133,32 +114,17 @@ export class FilesConstoller {
    @ApiResponse({ type: OpResWithData })
    public async exists(@Param("path") path: string, @AuthUser() userId: number) {
       try {
-         const info = await this.fileService.exists(userId, path);
-         return {
-            status: OperationStatus[OperationStatus.SUCCESS],
-            data: info,
-            errors: [],
-         };
+         const info = await this.storage.fileExists(userId, path);
+         return { status: OperationStatus[OperationStatus.SUCCESS], data: info, errors: [] };
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            data: null,
-            errors: [],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], data: null, errors: [] };
       }
    }
 
    @Get("thumbnail/:path")
-   @UseInterceptors(ThumbnailCacheInterceptor)
-   @ApiResponse({
-      description: "Returns a thumnail stream of the requested file",
-   })
-   @ApiParam({
-      name: "path",
-      description: "File relative path + file name + extension",
-      type: String,
-   })
+   @ApiResponse({ description: "Returns a thumnail stream of the requested file" })
+   @ApiParam({ name: "path", description: "File relative path + file name + extension", type: String })
    public async thumbnail(
       @Param("path") path: string,
       @AuthUser() userId: number,
@@ -166,28 +132,18 @@ export class FilesConstoller {
       @Query("height") height: number | undefined,
    ) {
       try {
-         const stream = await this.fileService.toThumbnail(path, userId, width, height);
-         if (!stream) {
-            throw new Error("Unable to generate thumbnail for " + path);
-         }
-
-         return new StreamableFile(stream);
+         const buffer = await this.storage.fileThumbnail(userId, path, width, height);
+         if (!buffer) throw new Error("Unable to generate thumbnail for " + path);
+         return new StreamableFile(Buffer.from(buffer));
       } catch (e) {
          this.logger.logException(e);
-         return {
-            status: OperationStatus[OperationStatus.FAILED],
-            errors: [{ field: "path", message: (e as Error).message }],
-         };
+         return { status: OperationStatus[OperationStatus.FAILED], errors: [{ field: "path", message: (e as Error).message }] };
       }
    }
 
    @Get(":path")
    @ApiResponse({ description: "Returns a stream of the requested file" })
-   @ApiParam({
-      name: "path",
-      description: "File relative path + file name + extension",
-      type: String,
-   })
+   @ApiParam({ name: "path", description: "File relative path + file name + extension", type: String })
    public async getFile(
       @Param("path") path: string,
       @AuthUser() userId: number,
@@ -195,50 +151,33 @@ export class FilesConstoller {
       @Req() req: Request,
    ) {
       try {
-         const fileInto = await this.fileService.info(userId, path, false, false);
+         const result = await this.storage.fileStream(userId, path, req.headers["user-agent"], undefined);
+         const fileInfo = result.info;
+         const fileBuffer = Buffer.from(result.buffer);
 
-         // In case that it is a video or audio
-         // We need to see if this request is for seeking
-         if (fileInto.is_video || fileInto.is_audio) {
-            const total = fileInto.size;
+         if (fileInfo.is_video || fileInfo.is_audio) {
+            const total = fileInfo.size;
             if (req.headers.range) {
-               const range = req.headers.range;
-               const parts = range.replace(/bytes=/, "").split("-");
-               const partialstart = parts[0];
-               const partialend = parts[1];
-
-               const start = parseInt(partialstart, 10);
-               const end = partialend ? parseInt(partialend, 10) : total - 1;
+               const parts = req.headers.range.replace(/bytes=/, "").split("-");
+               const start = parseInt(parts[0], 10);
+               const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
                const chunksize = end - start + 1;
 
-               const file = await this.fileService.asStream(userId, path, req.headers["user-agent"], {
-                  start,
-                  end,
-               });
+               const rangeResult = await this.storage.fileStream(userId, path, req.headers["user-agent"], { start, end });
                res.writeHead(206, {
                   "Content-Range": "bytes " + start + "-" + end + "/" + total,
                   "Accept-Ranges": "bytes",
                   "Content-Length": chunksize,
-                  "Content-Type": fileInto.mime,
+                  "Content-Type": fileInfo.mime,
                });
-
-               file.pipe(res);
+               res.end(Buffer.from(rangeResult.buffer));
             } else {
-               res.writeHead(200, {
-                  "Content-Length": total,
-                  "Content-Type": fileInto.mime,
-               });
-               (await this.fileService.asStream(userId, path, req.headers["user-agent"])).pipe(res);
+               res.writeHead(200, { "Content-Length": total, "Content-Type": fileInfo.mime });
+               res.end(fileBuffer);
             }
-         }
-         // Otherwise for any other file just do a simple stream
-         else {
-            const file = await this.fileService.asStream(userId, path, req.headers["user-agent"]);
-            res.writeHead(200, {
-               "Content-Type": fileInto.mime,
-               "Content-Length": fileInto.size,
-            });
-            file.pipe(res);
+         } else {
+            res.writeHead(200, { "Content-Type": fileInfo.mime, "Content-Length": fileBuffer.length });
+            res.end(fileBuffer);
          }
       } catch (e) {
          this.logger.logException(e);
