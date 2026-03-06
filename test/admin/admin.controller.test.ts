@@ -13,6 +13,8 @@ import crypto from "crypto";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { DeploymentService } from "src/admin/deployment.service";
 
+import { AuthGuardService } from "src/auth-client/auth.guard";
+
 describe("AdminController", () => {
    let adminController: AdminController;
    let adminService: AdminService;
@@ -84,7 +86,7 @@ describe("AdminController", () => {
                },
             },
          ],
-      }).compile();
+      }).overrideGuard(AuthGuardService).useValue({ canActivate: () => true }).compile();
 
       adminController = module.get<AdminController>(AdminController);
       adminService = module.get<AdminService>(AdminService);

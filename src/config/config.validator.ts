@@ -222,6 +222,19 @@ export class EnvVariables {
    GYM_API_PORT: number;
 
    /**
+    * Auth microservice
+    */
+   @IsOptional()
+   @IsString()
+   AUTH_SERVICE_HOST: string;
+
+   @IsOptional()
+   @IsNumber()
+   @Min(0)
+   @Max(65535)
+   AUTH_API_PORT: number;
+
+   /**
     * Display
     */
    @IsOptional()

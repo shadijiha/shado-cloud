@@ -1,3 +1,4 @@
+import { AuthedUserId } from "src/auth-client/authed-user.decorator";
 import {
    Body,
    Controller,
@@ -11,17 +12,17 @@ import {
    UseGuards,
    ValidationPipe,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { AuthGuardService } from "src/auth-client/auth.guard";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
 import { LoggerToDb } from "./../logging";
 import { UploadedFile } from "./../models/uploadedFile";
-import { AuthUser } from "./../util";
+import {  } from "./../util";
 import { DirectoriesService } from "./directories.service";
 import { DirListResponse, NewDirRequest, RenameDirRequest } from "./directoriesApiTypes";
 
 @Controller("directory")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuardService)
 @ApiTags("Directories")
 export class DirectoriesController {
    constructor(
@@ -30,7 +31,7 @@ export class DirectoriesController {
    ) { }
 
    @Get("root")
-   public async root(@AuthUser() userId: number) {
+   public async root(@AuthedUserId() userId: string) {
       try {
          return {
             rootDir: await this.directoriesService.root(userId),
@@ -49,7 +50,7 @@ export class DirectoriesController {
    @ApiParam({ name: "fetch_db_records", type: Boolean, required: false, example: false })
    @ApiResponse({ type: DirListResponse })
    public async list(
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @Param("path") path: string | undefined,
       @Query("fetch_related_keys_in_redis") fetch_related_keys_in_redis: boolean,
       @Query("fetch_db_records") fetch_db_records: boolean,
@@ -77,7 +78,7 @@ export class DirectoriesController {
    @Get("listrecursive")
    @ApiResponse({ type: [String] })
    public async listrecursive(
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @Query("showHidden", new ValidationPipe({ transform: true })) showHidden: boolean,
    ) {
       try {
@@ -90,7 +91,7 @@ export class DirectoriesController {
 
    @Post("new")
    @ApiResponse({ type: OperationStatusResponse })
-   public async new(@AuthUser() userId: number, @Body() body: NewDirRequest): Promise<OperationStatusResponse> {
+   public async new(@AuthedUserId() userId: string, @Body() body: NewDirRequest): Promise<OperationStatusResponse> {
       try {
          await this.directoriesService.new(userId, body.name);
          return {
@@ -108,7 +109,7 @@ export class DirectoriesController {
 
    @Delete("delete")
    @ApiResponse({ type: OperationStatusResponse })
-   public async delete(@AuthUser() userId: number, @Body() body: NewDirRequest) {
+   public async delete(@AuthedUserId() userId: string, @Body() body: NewDirRequest) {
       try {
          await this.directoriesService.delete(userId, body.name);
          return {
@@ -125,7 +126,7 @@ export class DirectoriesController {
 
    @Patch("rename")
    @ApiResponse({ type: OperationStatusResponse })
-   public async rename(@AuthUser() userId: number, @Body() body: RenameDirRequest) {
+   public async rename(@AuthedUserId() userId: string, @Body() body: RenameDirRequest) {
       try {
          await this.directoriesService.rename(userId, body.name, body.newName);
          return {
@@ -143,7 +144,7 @@ export class DirectoriesController {
    @Get("search")
    @ApiQuery({ name: "val" })
    @ApiResponse({ type: [UploadedFile] })
-   public async search(@AuthUser() userId: number, @Query("val") searchText: string) {
+   public async search(@AuthedUserId() userId: string, @Query("val") searchText: string) {
       try {
          return await this.directoriesService.search(userId, searchText);
       } catch (e) {
@@ -154,7 +155,7 @@ export class DirectoriesController {
 
    @Patch("zip")
    @ApiResponse({ type: OperationStatusResponse })
-   public zip(@AuthUser() userId: number, @Body() body: NewDirRequest): OperationStatusResponse {
+   public zip(@AuthedUserId() userId: string, @Body() body: NewDirRequest): OperationStatusResponse {
       try {
          this.directoriesService.zip(userId, body.name).catch((e) => {
             this.logger.logException(e);
@@ -174,7 +175,7 @@ export class DirectoriesController {
 
    @Patch("unzip")
    @ApiResponse({ type: OperationStatusResponse })
-   public unzip(@AuthUser() userId: number, @Body() body: NewDirRequest) {
+   public unzip(@AuthedUserId() userId: string, @Body() body: NewDirRequest) {
       try {
          this.directoriesService.unzip(userId, body.name).catch((e) => {
             this.logger.logException(e);

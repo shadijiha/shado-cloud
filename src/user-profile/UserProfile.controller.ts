@@ -1,3 +1,4 @@
+import { AuthedUserId } from "src/auth-client/authed-user.decorator";
 import {
    Body,
    Controller,
@@ -10,24 +11,24 @@ import {
    UseInterceptors,
    ValidationPipe,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { AuthGuardService } from "src/auth-client/auth.guard";
 import { FileInterceptor } from "@nestjs/platform-express/multer";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { OperationStatusResponse } from "src/files/filesApiTypes";
 import { LoggerToDb } from "./../logging";
-import { AuthUser } from "src/util";
+import {  } from "src/util";
 import { ChangeNameRequest, ChangePasswordRequest, ChangePictureRequest, ProfileStats } from "./user-profile-types";
 import { UserProfileService } from "./UserProfile.service";
 
 @Controller("profile")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuardService)
 @ApiTags("User profile settings")
 export class UserProfileController {
    constructor(private readonly profileService: UserProfileService, @Inject() private readonly logger: LoggerToDb) {}
 
    @Patch("change/password")
    @ApiResponse({ type: OperationStatusResponse })
-   public async changePassword(@AuthUser() userId: number, @Body() body: ChangePasswordRequest) {
+   public async changePassword(@AuthedUserId() userId: string, @Body() body: ChangePasswordRequest) {
       return await this.logger.errorWrapper(async () => {
          await this.profileService.changePassword(userId, body.old_password, body.new_password);
       });
@@ -35,7 +36,7 @@ export class UserProfileController {
 
    @Patch("change/name")
    @ApiResponse({ type: OperationStatusResponse })
-   public async changeName(@AuthUser() userId: number, @Body() body: ChangeNameRequest) {
+   public async changeName(@AuthedUserId() userId: string, @Body() body: ChangeNameRequest) {
       return await this.logger.errorWrapper(async () => {
          await this.profileService.changeName(userId, body.password, body.new_name);
       });
@@ -45,7 +46,7 @@ export class UserProfileController {
    @UseInterceptors(FileInterceptor("file"))
    @ApiResponse({ type: OperationStatusResponse })
    public async changePicture(
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @UploadedFile() file: Express.Multer.File,
       @Body() body: ChangePictureRequest,
    ) {
@@ -63,7 +64,7 @@ export class UserProfileController {
    @ApiQuery({ name: "with_deleted", required: false })
    @ApiResponse({ type: ProfileStats })
    public async getStats(
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @Query("with_deleted", new ValidationPipe({ transform: true }))
       with_deleted: boolean = false,
    ) {
@@ -74,7 +75,7 @@ export class UserProfileController {
 
    @Patch("indexfiles")
    @ApiResponse({ type: OperationStatusResponse })
-   public async indexFiles(@AuthUser() userId: number) {
+   public async indexFiles(@AuthedUserId() userId: string) {
       return {
          reindexCount: await this.profileService.indexFiles(userId),
       };

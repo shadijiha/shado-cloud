@@ -170,7 +170,7 @@ describe("FilesService", () => {
 
       it("should successfully upload a file if space is available and permissions are granted", async () => {
          // Arrange
-         const userId = 1;
+         const userId = "uuid-1";
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
          const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
@@ -196,7 +196,7 @@ describe("FilesService", () => {
 
       it("should return error if the user does not have enough space", async () => {
          // Arrange
-         const userId = 1;
+         const userId = "uuid-1";
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
          const user = { getMaxData: jest.fn().mockResolvedValue(1024) }; // 1KB max space
@@ -213,7 +213,7 @@ describe("FilesService", () => {
 
       it("should return error if the user does not have permission to upload to the specified location", async () => {
          // Arrange
-         const userId = 1;
+         const userId = "uuid-1";
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
          const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
@@ -233,11 +233,11 @@ describe("FilesService", () => {
 
       it("should handle file replacement and invalidate thumbnails if file exists", async () => {
          // Arrange
-         const user = { id: 1, email: "cait@queen.com", getMaxData: jest.fn().mockResolvedValue(2048) };
+         const user = { id: "uuid-1", email: "cait@queen.com", getMaxData: jest.fn().mockResolvedValue(2048) };
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
 
-         const existingFile = { id: 420, absolute_path: "uploads/test.txt", user: { id: 1 } };
+         const existingFile = { id: 420, absolute_path: "uploads/test.txt", user: { id: "uuid-1" } };
 
          userService.getById = jest.fn().mockResolvedValue(user);
          service.getUsedData = jest.fn().mockResolvedValue(usedData);
@@ -289,7 +289,7 @@ describe("FilesService", () => {
 
       it("should handle errors correctly", async () => {
          // Arrange
-         const userId = 1;
+         const userId = "uuid-1";
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
          const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
@@ -313,15 +313,15 @@ describe("FilesService", () => {
 
    describe("delete", () => {
       it("should return an error if the user does not have permission to delete the file", async () => {
-         userService.getById = jest.fn().mockResolvedValue({ id: 1, email: "cait@queen.com" });
+         userService.getById = jest.fn().mockResolvedValue({ id: "uuid-1", email: "cait@queen.com" });
          service.isOwner = jest.fn().mockResolvedValue(false);
 
-         const result = await service.delete(1, "path/to/file");
+         const result = await service.delete("uuid-1", "path/to/file");
          expect(result).toEqual([false, "You don't have permission to delete this file"]);
       });
 
       it("should delete the file if the user is the owner", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/path/to/file`;
          const relativePath = "path/to/file";
 
@@ -330,14 +330,14 @@ describe("FilesService", () => {
          service.absolutePath = jest.fn().mockResolvedValue(absolutePath);
          service.getUserRootPath = jest.fn().mockResolvedValue(`${config.get("CLOUD_DIR")}/${user.email}`);
 
-         uploadedFileRepo.findOne = jest.fn().mockResolvedValue({ id: 1, absolute_path: relativePath });
+         uploadedFileRepo.findOne = jest.fn().mockResolvedValue({ id: "uuid-1", absolute_path: relativePath });
          fileAccessStatRepo.find = jest.fn().mockResolvedValue([]);
          fileAccessStatRepo.softRemove = jest.fn();
          uploadedFileRepo.softRemove = jest.fn();
          fs.unlinkSync = jest.fn();
          fs.readdirSync = jest.fn().mockReturnValue([]);
 
-         const result = await service.delete(1, relativePath);
+         const result = await service.delete("uuid-1", relativePath);
 
          expect(result).toEqual([true, ""]);
          expect(fs.unlinkSync).toHaveBeenCalledWith(absolutePath);
@@ -345,14 +345,14 @@ describe("FilesService", () => {
             where: { absolute_path: relativePath, user: { id: user.id } },
          });
          expect(fileAccessStatRepo.find).toHaveBeenCalledWith({
-            where: { uploaded_file: { absolute_path: relativePath, id: 1 } },
+            where: { uploaded_file: { absolute_path: relativePath, id: "uuid-1" } },
          });
          expect(uploadedFileRepo.softRemove).toHaveBeenCalled();
          expect(fileAccessStatRepo.softRemove).toHaveBeenCalled();
       });
 
       it("should still delete file if it is not found in the database", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/path/to/file`;
          const relativePath = "path/to/file";
          userService.getById = jest.fn().mockResolvedValue(user);
@@ -364,26 +364,26 @@ describe("FilesService", () => {
          fileAccessStatRepo.find = jest.fn().mockResolvedValue([]);
          fileAccessStatRepo.softRemove = jest.fn();
 
-         const result = await service.delete(1, relativePath);
+         const result = await service.delete("uuid-1", relativePath);
 
          expect(result).toEqual([true, ""]);
          expect(fs.unlinkSync).toHaveBeenCalled();
       });
 
       it("should return an error if an exception occurs during deletion", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const relativePath = "path/to/file";
          userService.getById = jest.fn().mockResolvedValue(user);
          service.isOwner = jest.fn().mockResolvedValue(true);
          service.absolutePath = jest.fn().mockRejectedValue(new Error("Failed to resolve absolute path")); // Simulating an error
 
-         const result = await service.delete(1, relativePath);
+         const result = await service.delete("uuid-1", relativePath);
 
          expect(result).toEqual([false, "Failed to resolve absolute path"]);
       });
 
       it("should delete all thumbnails associated with the file", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/cait.jpg`;
          const relativePath = "cait.jpg";
          const uploadedFile = { id: 69, absolute_path: relativePath };
@@ -403,7 +403,7 @@ describe("FilesService", () => {
             { name: "24_100x100.jpg" }, // <--- Shouldn't be deleted!!
          ]); // <--- this function is called by invalidateThumbnailsFor
 
-         const result = await service.delete(1, relativePath);
+         const result = await service.delete("uuid-1", relativePath);
 
          expect(result).toEqual([true, ""]);
 
@@ -430,30 +430,30 @@ describe("FilesService", () => {
 
    describe("toThumbnail", () => {
       it("should throw an error if the user does not have permission", async () => {
-         userService.getById = jest.fn().mockResolvedValue({ id: -1, email: "cait@queen.com" } as User);
+         userService.getById = jest.fn().mockResolvedValue({ id: "uuid-none", email: "cait@queen.com" } as User);
          service.isOwner = jest.fn().mockResolvedValue(false);
 
-         await expect(service.toThumbnail("test/path", 1)).rejects.toThrow(
+         await expect(service.toThumbnail("test/path", "uuid-1")).rejects.toThrow(
             "You don't have permission to access this file",
          );
       });
 
       it("should throw an error if the file does not exist", async () => {
-         const user = { id: 1, email: "cait@queen.com" } as User;
+         const user = { id: "uuid-1", email: "cait@queen.com" } as User;
          userService.getById = jest.fn().mockResolvedValue(user);
 
          FilesService.detectFile = jest.fn().mockReturnValue("image/jpeg");
          service.isOwner = jest.fn().mockResolvedValue(true);
          fs.existsSync = jest.fn().mockReturnValue(false);
 
-         await expect(service.toThumbnail("path/to/file.png", 1)).rejects.toThrow(
+         await expect(service.toThumbnail("path/to/file.png", "uuid-1")).rejects.toThrow(
             `${config.get("CLOUD_DIR")}/${user.email}/path/to/file.png does not exist`,
          );
       });
 
       it("should return the existing thumbnail if already generated", async () => {
-         const mockFile = { id: 1 };
-         const user = { id: 1, email: "cait@queen.com" } as User;
+         const mockFile = { id: "uuid-1" };
+         const user = { id: "uuid-1", email: "cait@queen.com" } as User;
          userService.getById = jest.fn().mockResolvedValue(user);
 
          FilesService.detectFile = jest.fn().mockReturnValue("image/jpeg");
@@ -469,18 +469,18 @@ describe("FilesService", () => {
          jest.spyOn(fs, "existsSync").mockReturnValue(true);
          fs.createReadStream = jest.fn().mockReturnValue("readStream");
 
-         const result = await service.toThumbnail("test/path.jpg", 1, 100, 100);
+         const result = await service.toThumbnail("test/path.jpg", "uuid-1", 100, 100);
          expect(result).toBe("readStream");
          expect(fs.createReadStream).toHaveBeenCalledWith(
             `${config.get("CLOUD_DIR")}/${user.email}/${FilesService.METADATA_FOLDER_NAME}/${
                FilesService.THUMBNAILS_FOLDER_NAME
-            }/1_100x100.jpg`,
+            }/uuid-1_100x100.jpg`,
          );
       });
 
       it("should create a new thumbnail if none exists for image file", async () => {
-         const mockFile = { id: 1 };
-         const user = { id: 2, email: "cait@queen.com" } as User;
+         const mockFile = { id: "uuid-1" };
+         const user = { id: "uuid-2", email: "cait@queen.com" } as User;
 
          userService.getById = jest.fn().mockResolvedValue(user);
          FilesService.detectFile = jest.fn().mockReturnValue("image/jpeg");
@@ -505,7 +505,7 @@ describe("FilesService", () => {
             };
          });
 
-         const result = await service.toThumbnail("test/path.jpg", 1, 120, 100);
+         const result = await service.toThumbnail("test/path.jpg", "uuid-1", 120, 100);
          expect(result).toBeDefined(); // assuming the result would be a stream
          expect(thumbnailPath).toBe(`${metaDir}/${FilesService.THUMBNAILS_FOLDER_NAME}/${mockFile.id}_120x100.jpg`);
       });
@@ -524,7 +524,7 @@ describe("FilesService", () => {
 
          fs.createReadStream = jest.fn().mockReturnValue("readStream");
 
-         const result = await service.toThumbnail("test/video.mp4", 1, 100, 100);
+         const result = await service.toThumbnail("test/video.mp4", "uuid-1", 100, 100);
          expect(result).toBe("readStream");
          expect(ThumbnailGenerator).toHaveBeenCalledWith({
             verbose: false,
@@ -546,7 +546,7 @@ describe("FilesService", () => {
 
          fs.createReadStream = jest.fn().mockReturnValue({ pipe: jest.fn().mockReturnValue("Mocked image data") });
 
-         const result = await service.toThumbnail("test/path", 1); // no width, no height
+         const result = await service.toThumbnail("test/path", "uuid-1"); // no width, no height
          expect(result).toBe("Mocked image data");
       });
 
@@ -557,12 +557,12 @@ describe("FilesService", () => {
 
          fs.createReadStream = jest.fn().mockReturnValue("data");
 
-         await expect(service.toThumbnail("test/path", 1, 100, 100)).resolves.toBeNull();
+         await expect(service.toThumbnail("test/path", "uuid-1", 100, 100)).resolves.toBeNull();
       });
 
       it("should generate and return a PDF thumbnail", async () => {
          const mockFile = { id: 42 };
-         const user = { id: 1, email: "cait@cupcake.com" };
+         const user = { id: "uuid-1", email: "cait@cupcake.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/document.pdf`;
          const metaDir = `${config.get("CLOUD_DIR")}/${user.email}/${FilesService.METADATA_FOLDER_NAME}`;
          const thumbnailFolder = `${metaDir}/${FilesService.THUMBNAILS_FOLDER_NAME}`;
@@ -588,7 +588,7 @@ describe("FilesService", () => {
          uploadedFileRepo.findOne = jest.fn().mockResolvedValue(mockFile);
          fs.createReadStream = jest.fn().mockReturnValue("pdfThumbnailStream");
 
-         const result = await service.toThumbnail("document.pdf", 1, 400, 300);
+         const result = await service.toThumbnail("document.pdf", "uuid-1", 400, 300);
 
          expect(result).toBe("pdfThumbnailStream");
          expect(fs.writeFileSync).toHaveBeenCalledWith(
@@ -601,7 +601,7 @@ describe("FilesService", () => {
 
       it("should return cached PDF thumbnail if it exists", async () => {
          const mockFile = { id: 42 };
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/document.pdf`;
          const metaDir = `${config.get("CLOUD_DIR")}/${user.email}/${FilesService.METADATA_FOLDER_NAME}`;
          const thumbnailFolder = `${metaDir}/${FilesService.THUMBNAILS_FOLDER_NAME}`;
@@ -619,14 +619,14 @@ describe("FilesService", () => {
          uploadedFileRepo.findOne = jest.fn().mockResolvedValue(mockFile);
          fs.createReadStream = jest.fn().mockReturnValue("cachedPdfThumbnailStream");
 
-         const result = await service.toThumbnail("document.pdf", 1, 400, 300);
+         const result = await service.toThumbnail("document.pdf", "uuid-1", 400, 300);
 
          expect(result).toBe("cachedPdfThumbnailStream");
          expect(fs.createReadStream).toHaveBeenCalledWith(cachedThumbnailPath);
       });
 
       it("should throw error for PDF if file does not exist", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/missing.pdf`;
 
          userService.getById = jest.fn().mockResolvedValue(user);
@@ -636,7 +636,7 @@ describe("FilesService", () => {
 
          jest.spyOn(fs, "existsSync").mockReturnValue(false);
 
-         await expect(service.toThumbnail("missing.pdf", 1, 400, 300)).rejects.toThrow(
+         await expect(service.toThumbnail("missing.pdf", "uuid-1", 400, 300)).rejects.toThrow(
             `${absolutePath} does not exist`,
          );
       });
@@ -644,7 +644,7 @@ describe("FilesService", () => {
 
    describe("isOwner", () => {
       it("should return true if user is the owner (sanitized relative path is valid)", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/files`;
 
          userService.getById = jest.fn().mockResolvedValue(user);
@@ -656,7 +656,7 @@ describe("FilesService", () => {
       });
 
       it("should return false if user is trying to access a file outside their root directory", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/other@shado.com/files`;
 
          userService.getById = jest.fn().mockResolvedValue(user);
@@ -670,7 +670,7 @@ describe("FilesService", () => {
       });
 
       it('should return false if the relative path includes ".." and tries to go outside the root path', async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
 
          // ".." to go outside of the root path
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/../other@shado.com/file.txt`;
@@ -684,7 +684,7 @@ describe("FilesService", () => {
       });
 
       it("should return true if the sanitized relative path is empty (path points directly to the root)", async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}`;
 
          userService.getById = jest.fn().mockResolvedValue(user);
@@ -696,7 +696,7 @@ describe("FilesService", () => {
       });
 
       it('should return false if path traversal ".." is used multiple times to go out of the root path', async () => {
-         const user = { id: 1, email: "cait@queen.com" };
+         const user = { id: "uuid-1", email: "cait@queen.com" };
 
          const absolutePath = `${config.get("CLOUD_DIR")}/${user.email}/../../etc/passwd`;
 

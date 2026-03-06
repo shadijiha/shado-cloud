@@ -1,3 +1,4 @@
+import { AuthedUserId } from "src/auth-client/authed-user.decorator";
 import {
    Body,
    Controller,
@@ -16,12 +17,12 @@ import {
    UseGuards,
    UseInterceptors,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { AuthGuardService } from "src/auth-client/auth.guard";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiParam, ApiProduces, ApiProperty, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { LoggerToDb } from "./../logging";
-import { ApiFile, AuthUser } from "src/util";
+import { ApiFile } from "src/util";
 import { FilesService } from "./files.service";
 import {
    FileInfoResponse,
@@ -35,7 +36,7 @@ import {
 import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 
 @Controller("file")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuardService)
 @ApiTags("Files")
 export class FilesConstoller {
    constructor(private readonly fileService: FilesService, @Inject() private readonly logger: LoggerToDb) {}
@@ -46,7 +47,7 @@ export class FilesConstoller {
    @ApiFile()
    @UseInterceptors(FileInterceptor("file"))
    public async upload(
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @UploadedFile() file: Express.Multer.File,
       @Body() body: { dest: string },
    ) {
@@ -57,7 +58,7 @@ export class FilesConstoller {
 
    @Post("new")
    @ApiResponse({ type: OperationStatusResponse })
-   public async new(@Body() body: NewFileRequest, @AuthUser() userId: number): Promise<OperationStatusResponse> {
+   public async new(@Body() body: NewFileRequest, @AuthedUserId() userId: string): Promise<OperationStatusResponse> {
       return await this.logger.errorWrapper(async () => {
          await this.fileService.new(userId, body.name);
       });
@@ -65,7 +66,7 @@ export class FilesConstoller {
 
    @Patch("save")
    @ApiResponse({ type: OperationStatusResponse })
-   public async save(@Body() body: SaveFileRequest, @AuthUser() userId: number): Promise<OperationStatusResponse> {
+   public async save(@Body() body: SaveFileRequest, @AuthedUserId() userId: string): Promise<OperationStatusResponse> {
       const [success, message] = await this.fileService.save(userId, body.name, body.content, body.append);
       if (success) {
          return {
@@ -83,7 +84,7 @@ export class FilesConstoller {
 
    @Delete("delete")
    @ApiResponse({ type: OperationStatusResponse })
-   public async delete(@Body() body: NewFileRequest, @AuthUser() userId: number) {
+   public async delete(@Body() body: NewFileRequest, @AuthedUserId() userId: string) {
       const [success, message] = await this.fileService.delete(userId, body.name);
       if (success) {
          return {
@@ -101,7 +102,7 @@ export class FilesConstoller {
 
    @Patch("rename")
    @ApiResponse({ type: OperationStatusResponse })
-   public async rename(@Body() body: RenameFileRequest, @AuthUser() userId: number) {
+   public async rename(@Body() body: RenameFileRequest, @AuthedUserId() userId: string) {
       return await this.logger.errorWrapper(async () => {
          await this.fileService.rename(userId, body.name, body.newName);
       });
@@ -110,7 +111,7 @@ export class FilesConstoller {
    @Get("info/:path")
    @ApiParam({ name: "path" })
    @ApiResponse({ type: FileInfoResponse })
-   public async info(@Param("path") path: string, @AuthUser() userId: number): Promise<FileInfoResponse> {
+   public async info(@Param("path") path: string, @AuthedUserId() userId: string): Promise<FileInfoResponse> {
       try {
          const info = await this.fileService.info(userId, path, true, true);
          return {
@@ -131,7 +132,7 @@ export class FilesConstoller {
    @Get("exists/:path")
    @ApiParam({ name: "path" })
    @ApiResponse({ type: OpResWithData })
-   public async exists(@Param("path") path: string, @AuthUser() userId: number) {
+   public async exists(@Param("path") path: string, @AuthedUserId() userId: string) {
       try {
          const info = await this.fileService.exists(userId, path);
          return {
@@ -161,7 +162,7 @@ export class FilesConstoller {
    })
    public async thumbnail(
       @Param("path") path: string,
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @Query("width") width: number | undefined,
       @Query("height") height: number | undefined,
    ) {
@@ -190,7 +191,7 @@ export class FilesConstoller {
    })
    public async getFile(
       @Param("path") path: string,
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @Res() res: Response,
       @Req() req: Request,
    ) {

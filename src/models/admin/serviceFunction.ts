@@ -22,7 +22,7 @@ export class ServiceFunction {
     storage: string | undefined | null;
 
     @Column()
-    user_id: number;
+    user_id: string;
 
     @Column({ default: true})
     enabled: boolean;

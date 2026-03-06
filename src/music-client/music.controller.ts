@@ -1,3 +1,4 @@
+import { AuthedUserId } from "src/auth-client/authed-user.decorator";
 import {
    All,
    Controller,
@@ -9,17 +10,17 @@ import {
    Res,
    UseGuards,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { AuthGuardService } from "src/auth-client/auth.guard";
 import { ClientProxy } from "@nestjs/microservices";
 import { ApiTags } from "@nestjs/swagger";
 import { type Request, type Response } from "express";
-import { AuthUser } from "src/util";
+import {  } from "src/util";
 import { MUSIC_SERVICE } from "./constants";
 import { firstValueFrom } from "rxjs";
 import { FilesService } from "src/files/files.service";
 
 @Controller("music")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuardService)
 @ApiTags("Music — proxied to shado-music-api (see github.com/shadijiha/shado-music-api)")
 export class MusicController {
    constructor(
@@ -65,7 +66,7 @@ export class MusicController {
    // ── SSE endpoints (need manual res.write) ───────────────
 
    @All("pull-playlist")
-   async pullPlaylist(@AuthUser() userId: number, @Req() req: Request, @Res() res: Response) {
+   async pullPlaylist(@AuthedUserId() userId: string, @Req() req: Request, @Res() res: Response) {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -79,7 +80,7 @@ export class MusicController {
    }
 
    @All("import-playlist")
-   async importPlaylist(@AuthUser() userId: number, @Req() req: Request, @Res() res: Response) {
+   async importPlaylist(@AuthedUserId() userId: string, @Req() req: Request, @Res() res: Response) {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -95,7 +96,7 @@ export class MusicController {
    // ── Generic TCP proxy for everything else ───────────────
 
    @All("*path")
-   async proxy(@AuthUser() userId: number, @Req() req: Request, @Res() res: Response) {
+   async proxy(@AuthedUserId() userId: string, @Req() req: Request, @Res() res: Response) {
       const musicPath = req.url; // e.g. /search?q=test, /playlists, /songs/1/play
       const pattern = "music.proxy";
       const payload = {

@@ -26,6 +26,7 @@ import { FeatureFlag } from "./models/admin/featureFlag";
 import { ReplicationModule } from "./replication/replication.module";
 import { MusicClientModule } from "./music-client/music-client.module";
 import { GymClientModule } from "./gym-client/gym-client.module";
+import { AuthClientModule } from "./auth-client/auth-client.module";
 
 @Global()
 @Module({
@@ -121,6 +122,7 @@ export class GlobalUtilityModule {}
       ReplicationModule,
       MusicClientModule,
       GymClientModule,
+      AuthClientModule,
    ],
    controllers: [AppController],
    providers: [

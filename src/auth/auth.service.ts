@@ -6,6 +6,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import type Redis from "ioredis";
 import { REDIS_CACHE } from "src/util";
 import { LoggerToDb } from "src/logging";
+
 @Injectable()
 export class AuthService {
    constructor(
@@ -26,20 +27,16 @@ export class AuthService {
       return this.userRepo.save(user);
    }
 
-   public async getById(userId: number): Promise<User | null> {
-      const key = AuthService.getCachedUserKey(userId);
+   public async getById(userId: string): Promise<User | null> {
+      const key = `user:${userId}`;
       const cachedValue = await this.cache.get(key);
       if (cachedValue) {
-         // Attack member funtiosn back to the user
          const cachedUser = JSON.parse(cachedValue) as User;
          Object.setPrototypeOf(cachedUser, User.prototype);
-
-         // To avoid cache paring issues, we need to assert that the user still have the same properties
-         // as User class
          if (cachedUser.id === userId && "email" in cachedUser) {
             return cachedUser;
          } else {
-            this.logger.warn(`Cache key ${key} is corrupted (value => ${cachedValue}), deleting it...`);
+            this.logger.warn(`Cache key ${key} is corrupted, deleting...`);
             this.cache.del(key);
          }
       }
@@ -50,29 +47,21 @@ export class AuthService {
       return user;
    }
 
-   public async passwordMatch(userId: number, password: string) {
-      const query = this.userRepo.createQueryBuilder("user");
-      const user = await query
+   public async passwordMatch(userId: string, password: string) {
+      const user = await this.userRepo
+         .createQueryBuilder("user")
          .select("user.password")
-         .where("id = :id", {
-            id: userId,
-         })
+         .where("id = :id", { id: userId })
          .getOne();
       return await argon2.verify(user.password, password);
    }
 
-   public getWithPassword(userId: number): Promise<User | null> {
-      const query = this.userRepo.createQueryBuilder("user");
-      return query
+   public getWithPassword(userId: string): Promise<User | null> {
+      return this.userRepo
+         .createQueryBuilder("user")
          .select("user.password")
          .addSelect("user")
-         .where("id = :id", {
-            id: userId,
-         })
+         .where("id = :id", { id: userId })
          .getOne();
-   }
-
-   private static getCachedUserKey(userId: number) {
-      return `user${userId}__cache`;
    }
 }

@@ -16,9 +16,8 @@ import { AuthService } from "../auth/auth.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import * as cookie from "cookie";
-import * as jwt from "jsonwebtoken";
-import { CookiePayload } from "../auth/authApiTypes";
 import { LoggerToDb } from "../logging";
+import { AuthClientService } from "../auth-client/auth-client.service";
 import { networkInterfaces } from "os";
 
 const execAsync = promisify(exec);
@@ -54,12 +53,13 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
       private authService: AuthService,
       private config: ConfigService<EnvVariables>,
     @Inject() private readonly logger: LoggerToDb,
+      private readonly authClient: AuthClientService,
    ) {
            this.logger.log("RemoteDesktopGateway initialized");
    }
 
    async handleConnection(client: Socket) {
-      // Verify admin authentication via JWT
+      // Verify admin authentication via auth microservice
       try {
          const cookies = cookie.parse(client.handshake.headers.cookie || "");
          const token = cookies[this.config.get("COOKIE_NAME")!];
@@ -68,10 +68,9 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
             client.disconnect();
             return;
          }
-         const payload = jwt.verify(token, this.config.get("JWT_SECRET")!) as CookiePayload;
-         const user = await this.authService.getById(payload.userId);
-         if (!user || !user.is_admin) {
-            this.logger.warn(`Unauthorized connection attempt: ${client.id} - not admin`);
+         const result = await this.authClient.verify(token);
+         if (!result.valid || !result.user?.isAdmin) {
+            this.logger.warn(`Unauthorized connection attempt: ${client.id} - ${!result.valid ? "auth failed" : "not admin"}`);
             client.disconnect();
             return;
          }

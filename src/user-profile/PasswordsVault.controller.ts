@@ -1,16 +1,17 @@
+import { AuthedUserId } from "src/auth-client/authed-user.decorator";
 import { Body, Controller, Delete, Get, Inject, Param, Post, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { AuthGuardService } from "src/auth-client/auth.guard";
 import { ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Paginate, type Paginated, PaginateQuery } from "nestjs-paginate";
 import { OperationStatus, OperationStatusResponse } from "src/files/filesApiTypes";
 import { LoggerToDb } from "src/logging";
 import { type EncryptedPassword } from "src/models/EncryptedPassword";
-import { AuthUser } from "src/util";
+import {  } from "src/util";
 import { PasswordsVaultService } from "./PasswordsVaultService.service";
 import { AddToVaultRequest, AddToVaultResponse, AllPasswordsResponse } from "./user-profile-types";
 
 @Controller("profile/vault")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuardService)
 @ApiTags("User profile settings")
 export class PasswordsVaultController {
    constructor(
@@ -22,7 +23,7 @@ export class PasswordsVaultController {
    @ApiQuery({ name: "search", type: String })
    @ApiResponse({ type: AllPasswordsResponse })
    public async all(
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @Paginate() query: PaginateQuery,
    ): Promise<Paginated<EncryptedPassword>> {
       return await this.logger.errorWrapper(async () => {
@@ -43,7 +44,7 @@ export class PasswordsVaultController {
 
    @Get("get/:encryption_id")
    @ApiResponse({ type: typeof { decrypted_password: "" } })
-   public async get(@AuthUser() userId: number, @Param("encryption_id") encryption_id: number) {
+   public async get(@AuthedUserId() userId: string, @Param("encryption_id") encryption_id: number) {
       return await this.logger.errorWrapper(async () => {
          return await this.passwordVaultService.get(userId, encryption_id);
       });
@@ -51,7 +52,7 @@ export class PasswordsVaultController {
 
    @Post("add")
    @ApiResponse({ type: AddToVaultResponse })
-   public async add(@AuthUser() userId: number, @Body() body: AddToVaultRequest): Promise<AddToVaultResponse> {
+   public async add(@AuthedUserId() userId: string, @Body() body: AddToVaultRequest): Promise<AddToVaultResponse> {
       return await this.logger.errorWrapper(async () => {
          const result: EncryptedPassword[] = [];
          const errors = [];
@@ -74,7 +75,7 @@ export class PasswordsVaultController {
 
    @Delete("delete/:encryption_id")
    @ApiResponse({ type: OperationStatusResponse })
-   public async delete(@AuthUser() userId: number, @Param("encryption_id") encryption_id: number) {
+   public async delete(@AuthedUserId() userId: string, @Param("encryption_id") encryption_id: number) {
       return await this.logger.errorWrapper(async () => {
          await this.passwordVaultService.delete(userId, encryption_id);
       });

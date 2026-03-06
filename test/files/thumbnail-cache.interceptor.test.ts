@@ -44,18 +44,18 @@ describe("ThumbnailCacheInterceptor", () => {
 
    describe("getCacheKey", () => {
       it("should generate cache key with dimensions", () => {
-         const key = ThumbnailCacheInterceptor.getCacheKey(1, "test.jpg", 400, 300);
-         expect(key).toBe("1:test.jpg:400:300");
+         const key = ThumbnailCacheInterceptor.getCacheKey("uuid-1", "test.jpg", 400, 300);
+         expect(key).toBe("uuid-1:test.jpg:400:300");
       });
 
       it("should generate cache key without dimensions", () => {
-         const key = ThumbnailCacheInterceptor.getCacheKey(1, "test.jpg", 400, 300, false);
-         expect(key).toBe("1:test.jpg");
+         const key = ThumbnailCacheInterceptor.getCacheKey("uuid-1", "test.jpg", 400, 300, false);
+         expect(key).toBe("uuid-1:test.jpg");
       });
 
       it("should handle undefined dimensions", () => {
-         const key = ThumbnailCacheInterceptor.getCacheKey(1, "test.pdf", undefined, undefined);
-         expect(key).toBe("1:test.pdf:undefined:undefined");
+         const key = ThumbnailCacheInterceptor.getCacheKey("uuid-1", "test.pdf", undefined, undefined);
+         expect(key).toBe("uuid-1:test.pdf:undefined:undefined");
       });
    });
 

@@ -30,7 +30,7 @@ export class UserProfileService {
       @Inject() private readonly fs: AbstractFileSystem,
    ) {}
 
-   public async changePassword(userId: number, old_password: string, new_password: string) {
+   public async changePassword(userId: string, old_password: string, new_password: string) {
       // Get the old password of the user
       const user = await this.verifyPassword(userId, old_password);
       user.password = await argon2.hash(new_password);
@@ -39,18 +39,18 @@ export class UserProfileService {
       this.logger.log("User changed their password");
    }
 
-   public async changeName(userId: number, password: string, new_name: string) {
+   public async changeName(userId: string, password: string, new_name: string) {
       const user = await this.verifyPassword(userId, password);
       user.name = new_name;
       this.userRepo.save(user);
    }
 
-   public async changePicture(userId: number, password: string, file: Express.Multer.File, crop: ProfileCropData) {
+   public async changePicture(userId: string, password: string, file: Express.Multer.File, crop: ProfileCropData) {
       const user = await this.verifyPassword(userId, password);
       this.saveProfilePicture(user, file, crop);
    }
 
-   public async getStats(userId: number, withDeleted = false) {
+   public async getStats(userId: string, withDeleted = false) {
       const fileAccesMeta = this.fileAccessStatRepo.metadata;
       const uploadedFileMeta = this.uploadedFileRepo.metadata;
       const userTbMeta = this.userRepo.metadata;
@@ -93,7 +93,7 @@ export class UserProfileService {
       return most_accesed_files;
    }
 
-   public async indexFiles(userId: number) {
+   public async indexFiles(userId: string) {
       const user = await this.userService.getById(userId);
 
       // Get current indexed files
@@ -147,7 +147,7 @@ export class UserProfileService {
       return newIndexedFiles.length;
    }
 
-   private async verifyPassword(userId: number, password: string): Promise<User> | never {
+   private async verifyPassword(userId: string, password: string): Promise<User> | never {
       const user = await this.userService.getWithPassword(userId);
       if (!(await argon2.verify(user.password, password))) {
          throw new SoftException("Invalid password");

@@ -24,7 +24,7 @@ export class TempUrlService {
 
    public async generate(
       requestHeaders: IncomingHttpHeaders,
-      userId: number,
+      userId: string,
       filepath: string,
       max_requests: number,
       expires_at: Date,
@@ -105,7 +105,7 @@ export class TempUrlService {
       }
    }
 
-   public async all(userId: number) {
+   public async all(userId: string) {
       return (await this.tempUrlRepo.find({ where: { user: { id: userId } } })).map((e) => {
          return {
             ...e,
@@ -114,7 +114,7 @@ export class TempUrlService {
       });
    }
 
-   public async delete(userId: number, key: any) {
+   public async delete(userId: string, key: any) {
       const user = await this.userService.getById(userId);
       const tempUrl = await this.tempUrlRepo.findOne({
          where: { url: key },

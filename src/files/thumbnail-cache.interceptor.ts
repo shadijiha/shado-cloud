@@ -10,7 +10,7 @@ import { Reflector } from "@nestjs/core";
 import { type Observable, of } from "rxjs";
 import { switchMap } from "rxjs/operators";
 import { type Request, type Response } from "express";
-import { getUserIdFromRequest, REDIS_CACHE } from "src/util";
+import { REDIS_CACHE } from "src/util";
 import { FilesService } from "./files.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
@@ -100,7 +100,7 @@ export class ThumbnailCacheInterceptor implements NestInterceptor {
    }
 
    private getCacheKeyFromReq(request: Request & { configService: ConfigService<EnvVariables> }): string {
-      const userId = getUserIdFromRequest(request);
+      const userId = request.authUser?.id || "anon";
       const { params, query } = request;
       const { path } = params;
       const { width, height } = query;
@@ -108,7 +108,7 @@ export class ThumbnailCacheInterceptor implements NestInterceptor {
    }
 
    public static getCacheKey(
-      userId: number,
+      userId: string,
       path: string | string[],
       width?: any,
       height?: any,

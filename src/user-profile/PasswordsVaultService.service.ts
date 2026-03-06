@@ -19,7 +19,7 @@ export class PasswordsVaultService {
       @Inject() private readonly config: ConfigService<EnvVariables>,
    ) {}
 
-   public async all(userId: number, query: PaginateQuery): Promise<Paginated<EncryptedPassword>> {
+   public async all(userId: string, query: PaginateQuery): Promise<Paginated<EncryptedPassword>> {
       const builder = this.encrtyptedPasswordRepo
          .createQueryBuilder("pass")
          .leftJoinAndSelect("pass.user", "user")
@@ -31,7 +31,7 @@ export class PasswordsVaultService {
       });
    }
 
-   public async add(userId: number, username: string, website: string, passwordToStore: string) {
+   public async add(userId: string, username: string, website: string, passwordToStore: string) {
       const user = await this.userService.getWithPassword(userId);
       if (!user) {
          throw new Error("User " + userId + " not found");
@@ -41,7 +41,7 @@ export class PasswordsVaultService {
       return await this.encrypt(username, new URL(website), passwordToStore, user);
    }
 
-   public async get(userId: number, encryption_id: number): Promise<{ decrypted_password: string }> {
+   public async get(userId: string, encryption_id: number): Promise<{ decrypted_password: string }> {
       const decrypt = await this.decrypt(userId, encryption_id);
 
       return {
@@ -49,7 +49,7 @@ export class PasswordsVaultService {
       };
    }
 
-   public async delete(userId: number, encryption_id: number) {
+   public async delete(userId: string, encryption_id: number) {
       const query = this.encrtyptedPasswordRepo.createQueryBuilder("vault");
       const vault = await query
          .select("vault.encryption_key")
@@ -111,7 +111,7 @@ export class PasswordsVaultService {
    }
 
    private async decrypt(
-      userId: number,
+      userId: string,
       encryptionId: number,
    ): Promise<{ vault: EncryptedPassword; decryptedPassword: string }> {
       const query = this.encrtyptedPasswordRepo.createQueryBuilder("vault");

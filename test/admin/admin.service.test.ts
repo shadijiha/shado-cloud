@@ -150,8 +150,8 @@ describe("AdminService", () => {
       it("should return logs sorted by created_at in descending order", async () => {
          // Arrange: Mock data
          const logs = [
-            { created_at: new Date("2023-01-01"), user: { id: 1 } } as Log,
-            { created_at: new Date("2024-01-01"), user: { id: 2 } } as Log,
+            { created_at: new Date("2023-01-01"), user: { id: "uuid-1" } } as Log,
+            { created_at: new Date("2024-01-01"), user: { id: "uuid-2" } } as Log,
          ];
          jest.spyOn(logRepo, "find").mockResolvedValue(logs);
 
@@ -160,8 +160,8 @@ describe("AdminService", () => {
 
          // Assert: Check that the result is sorted in descending order
          expect(result).toEqual([
-            { created_at: new Date("2024-01-01"), user: { id: 2 } } as Log,
-            { created_at: new Date("2023-01-01"), user: { id: 1 } } as Log,
+            { created_at: new Date("2024-01-01"), user: { id: "uuid-2" } } as Log,
+            { created_at: new Date("2023-01-01"), user: { id: "uuid-1" } } as Log,
          ]);
       });
    });

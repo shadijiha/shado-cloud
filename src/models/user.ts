@@ -17,8 +17,8 @@ import { SearchStat } from "./stats/searchStat";
 @Entity()
 export class User extends BaseEntity {
    @ApiProperty()
-   @PrimaryGeneratedColumn()
-   id: number;
+   @PrimaryGeneratedColumn("uuid")
+   id: string;
 
    @ApiProperty()
    @Column({ unique: true })

@@ -1,3 +1,4 @@
+import { AuthedUserId } from "src/auth-client/authed-user.decorator";
 import {
    Body,
    Controller,
@@ -12,13 +13,13 @@ import {
    Headers,
    Inject,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { AuthGuardService } from "src/auth-client/auth.guard";
 import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
 import { LoggerToDb } from "./../logging";
 import { TempUrl } from "./../models/tempUrl";
-import { AuthUser } from "./../util";
+import {  } from "./../util";
 import { TempUrlService } from "./tempUrl.service";
 import { TempURLGenerateOptions, TempURLGenerateResponse, TempURLSaveRequest } from "./tempUrlApiTypes";
 import { IncomingHttpHeaders } from "http";
@@ -29,12 +30,12 @@ export class TempUrlConstoller {
    constructor(private readonly tempUrlService: TempUrlService, @Inject() private readonly logger: LoggerToDb) {}
 
    @Post("generate")
-   @UseGuards(AuthGuard("jwt"))
+   @UseGuards(AuthGuardService)
    @ApiResponse({ type: TempURLGenerateResponse })
    public async generate(
       @Headers() headers: IncomingHttpHeaders,
       @Req() request: Request,
-      @AuthUser() userId: number,
+      @AuthedUserId() userId: string,
       @Body() options: TempURLGenerateOptions,
    ): Promise<TempURLGenerateResponse> {
       try {
@@ -96,9 +97,9 @@ export class TempUrlConstoller {
    }
 
    @Get("list")
-   @UseGuards(AuthGuard("jwt"))
+   @UseGuards(AuthGuardService)
    @ApiResponse({ type: [TempUrl] })
-   public async list(@AuthUser() userId: number) {
+   public async list(@AuthedUserId() userId: string) {
       try {
          return await this.tempUrlService.all(userId);
       } catch (e) {
@@ -108,10 +109,10 @@ export class TempUrlConstoller {
    }
 
    @Delete("delete/:key")
-   @UseGuards(AuthGuard("jwt"))
+   @UseGuards(AuthGuardService)
    @ApiParam({ name: "key", type: String })
    @ApiResponse({ type: OperationStatusResponse })
-   public async delete(@Param("key") key, @AuthUser() userId: number): Promise<OperationStatusResponse> {
+   public async delete(@Param("key") key, @AuthedUserId() userId: string): Promise<OperationStatusResponse> {
       try {
          await this.tempUrlService.delete(userId, key);
          return {

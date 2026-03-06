@@ -28,11 +28,11 @@ export class DirectoriesService {
       @Inject() private readonly config: ConfigService<EnvVariables>,
    ) {}
 
-   public async root(userId: number) {
+   public async root(userId: string) {
       return await this.fileService.getUserRootPath(userId);
    }
 
-   public async list(userId: number, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false) {
+   public async list(userId: string, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false) {
       const dir = await this.fileService.absolutePath(userId, relativePath);
 
       if (!(await this.fileService.isOwner(userId, dir))) {
@@ -65,7 +65,7 @@ export class DirectoriesService {
       });
    }
 
-   public async new(userId: number, name: string) {
+   public async new(userId: string, name: string) {
       const dir = await this.fileService.absolutePath(userId, name);
 
       if (!(await this.fileService.isOwner(userId, dir))) {
@@ -77,7 +77,7 @@ export class DirectoriesService {
       this.fs.mkdirSync(dir, { recursive: true });
    }
 
-   public async delete(userId: number, relativePath: string) {
+   public async delete(userId: string, relativePath: string) {
       const root = await this.fileService.absolutePath(userId, "");
       const dir = path.join(root, relativePath);
 
@@ -102,7 +102,7 @@ export class DirectoriesService {
       this.fs.rmdirSync(dir, { recursive: true });
    }
 
-   public async rename(userId: number, name: string, newName: string) {
+   public async rename(userId: string, name: string, newName: string) {
       const dir = await this.fileService.absolutePath(userId, name);
       const newDir = await this.fileService.absolutePath(userId, newName);
 
@@ -120,7 +120,7 @@ export class DirectoriesService {
       }
    }
 
-   public async listrecursive(userId: number, showHidden = false) {
+   public async listrecursive(userId: string, showHidden = false) {
       const dir = await this.fileService.getUserRootPath(userId);
       const files = this.getAllFiles(dir);
 
@@ -135,7 +135,7 @@ export class DirectoriesService {
          .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
    }
 
-   public async search(userId: number, searchText: string) {
+   public async search(userId: string, searchText: string) {
       const files = await this.uploadedFileRepo.find({
          where: [{ absolute_path: Like(`%${searchText}%`), user: { id: userId } }],
       });
@@ -149,7 +149,7 @@ export class DirectoriesService {
       return files ?? [];
    }
 
-   public async zip(userId: number, name: string) {
+   public async zip(userId: string, name: string) {
       const dir = await this.fileService.absolutePath(userId, name);
 
       if (!(await this.fileService.isOwner(userId, dir))) {
@@ -171,7 +171,7 @@ export class DirectoriesService {
       archive.finalize();
    }
 
-   public async unzip(userId: number, name: string) {
+   public async unzip(userId: string, name: string) {
       const dir = await this.fileService.absolutePath(userId, name);
       const fileFullName = path.basename(dir);
       const fileName = path.parse(fileFullName).name;

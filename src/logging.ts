@@ -4,7 +4,7 @@ import { Log } from "./models/log";
 import { User } from "./models/user";
 import { RequestContext } from "nestjs-request-context";
 import { type Request } from "express";
-import { getUserIdFromRequest, SoftException } from "./util";
+import { SoftException } from "./util";
 import { OperationStatus, type OperationStatusResponse } from "./files/filesApiTypes";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -90,8 +90,8 @@ export class LoggerToDb extends ConsoleLogger {
       log.stack = stack?.substring(0, 512);
 
       // Get user
-      const userId = getUserIdFromRequest(req);
-      if (userId != -1) {
+      const userId = req?.authUser?.id;
+      if (userId) {
          log.user = await User.findOne({ where: { id: userId } });
       }
 

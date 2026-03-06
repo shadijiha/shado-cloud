@@ -48,8 +48,3 @@ export class RegisterRequest {
    @IsNotEmpty()
    password: string;
 }
-
-// Cookie
-export interface CookiePayload {
-   userId: number;
-}

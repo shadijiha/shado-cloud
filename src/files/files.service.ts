@@ -60,7 +60,7 @@ export class FilesService {
       sharp.simd(true);
    }
 
-   public async asStream(userId: number, relativePath: string, user_agent: string, options?: any) {
+   public async asStream(userId: string, relativePath: string, user_agent: string, options?: any) {
       const dir = await this.absolutePath(userId, relativePath);
       if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
@@ -74,7 +74,7 @@ export class FilesService {
       return this.fs.createReadStream(dir, options);
    }
 
-   public async upload(userId: number, file: Express.Multer.File, dest: string): FileServiceResult {
+   public async upload(userId: string, file: Express.Multer.File, dest: string): FileServiceResult {
       try {
          // Check if user has enough space to upload the file
          const usedData = await this.getUsedData(userId);
@@ -119,7 +119,7 @@ export class FilesService {
       }
    }
 
-   public async new(userId: number, name: string): Promise<void> | never {
+   public async new(userId: string, name: string): Promise<void> | never {
       const root = await this.getUserRootPath(userId);
       const dir = path.join(root, name);
       const relative = path.relative(root, dir);
@@ -141,7 +141,7 @@ export class FilesService {
    }
 
    public async save(
-      userId: number,
+      userId: string,
       fileRelativePath: string,
       content: string,
       append: boolean | string = false,
@@ -165,7 +165,7 @@ export class FilesService {
       }
    }
 
-   public async delete(userId: number, relativePath: string): FileServiceResult {
+   public async delete(userId: string, relativePath: string): FileServiceResult {
       try {
          const root = await this.getUserRootPath(userId);
          const dir = await this.absolutePath(userId, relativePath);
@@ -199,7 +199,7 @@ export class FilesService {
       }
    }
 
-   public async rename(userId: number, name: string, newName: string): Promise<void> | never {
+   public async rename(userId: string, name: string, newName: string): Promise<void> | never {
       const root = await this.getUserRootPath(userId);
       const dir = await this.absolutePath(userId, name);
       const newDir = await this.absolutePath(userId, newName);
@@ -240,7 +240,7 @@ export class FilesService {
       }
    }
 
-   public async info(userId: number, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false) {
+   public async info(userId: string, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false) {
       const root = await this.getUserRootPath(userId);
       const dir = await this.absolutePath(userId, relativePath);
       const relative = path.relative(root, dir);
@@ -294,7 +294,7 @@ export class FilesService {
       };
    }
 
-   public async exists(userId: number, relativePath: string) {
+   public async exists(userId: string, relativePath: string) {
       const dir = await this.absolutePath(userId, relativePath);
 
       if (!(await this.isOwner(userId, dir))) {
@@ -306,7 +306,7 @@ export class FilesService {
 
    public async toThumbnail(
       path_: string,
-      userId: number,
+      userId: string,
       width: number | undefined = undefined,
       height: number | undefined = undefined,
    ) {
@@ -489,7 +489,7 @@ export class FilesService {
       return null;
    }
 
-   public async getUserRootPath(userId: number): Promise<string> {
+   public async getUserRootPath(userId: string): Promise<string> {
       // Get user
       const user = await this.userService.getById(userId);
       if (!user) {
@@ -504,7 +504,7 @@ export class FilesService {
       return path.join(this.config.get("CLOUD_DIR"), user.email);
    }
 
-   public async absolutePath(userId: number, relativePath: string) {
+   public async absolutePath(userId: string, relativePath: string) {
       return path.join(await this.getUserRootPath(userId), relativePath);
    }
 
@@ -549,7 +549,7 @@ export class FilesService {
       return basename;
    }
 
-   public async profilePictureInfo(userId: number) {
+   public async profilePictureInfo(userId: string) {
       const dir = await this.absolutePath(userId, FilesService.METADATA_FOLDER_NAME + "/prof");
       return {
          exists: this.fs.existsSync(dir),
@@ -557,7 +557,7 @@ export class FilesService {
       };
    }
 
-   public async getUsedData(userId: number) {
+   public async getUsedData(userId: string) {
       // TODO: Cache this in redis
       const root = await this.getUserRootPath(userId);
       const user = await this.userService.getById(userId);
@@ -595,7 +595,7 @@ export class FilesService {
       return used_data;
    }
 
-   public async createMetaFolderIfNotExists(userId: number): Promise<string> {
+   public async createMetaFolderIfNotExists(userId: string): Promise<string> {
       const dir = await this.absolutePath(userId, FilesService.METADATA_FOLDER_NAME);
       if (!this.fs.existsSync(dir)) this.fs.mkdirSync(dir, { recursive: true });
 
@@ -607,7 +607,7 @@ export class FilesService {
       return dir;
    }
 
-   private async updateStats(userId: number, absolute_path: string, user_agent: string) {
+   private async updateStats(userId: string, absolute_path: string, user_agent: string) {
       const root = await this.getUserRootPath(userId);
       const sanitizedRelative = path.relative(root, absolute_path); // Need this to avoid weird slashes
       const user = await this.userService.getById(userId);
@@ -643,7 +643,7 @@ export class FilesService {
       await this.fileAccessStatRepo.save(stat);
    }
 
-   public async isOwner(userId: number, absolute_path: string) {
+   public async isOwner(userId: string, absolute_path: string) {
       const root = await this.getUserRootPath(userId);
       const sanitizedRelative = path.relative(absolute_path, root);
       // If we replace all "..\" and there is still and email in the path,
@@ -657,7 +657,7 @@ export class FilesService {
       return cond;
    }
 
-   private async invalidateThumbnailsFor(userId: number, uploadedFile: UploadedFile): Promise<void> {
+   private async invalidateThumbnailsFor(userId: string, uploadedFile: UploadedFile): Promise<void> {
       const thumbnailFolder = path.join(
          await this.createMetaFolderIfNotExists(userId),
          FilesService.THUMBNAILS_FOLDER_NAME,
@@ -679,7 +679,7 @@ export class FilesService {
       }
    }
 
-   private async getCacheKeysForFile(userId: number, uploadedFile: UploadedFile): Promise<string[]> {
+   private async getCacheKeysForFile(userId: string, uploadedFile: UploadedFile): Promise<string[]> {
       const cacheKey = ThumbnailCacheInterceptor.getCacheKey(userId, uploadedFile.absolute_path, 0, 0, false);
       const pattern = `${cacheKey}*`;
       let cursor = "0";

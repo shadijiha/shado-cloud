@@ -1,10 +1,11 @@
+import { AuthedUserId } from "src/auth-client/authed-user.decorator";
 import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Logger, Inject, Delete, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { AuthGuardService } from "src/auth-client/auth.guard";
 import { AdminGuard } from "../admin.strategy";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ServiceFunction } from "../../models/admin/serviceFunction";
 import { Repository } from "typeorm";
-import { AuthUser } from "src/util";
+import {  } from "src/util";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { type Readable } from "stream";
 import vm from "vm";
@@ -20,7 +21,7 @@ import { basename, dirname } from "path";
 puppeteer.use(StealthPlugin());
 
 @Controller("admin/service_functions")
-@UseGuards(AuthGuard("jwt"), AdminGuard)
+@UseGuards(AuthGuardService, AdminGuard)
 export class ServiceFunctionsController {
     private readonly logger = new Logger(ServiceFunctionsController.name);
 
@@ -33,7 +34,7 @@ export class ServiceFunctionsController {
     ) { }
 
     @Get("all")
-    public async all(@AuthUser() userId: number) {
+    public async all(@AuthedUserId() userId: string) {
         return this.serviceFuncRepo.find({
             where: {
                 user_id: userId
@@ -43,7 +44,7 @@ export class ServiceFunctionsController {
 
     @Post("/create")
     public async create(
-        @AuthUser() userId: number,
+        @AuthedUserId() userId: string,
         @Body() body: { code: string, name?: string }
     ) {
         const func = new ServiceFunction();
@@ -57,7 +58,7 @@ export class ServiceFunctionsController {
 
     @Get(":id/get")
     public async get(
-        @AuthUser() userId: number,
+        @AuthedUserId() userId: string,
         @Param("id") id: string
     ) {
         const func = await this.serviceFuncRepo.findOne({
@@ -75,7 +76,7 @@ export class ServiceFunctionsController {
 
     @Post(":id/save")
     public async save(
-        @AuthUser() userId: number,
+        @AuthedUserId() userId: string,
         @Param("id") id: string,
         @Body() body: { code: string, name?: string, enabled?: boolean }
     ) {
@@ -102,7 +103,7 @@ export class ServiceFunctionsController {
 
     @Post(":id/execute")
     public async execute(
-        @AuthUser() userId: number,
+        @AuthedUserId() userId: string,
         @Param("id") id: string,
     ) {
         const func = await this.serviceFuncRepo.findOne({
@@ -121,7 +122,7 @@ export class ServiceFunctionsController {
 
     @Delete(":id/delete")
     public async delete(
-        @AuthUser() userId: number,
+        @AuthedUserId() userId: string,
         @Param("id") id: string,
     ) {
         const func = await this.serviceFuncRepo.findOne({
