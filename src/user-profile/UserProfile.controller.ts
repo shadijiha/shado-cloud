@@ -3,8 +3,10 @@ import {
    Controller,
    Get,
    Inject,
+   MessageEvent,
    Patch,
    Query,
+   Sse,
    UploadedFile,
    UseGuards,
    UseInterceptors,
@@ -18,6 +20,7 @@ import { LoggerToDb } from "./../logging";
 import { AuthUser } from "src/util";
 import { ChangeNameRequest, ChangePasswordRequest, ChangePictureRequest, ProfileStats } from "./user-profile-types";
 import { UserProfileService } from "./UserProfile.service";
+import { Observable, Subject } from "rxjs";
 
 @Controller("profile")
 @UseGuards(AuthGuard("jwt"))
@@ -72,11 +75,20 @@ export class UserProfileController {
       });
    }
 
-   @Patch("indexfiles")
-   @ApiResponse({ type: OperationStatusResponse })
-   public async indexFiles(@AuthUser() userId: number) {
-      return {
-         reindexCount: await this.profileService.indexFiles(userId),
-      };
+   @Sse("indexfiles")
+   public indexFiles(@AuthUser() userId: number): Observable<MessageEvent> {
+      const subject = new Subject<MessageEvent>();
+
+      this.profileService.indexFiles(userId, (current, total) => {
+         subject.next({ data: { current, total, percent: Math.round((current / total) * 100) } });
+      }).then((count) => {
+         subject.next({ data: { done: true, reindexCount: count } });
+         subject.complete();
+      }).catch((e) => {
+         subject.next({ data: { error: e.message } });
+         subject.complete();
+      });
+
+      return subject.asObservable();
    }
 }

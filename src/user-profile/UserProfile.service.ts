@@ -93,7 +93,7 @@ export class UserProfileService {
       return most_accesed_files;
    }
 
-   public async indexFiles(userId: number) {
+   public async indexFiles(userId: number, onProgress?: (current: number, total: number) => void) {
       const user = await this.userService.getById(userId);
 
       // Get current indexed files
@@ -113,6 +113,7 @@ export class UserProfileService {
 
          newFile.mime = mime;
          newIndexedFiles.push(await this.uploadedFileRepo.save(newFile));
+         onProgress?.(newIndexedFiles.length, files.length);
       }
 
       // Get all references to the uploaded files (can't delete yet because of foreign key constraints)
