@@ -26,14 +26,13 @@ export class GymController {
    @All("*path")
    async proxy(@Req() req: Request, @Res() res: Response) {
       const gymPath = req.url.replace(/^\/gym/, "");
-      const userId = this.extractGymUserId(req);
 
       try {
          const upstream = await fetch(`${this.gymBaseUrl}${gymPath}`, {
             method: req.method,
             headers: {
                "Content-Type": "application/json",
-               ...(userId ? { "x-user-id": userId } : {}),
+               ...(req.headers.cookie ? { cookie: req.headers.cookie } : {}),
             },
             body: ["GET", "HEAD"].includes(req.method) ? undefined : JSON.stringify(req.body),
          });
@@ -64,16 +63,6 @@ export class GymController {
          return res.status(upstream.status).json(data);
       } catch {
          return res.status(502).json({ error: "Gym service unavailable" });
-      }
-   }
-
-   private extractGymUserId(req: Request): string | null {
-      const token = req.cookies?.[GYM_COOKIE];
-      if (!token) return null;
-      try {
-         return this.jwtService.verify(token).sub;
-      } catch {
-         return null;
       }
    }
 

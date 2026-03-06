@@ -47,7 +47,10 @@ async function bootstrap() {
          "The Shado Cloud API description\n\n" +
          "### Music API\n" +
          "All `/music/*` endpoints are proxied to the [shado-music-api](https://github.com/shadijiha/shado-music-api) microservice over TCP. " +
-         "See the microservice repo for the full API reference.",
+         "See the microservice repo for the full API reference.\n\n" +
+         "### Gym API\n" +
+         "All `/gym/*` endpoints are proxied to the [shado-gym-api](https://github.com/shadijiha/shado-gym-api) microservice over HTTP. " +
+         "See the microservice's own Swagger UI at `/api` on port `10001` for the full API reference.",
       )
       .setVersion("1.0")
       .addTag("")
