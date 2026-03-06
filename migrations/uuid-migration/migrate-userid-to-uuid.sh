@@ -126,6 +126,7 @@ UPDATE playlist p JOIN _user_uuid_map m ON p.userId = m.old_id SET p.userId = m.
 UPDATE play_history ph JOIN _user_uuid_map m ON ph.userId = m.old_id SET ph.userId = m.new_id;
 
 -- ── Convert user PK ──
+ALTER TABLE user MODIFY id INT NOT NULL;
 ALTER TABLE user DROP PRIMARY KEY;
 ALTER TABLE user MODIFY id VARCHAR(36) NOT NULL;
 UPDATE user u JOIN _user_uuid_map m ON u.id = m.old_id SET u.id = m.new_id;

@@ -16,11 +16,13 @@ DB_NAME="${DB_NAME:-shado_cloud_nestjs}"
 BACKUP_FILE="${1:-}"
 
 if [ -z "$BACKUP_FILE" ]; then
-  echo "Usage: $0 <backup_file.sql.gz>"
-  echo ""
-  echo "Available backups:"
-  ls -1 "$(dirname "$0")"/backup_*.sql.gz 2>/dev/null || echo "  (none found)"
-  exit 1
+  # Auto-pick the oldest backup
+  BACKUP_FILE=$(ls -1t "$(dirname "$0")"/backup_*.sql.gz 2>/dev/null | tail -1)
+  if [ -z "$BACKUP_FILE" ]; then
+    echo "Error: No backup files found."
+    exit 1
+  fi
+  echo "Auto-selected oldest backup: ${BACKUP_FILE}"
 fi
 
 if [ ! -f "$BACKUP_FILE" ]; then
