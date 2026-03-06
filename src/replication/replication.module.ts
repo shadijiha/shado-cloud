@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ReplicationService } from "./replication.service";
+import { GoogleDriveBackupService } from "./google-drive-backup.service";
 import { LocalNetworkMiddleware } from "./local-network.middleware";
 import { ReplicationController } from "./replication.controller";
 import { ConditionalModule, ConfigModule } from "@nestjs/config";
@@ -35,6 +36,7 @@ import { AdminModule } from "src/admin/admin.module";
    controllers: [ReplicationController],
    providers: [
       ReplicationService,
+      GoogleDriveBackupService,
       {
          provide: AbstractFileSystem,
          useClass: NodeFileSystemService,

@@ -209,6 +209,21 @@ export class EnvVariables {
    MUSIC_API_PORT: number;
 
    /**
+    * Google Drive backup
+    */
+   @IsOptional()
+   @IsString()
+   GOOGLE_CLIENT_ID: string;
+
+   @IsOptional()
+   @IsString()
+   GOOGLE_CLIENT_SECRET: string;
+
+   @IsOptional()
+   @IsString()
+   GOOGLE_REFRESH_TOKEN: string;
+
+   /**
     * Display
     */
    @IsOptional()
