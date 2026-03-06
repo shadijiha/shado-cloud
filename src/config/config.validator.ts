@@ -209,6 +209,19 @@ export class EnvVariables {
    MUSIC_API_PORT: number;
 
    /**
+    * Gym microservice
+    */
+   @IsOptional()
+   @IsString()
+   GYM_SERVICE_HOST: string;
+
+   @IsOptional()
+   @IsNumber()
+   @Min(0)
+   @Max(65535)
+   GYM_API_PORT: number;
+
+   /**
     * Display
     */
    @IsOptional()

@@ -25,6 +25,7 @@ import { FeatureFlagService } from "./admin/feature-flag.service";
 import { FeatureFlag } from "./models/admin/featureFlag";
 import { ReplicationModule } from "./replication/replication.module";
 import { MusicClientModule } from "./music-client/music-client.module";
+import { GymClientModule } from "./gym-client/gym-client.module";
 
 @Global()
 @Module({
@@ -119,6 +120,7 @@ export class GlobalUtilityModule {}
       UserProfileModule,
       ReplicationModule,
       MusicClientModule,
+      GymClientModule,
    ],
    controllers: [AppController],
    providers: [
