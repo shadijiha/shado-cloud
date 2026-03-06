@@ -9,9 +9,9 @@ set -euo pipefail
 
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-3306}"
-DB_USER="${DB_USER:-root}"
-DB_PASS="${DB_PASS:-}"
-DB_NAME="${DB_NAME:-shado_cloud}"
+DB_USER="${DB_USER:-shadi}"
+DB_PASS="${DB_PASS:-password}"
+DB_NAME="${DB_NAME:-shado_cloud_nestjs}"
 
 BACKUP_FILE="${1:-}"
 
