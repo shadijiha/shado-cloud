@@ -238,9 +238,7 @@ export class AdminService {
          const dbHost = this.config.get("DB_HOST") || "localhost";
          const dbUser = this.config.get("DB_USERNAME");
          const dbPass = this.config.get("DB_PASSWORD");
-         const mysqldump = isMac ? "/opt/homebrew/bin/mysqldump" : "mysqldump";
-         
-         const dumpCmd = `${mysqldump} -h ${dbHost} -u ${dbUser} -p'${dbPass}' --all-databases > ${tmpDir}/mysql-dump.sql`;
+         const dumpCmd = `mysqldump -h ${dbHost} -u ${dbUser} -p'${dbPass}' --protocol=tcp --all-databases > ${tmpDir}/mysql-dump.sql`;
          await this.execSync(dumpCmd);
       } catch (e) {
          errors.push(`MySQL dump failed: ${(e as Error).message}`);
@@ -326,15 +324,14 @@ export class AdminService {
          const dbHost = this.config.get("DB_HOST") || "localhost";
          const dbUser = this.config.get("DB_USERNAME");
          const dbPass = this.config.get("DB_PASSWORD");
-         const mysqldump = isMac ? "/opt/homebrew/bin/mysqldump" : "mysqldump";
-         
          await new Promise<void>((resolve, reject) => {
             const dumpPath = `${tmpDir}/mysql-dump.sql`;
             const output = this.fs.createWriteStream(dumpPath);
-            const child = require("child_process").spawn(mysqldump, [
+            const child = require("child_process").spawn("mysqldump", [
                "-h", dbHost,
                "-u", dbUser,
                `-p${dbPass}`,
+               "--protocol=tcp",
                "--all-databases"
             ]);
 
