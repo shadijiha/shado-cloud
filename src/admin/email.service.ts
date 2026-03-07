@@ -17,8 +17,11 @@ export class EmailService {
         const refreshToken = this.config.get<string | undefined>("GOOGLE_REFRESH_TOKEN");
 
         if (email && clientId && refreshToken) {
+            this.logger.log(`Email transport: OAuth2 with ${email}`);
             this.transporter = nodemailer.createTransport({
-                service: "gmail",
+                host: "smtp.gmail.com",
+                port: 465,
+                secure: true,
                 auth: {
                     type: "OAuth2",
                     user: config.get("EMAIL_USER"),
