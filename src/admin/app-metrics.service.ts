@@ -231,33 +231,32 @@ export class AppMetricsService {
       const keyValuePairs: Record<string, string | object> = {};
 
       for (const key of allKeys) {
-         const value = await this.redis.get(key); // This works for string values
-         if (value) {
-            keyValuePairs[key] = this.trimString(value); // Trim long string values
-         } else {
-            // If the value is not a string, try other types like hashes, lists, etc.
-            const hashValue = await this.redis.hgetall(key);
-            if (Object.keys(hashValue).length > 0) {
-               keyValuePairs[key] = hashValue;
+         const type = await this.redis.type(key);
+         switch (type) {
+            case "string": {
+               const v = await this.redis.get(key);
+               if (v) keyValuePairs[key] = this.trimString(v);
+               break;
             }
-
-            const listValue = await this.redis.lrange(key, 0, -1); // List
-            if (listValue.length > 0) {
-               keyValuePairs[key] = listValue;
+            case "hash": {
+               keyValuePairs[key] = await this.redis.hgetall(key);
+               break;
             }
-
-            const setValue = await this.redis.smembers(key); // Set
-            if (setValue.length > 0) {
-               keyValuePairs[key] = setValue;
+            case "list": {
+               keyValuePairs[key] = await this.redis.lrange(key, 0, -1);
+               break;
             }
-
-            const zsetValue = await this.redis.zrange(key, 0, -1); // Sorted Set
-            if (zsetValue.length > 0) {
-               keyValuePairs[key] = zsetValue;
+            case "set": {
+               keyValuePairs[key] = await this.redis.smembers(key);
+               break;
+            }
+            case "zset": {
+               keyValuePairs[key] = await this.redis.zrange(key, 0, -1);
+               break;
             }
          }
       }
-      return keyValuePairs; // You can log it, return it, or store it as needed.
+      return keyValuePairs;
    }
 
    // Helper method to fetch all keys using SCAN to avoid blocking the Redis server
@@ -266,7 +265,7 @@ export class AppMetricsService {
       let allKeys: string[] = [];
 
       do {
-         const result = await this.redis.scan(cursor);
+         const result = await this.redis.scan(cursor, "COUNT", 200);
          cursor = result[0];
          allKeys = allKeys.concat(result[1]);
       } while (cursor !== "0"); // Continue until all keys are retrieved
