@@ -10,6 +10,22 @@ A fully featured cloud drive with remote desktop streaming.
 - Admin panel
 - Music streaming via [Smusic](https://github.com/shadijiha/shado-music-api) *(separate microservice, not included in this repo)*
 
+## Quick Server Setup
+
+To provision a fresh Ubuntu machine into a fully working Shado Cloud server, run:
+
+```bash
+cd setup-new-server-script
+chmod +x master-setup.sh
+./master-setup.sh
+```
+
+This installs all dependencies (Node.js, Docker, Apache, Chromium, MediaMTX, Certbot, etc.), sets up Git SSH keys, clones all repos, restores the database and cloud files from the existing server's backup API, configures HTTPS with Let's Encrypt, and starts everything via PM2.
+
+See [`setup-new-server-script/`](setup-new-server-script/) for details.
+
+---
+
 ## Architecture
 
 ```
