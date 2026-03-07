@@ -20,8 +20,11 @@ export class EmailService {
             this.transporter = nodemailer.createTransport({
                 service: "gmail",
                 auth: {
-                    user: config.get("EMAIL_USER"), // Your email address
-                    pass: config.get("EMAIL_APP_PASSWORD"), // Your email password (or app-specific password)
+                    type: "OAuth2",
+                    user: config.get("EMAIL_USER"),
+                    clientId: config.get("GOOGLE_CLIENT_ID"),
+                    clientSecret: config.get("GOOGLE_CLIENT_SECRET"),
+                    refreshToken: config.get("GOOGLE_REFRESH_TOKEN"),
                 },
             });
         } else {
