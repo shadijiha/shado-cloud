@@ -52,3 +52,6 @@ Homestead.json
 Homestead.yaml
 
 shado_cloud_sqlite
+
+# Setup script venv
+setup-new-server-script/.venv/

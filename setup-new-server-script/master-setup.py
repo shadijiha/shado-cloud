@@ -6,12 +6,9 @@ Provisions a fresh Ubuntu machine into a fully working server.
 Run via:  chmod +x master-setup.sh && ./master-setup.sh
 """
 
-import getpass, json, os, re, shutil, subprocess, sys, tempfile, textwrap, zipfile
+import getpass, json, os, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError
-from http.cookiejar import CookieJar
-from urllib.request import HTTPCookieProcessor, build_opener
+import requests
 
 # ── Config ────────────────────────────────────────────────────────────────────
 API_BASE = "https://cloud.shadijiha.com/apinest"
@@ -28,6 +25,7 @@ REPOS = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 C = "\033[0;36m"; G = "\033[0;32m"; Y = "\033[1;33m"; R = "\033[0;31m"; N = "\033[0m"
+USER = os.environ.get("USER") or os.environ.get("LOGNAME") or subprocess.run("whoami", shell=True, capture_output=True, text=True).stdout.strip() or "root"
 
 def step(num: str, msg: str):
     print(f"\n{C}━━━ [{num}] {msg} ━━━{N}")
@@ -63,80 +61,74 @@ def human_bytes(n: float) -> str:
         n /= 1024
     return f"{n:.1f} TB"
 
-# ── HTTP client (cookie-aware) ────────────────────────────────────────────────
-cookie_jar = CookieJar()
-opener = build_opener(HTTPCookieProcessor(cookie_jar))
+# ── HTTP client (requests-based) ──────────────────────────────────────────────
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "Mozilla/5.0 ShadoCloudSetup/1.0",
+    "Origin": "https://cloud.shadijiha.com",
+})
 
-def api(method: str, path: str, body: dict | None = None, stream=False) -> any:
+def api(method: str, path: str, body: dict | None = None):
     url = f"{API_BASE}/{path.lstrip('/')}"
-    data = json.dumps(body).encode() if body else None
-    req = Request(url, data=data, method=method)
-    req.add_header("Content-Type", "application/json")
-    resp = opener.open(req)
-    if stream:
-        return resp  # caller reads line-by-line
-    return json.loads(resp.read().decode())
+    resp = session.request(method, url, json=body)
+    resp.raise_for_status()
+    return resp.json()
 
 def download_file(path: str, dest: Path):
     """Download a file from the API to disk, showing progress."""
     url = f"{API_BASE}/{path.lstrip('/')}"
-    req = Request(url)
-    resp = opener.open(req)
-    total = int(resp.headers.get("Content-Length", 0))
-    downloaded = 0
-    with open(dest, "wb") as f:
-        while True:
-            chunk = resp.read(65536)
-            if not chunk:
-                break
-            f.write(chunk)
-            downloaded += len(chunk)
-            if total:
-                pct = downloaded * 100 // total
-                print(f"\r  Downloading... {human_bytes(downloaded)} / {human_bytes(total)} ({pct}%)", end="", flush=True)
-            else:
-                print(f"\r  Downloading... {human_bytes(downloaded)}", end="", flush=True)
+    with session.get(url, stream=True) as resp:
+        resp.raise_for_status()
+        total = int(resp.headers.get("Content-Length", 0))
+        downloaded = 0
+        with open(dest, "wb") as f:
+            for chunk in resp.iter_content(65536):
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total:
+                    pct = downloaded * 100 // total
+                    print(f"\r  Downloading... {human_bytes(downloaded)} / {human_bytes(total)} ({pct}%)", end="", flush=True)
+                else:
+                    print(f"\r  Downloading... {human_bytes(downloaded)}", end="", flush=True)
     print()
 
-# ── SSE reader ────────────────────────────────────────────────────────────────
 def follow_sse(path: str) -> str | None:
-    """
-    Follow an SSE endpoint, print progress, return the downloadPath on completion.
-    """
-    resp = api("GET", path, stream=True)
+    """Follow an SSE endpoint, print progress, return the downloadPath on completion."""
+    url = f"{API_BASE}/{path.lstrip('/')}"
     download_path = None
-    for raw_line in resp:
-        line = raw_line.decode("utf-8", errors="replace").strip()
-        if not line.startswith("data:"):
-            continue
-        data_str = line[len("data:"):].strip()
-        try:
-            data = json.loads(data_str)
-        except json.JSONDecodeError:
-            continue
+    with session.get(url, stream=True) as resp:
+        resp.raise_for_status()
+        for raw_line in resp.iter_lines():
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line.startswith("data:"):
+                continue
+            data_str = line[len("data:"):].strip()
+            try:
+                data = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
 
-        evt_type = data.get("type", "")
-        if evt_type == "progress":
-            step_msg = data.get("step", "")
-            pct = data.get("percent", "")
-            total = data.get("totalBytes")
-            processed = data.get("processedBytes")
-            parts = [step_msg]
-            if pct not in ("", None):
-                parts.append(f"{pct}%")
-            if total and processed:
-                parts.append(f"({human_bytes(processed)} / {human_bytes(total)})")
-            print(f"\r  {Y}{' — '.join(parts)}{N}          ", end="", flush=True)
-        elif evt_type == "complete":
-            print()
-            download_path = data.get("downloadPath")
-            ok("Backup ready on server")
-            break
-        elif evt_type == "error":
-            print()
-            warn(f"Server error: {data.get('message', '?')}")
-            break
-    resp.close()
+            evt_type = data.get("type", "")
+            if evt_type == "progress":
+                step_msg = data.get("step", "")
+                pct = data.get("percent", "")
+                total = data.get("totalBytes")
+                processed = data.get("processedBytes")
+                parts = [step_msg]
+                if pct not in ("", None):
+                    parts.append(f"{pct}%")
+                if total and processed:
+                    parts.append(f"({human_bytes(processed)} / {human_bytes(total)})")
+                print(f"\r  {Y}{' — '.join(parts)}{N}          ", end="", flush=True)
+            elif evt_type == "complete":
+                print()
+                download_path = data.get("downloadPath")
+                ok("Backup ready on server")
+                break
+            elif evt_type == "error":
+                print()
+                warn(f"Server error: {data.get('message', '?')}")
+                break
     return download_path
 
 
@@ -218,15 +210,14 @@ def main():
     step("2/10", "Installing Docker")
     if shutil.which("docker") is None:
         run("curl -fsSL https://get.docker.com | sudo sh")
-        run(f"sudo usermod -aG docker {os.environ['USER']}")
+        run(f"sudo usermod -aG docker {USER}")
         ok("Docker installed (re-login for group to take effect)")
     else:
         ok("Docker already installed")
-    run("sudo systemctl enable --now docker")
-    # docker compose plugin
+    run("sudo systemctl enable --now docker", check=False)
+    ok("Docker ready")
     if run_quiet("docker compose version").returncode != 0:
-        run("sudo apt install -y docker-compose-plugin")
-    ok("Docker + Compose ready")
+        run("sudo apt install -y docker-compose-plugin", check=False)
 
     # ── 3. Node.js (latest LTS) ──────────────────────────────────────────────
     step("3/10", "Installing latest Node.js")
@@ -238,6 +229,7 @@ def main():
     else:
         ok(f"Node already installed: {node_ver.stdout.strip()}")
     run("sudo npm install -g pm2 @nestjs/cli", check=False)
+    run("sudo pip3 install yt-dlp --break-system-packages 2>/dev/null || sudo pip3 install yt-dlp", check=False)
     ok(f"Node {run_quiet('node -v').stdout.strip()} / npm {run_quiet('npm -v').stdout.strip()} / pm2 + nest-cli")
 
     # ── 4. Clone repos ────────────────────────────────────────────────────────
@@ -257,11 +249,13 @@ def main():
     step("5/10", "Authenticating with Shado Cloud API")
     try:
         resp = api("POST", "/auth/login", {"email": ADMIN_EMAIL, "password": password})
-    except HTTPError as e:
+    except requests.RequestException as e:
         fail(f"Login request failed: {e}")
-    errors = resp.get("errors", [])
-    if errors:
-        fail(f"Login failed: {errors[0].get('message', 'Unknown error')}")
+    if not resp.get("user"):
+        errors = resp.get("errors", [])
+        msg = errors[0].get("message", "Unknown error") if errors else "Unknown error"
+        fail(f"Login failed: {msg}")
+    ok("Authenticated successfully")
     ok("Authenticated successfully")
 
     # ── 6. Server backup (DB + .env + Apache) via SSE ─────────────────────────
@@ -306,44 +300,72 @@ def main():
             content = re.sub(r"^CLOUD_DIR=.*$", f"CLOUD_DIR={CLOUD_DIR}", content, flags=re.M)
             content = re.sub(r"^FRONTEND_DEPLOY_PATH=.*$", "FRONTEND_DEPLOY_PATH=/var/www/html/shado-cloud-frontend/build", content, flags=re.M)
             content = re.sub(r"^ENV=.*$", "ENV=prod", content, flags=re.M)
+            content = re.sub(r"^DB_HOST=.*$", "DB_HOST=localhost", content, flags=re.M)
+            content = re.sub(r"^REDIS_HOST=.*$", "REDIS_HOST=localhost", content, flags=re.M)
             # Ensure Puppeteer uses system Chromium
             if "PUPPETEER_EXECUTABLE_PATH" not in content:
                 content += "\nPUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser\n"
             env_dest.write_text(content)
             ok(".env copied and patched")
 
-    # Apache config — prefer the one from the server backup (production config)
+    # Apache config — use the repo version (HTTP-only) so Apache can start,
+        # then Certbot will add SSL config automatically
         apache_src = extract_dir / "apache-config.conf"
+        run(f"sudo cp {cloud_app / 'deploy/shado-cloud.conf'} /etc/apache2/sites-available/shado-cloud.conf")
+        # Save the production config for reference
         if apache_src.exists():
-            run(f"sudo cp {apache_src} /etc/apache2/sites-available/shado-cloud.conf")
-            ok("Apache config restored from server backup")
-        else:
-            run(f"sudo cp {cloud_app / 'deploy/shado-cloud.conf'} /etc/apache2/sites-available/shado-cloud.conf")
-            ok("Apache config copied from repo (no backup found)")
+            run(f"sudo cp {apache_src} /etc/apache2/sites-available/shado-cloud-production-backup.conf")
+        ok("Apache config installed (HTTP-only, Certbot will add SSL)")
 
-        # Start Docker (MySQL + Redis) before seeding
-        print("  Starting Docker services (MySQL + Redis)...")
-        run(f"docker compose -f {cloud_app / 'docker-compose.yml'} up -d mysql redis")
-        print("  Waiting for MySQL to be healthy...", end="", flush=True)
-        for _ in range(60):
-            r = run_quiet("docker exec mysql-db-shado-cloud mysqladmin ping -h localhost --silent")
-            if r.returncode == 0:
+        # Start MySQL & Redis (native installs)
+        print("  Installing MySQL and Redis...")
+        run("sudo apt install -y mysql-server redis-server")
+        run("sudo systemctl enable --now mysql", check=False)
+        run("sudo systemctl enable --now redis-server", check=False)
+
+        print("  Waiting for MySQL to be ready...", end="", flush=True)
+        import time
+        for _ in range(30):
+            if run_quiet("sudo mysqladmin ping --silent").returncode == 0:
                 break
             print(".", end="", flush=True)
-            import time; time.sleep(2)
+            time.sleep(2)
         print()
         ok("MySQL is ready")
+
+        # Read DB creds from .env
+        db_pass = db_user = db_name = ""
+        for line in env_dest.read_text().splitlines():
+            if line.startswith("DB_PASSWORD="): db_pass = line.split("=", 1)[1]
+            if line.startswith("DB_USERNAME="): db_user = line.split("=", 1)[1]
+            if line.startswith("DB_NAME="): db_name = line.split("=", 1)[1]
+
+        # Setup MySQL user and database
+        print("  Configuring MySQL user and database...")
+        sql_cmds = f"""
+CREATE DATABASE IF NOT EXISTS \`{db_name}\`;
+CREATE USER IF NOT EXISTS '{db_user}'@'localhost' IDENTIFIED BY '{db_pass}';
+ALTER USER '{db_user}'@'localhost' IDENTIFIED BY '{db_pass}';
+GRANT ALL PRIVILEGES ON \`{db_name}\`.* TO '{db_user}'@'localhost';
+FLUSH PRIVILEGES;
+"""
+        run(f"sudo mysql -e \"{sql_cmds}\"")
+        ok("MySQL user and database configured")
+
+        # Configure Redis password
+        redis_pass = ""
+        for line in env_dest.read_text().splitlines():
+            if line.startswith("REDIS_PASSWORD="): redis_pass = line.split("=", 1)[1]
+        if redis_pass:
+            run(f"sudo sed -i 's/^# *requirepass .*/requirepass {redis_pass}/' /etc/redis/redis.conf")
+            run("sudo systemctl restart redis-server", check=False)
+            ok("Redis password configured")
 
         # Seed DB
         sql_dump = extract_dir / "mysql-dump.sql"
         if sql_dump.exists():
-            # Read DB_PASSWORD from the patched .env
-            db_pass = ""
-            for line in env_dest.read_text().splitlines():
-                if line.startswith("DB_PASSWORD="):
-                    db_pass = line.split("=", 1)[1]
             print("  Importing MySQL dump...")
-            run(f"docker exec -i mysql-db-shado-cloud mysql -u root -p'{db_pass}' < {sql_dump}")
+            run(f"sudo mysql < {sql_dump}")
             ok("Database seeded")
 
         # Cleanup
@@ -411,7 +433,7 @@ def main():
     ok("MediaMTX installed")
 
     # MediaMTX systemd
-    user = os.environ["USER"]
+    user = USER
     home = str(Path.home())
     run(f"""sudo tee /etc/systemd/system/mediamtx.service > /dev/null <<'EOF'
 [Unit]
@@ -426,7 +448,7 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF""")
-    run("sudo systemctl daemon-reload && sudo systemctl enable mediamtx")
+    run("sudo systemctl daemon-reload && sudo systemctl enable mediamtx", check=False)
     ok("MediaMTX service configured")
 
     # Apache + HTTPS (Let's Encrypt)
@@ -434,7 +456,7 @@ EOF""")
     run("sudo a2enmod proxy proxy_http proxy_wstunnel rewrite headers ssl")
     run("sudo a2dissite 000-default.conf 2>/dev/null || true")
     run("sudo a2ensite shado-cloud.conf")
-    run("sudo systemctl enable apache2 && sudo systemctl restart apache2")
+    run("sudo systemctl enable apache2 && sudo systemctl restart apache2", check=False)
     ok("Apache configured (HTTP)")
 
     # SSL — Let's Encrypt via Certbot
@@ -499,6 +521,8 @@ EOF""")
 
     # ── Done ──────────────────────────────────────────────────────────────────
     domain_str = domains[0] if domains else "localhost"
+    local_ip = run_quiet("hostname -I").stdout.strip().split()[0] if run_quiet("hostname -I").returncode == 0 else "unknown"
+    gateway = run_quiet("ip route | grep default | awk '{print $3}'").stdout.strip() or "unknown"
     print(f"""
 {G}╔══════════════════════════════════════════════╗
 ║   Setup Complete!                            ║
@@ -517,6 +541,10 @@ EOF""")
   {Y}sudo certbot renew --dry-run{N} — test auto-renewal
 
   {R}NOTE: Log out and back in for Docker group permissions.{N}
+
+  {Y}⚠ Don't forget to forward ports 80 and 443 in your router settings!{N}
+    This device IP: {C}{local_ip}{N}
+    Router admin:   {C}http://{gateway}{N}
 """)
 
 

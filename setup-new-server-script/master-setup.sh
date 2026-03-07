@@ -10,4 +10,8 @@ sudo apt update
 sudo apt install -y python3 python3-pip python3-venv curl
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec python3 "$SCRIPT_DIR/master-setup.py" "$@"
+VENV_DIR="$SCRIPT_DIR/.venv"
+
+python3 -m venv "$VENV_DIR"
+"$VENV_DIR/bin/pip" install --quiet requests
+exec "$VENV_DIR/bin/python3" "$SCRIPT_DIR/master-setup.py" "$@"
