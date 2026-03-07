@@ -48,7 +48,6 @@ describe("AdminService", () => {
                useValue: {
                   get: jest.fn().mockImplementation((key: string) => {
                      if (key === "EMAIL_USER") return "test@example.com";
-                     if (key === "EMAIL_APP_PASSWORD") return "app-password";
                      return undefined;
                   }),
                },

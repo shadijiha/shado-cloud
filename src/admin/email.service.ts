@@ -13,10 +13,10 @@ export class EmailService {
         @Inject() private readonly config: ConfigService<EnvVariables>,
     ) {
         const email = this.config.get<string | undefined>("EMAIL_USER");
-        const password = this.config.get<string | undefined>("EMAIL_APP_PASSWORD");
+        const clientId = this.config.get<string | undefined>("GOOGLE_CLIENT_ID");
+        const refreshToken = this.config.get<string | undefined>("GOOGLE_REFRESH_TOKEN");
 
-        // We only want to send emails if credentials are defined in the env
-        if (email && password) {
+        if (email && clientId && refreshToken) {
             this.transporter = nodemailer.createTransport({
                 service: "gmail",
                 auth: {
