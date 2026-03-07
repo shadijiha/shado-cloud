@@ -1,1 +1,0 @@
-export const MUSIC_SERVICE = "MUSIC_SERVICE";

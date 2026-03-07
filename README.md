@@ -8,37 +8,23 @@ A fully featured cloud drive with remote desktop streaming.
 - Secure JWT authentication
 - Remote desktop streaming via WebRTC
 - Admin panel
-- Music streaming via [Smusic](https://github.com/shadijiha/shado-music-api) microservice
+- Music streaming via [Smusic](https://github.com/shadijiha/shado-music-api) *(separate microservice, not included in this repo)*
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐              ┌──────────────────────────────────┐
-│     shado-cloud (HTTP :9000)        │  TCP :9001   │   shado-music-api                │
-│                                     │ ────────────►│                                  │
-│  MusicController ──► ClientProxy    │  RPC (JSON)  │  MusicMicroserviceController     │
-│    search, playlists, pull, etc.    │              │    @MessagePattern handlers       │
-│    streamSong/thumbnail             │              │    Observable<event> for SSE      │
-│      ──► FilesService.asStream()    │              │                                  │
-│                                     │  HTTP :9000  │  CloudStorageClient (interface)   │
-│  InternalController                 │ ◄────────────│    ──► HttpCloudStorageClient     │
-│    /internal/file/* (service-key)   │  file ops    │    upload, exists, fileInfo       │
-│                                     │              │                                  │
-│  FilesController                    │              │  No HTTP server                   │
-│  DirsController                     │              │  No auth module                   │
-│  TempUrlController                  │              │  No CLOUD_DIR knowledge           │
-│  AuthController                     │              │  Own DB connection                │
-│  AdminModule (Remote Desktop, etc.) │              │  HeartbeatService → /admin        │
-│  UserProfileModule                  │              └──────────────────────────────────┘
+┌─────────────────────────────────────┐
+│     shado-cloud (HTTP :9000)        │
+│                                     │
+│  FilesController                    │
+│  DirsController                     │
+│  TempUrlController                  │
+│  AuthController                     │
+│  AdminModule (Remote Desktop, etc.) │
+│  UserProfileModule                  │
 │  Swagger + JWT Auth (HTTP layer)    │
-│  ServiceKeyGuard (service-to-service)│
 └─────────────────────────────────────┘
 ```
-
-Shado Cloud acts as the HTTP API gateway. The music microservice is a pure TCP service with no HTTP server, no auth, and no filesystem access.
-
-- **`:9001` TCP (shado-cloud → music)** — NestJS `@nestjs/microservices` TCP transport for JSON RPC (search, CRUD, YouTube pull, etc.) and Observable-based SSE streaming (playlist import progress). Streaming endpoints return metadata (userId, relativePath, contentType); shado-cloud uses its own `FilesService` to read files directly.
-- **`:9000` HTTP (music → shado-cloud)** — The music microservice calls back to shado-cloud's `/internal/*` endpoints (protected by `x-service-key`) for file operations: uploading yt-dlp downloads, checking file existence, and querying file info. This is behind a `CloudStorageClient` interface that can be swapped to TCP in the future.
 
 ## Screenshots
 
@@ -227,13 +213,6 @@ sudo systemctl restart apache2
 ### 4. Environment Variables
 
 Create `.env` in the shado-cloud directory with required variables (see `.env.example`).
-
-Music microservice variables:
-
-| Variable | Description |
-|---|---|
-| `MUSIC_SERVICE_HOST` | Hostname of the music microservice (default: `localhost`) |
-| `MUSIC_API_PORT` | TCP port for music RPC (default: `9001`) |
 
 ### 5. Running the Application
 

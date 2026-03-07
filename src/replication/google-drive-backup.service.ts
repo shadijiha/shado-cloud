@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { EnvVariables } from "src/config/config.validator";
@@ -9,16 +9,12 @@ import { LoggerToDb } from "src/logging";
 const GOOGLE_DRIVE_FOLDER_ID = "1cZIPqmwJkh9gP4DvavzwwJMQ9bBpKWvU";
 
 @Injectable()
-export class GoogleDriveBackupService implements OnModuleInit {
+export class GoogleDriveBackupService {
     constructor(
         private readonly config: ConfigService<EnvVariables>,
         @Inject() private readonly adminService: AdminService,
         @Inject() private readonly logger: LoggerToDb,
     ) {}
-
-    onModuleInit() {
-        this.backup();
-    }
 
     @Cron(CronExpression.EVERY_DAY_AT_3AM)
     public async backup() {
