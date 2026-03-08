@@ -5,6 +5,8 @@ import { EnvVariables } from "src/config/config.validator";
 import { google } from "googleapis";
 import { AdminService } from "src/admin/admin.service";
 import { LoggerToDb } from "src/logging";
+import { FeatureFlagService } from "src/admin/feature-flag.service";
+import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 
 const GOOGLE_DRIVE_FOLDER_ID = "1cZIPqmwJkh9gP4DvavzwwJMQ9bBpKWvU";
 
@@ -14,10 +16,16 @@ export class GoogleDriveBackupService {
         private readonly config: ConfigService<EnvVariables>,
         @Inject() private readonly adminService: AdminService,
         @Inject() private readonly logger: LoggerToDb,
+        @Inject() private readonly featureFlagService: FeatureFlagService,
     ) {}
 
     @Cron(CronExpression.EVERY_DAY_AT_3AM)
     public async backup() {
+        if (await this.featureFlagService.isFeatureFlagEnabled(FeatureFlagNamespace.Replication, "disable_google_drive_db_backup")) {
+            this.logger.log("Google Drive backup skipped: feature flag disabled");
+            return;
+        }
+
         if (!this.config.get("GOOGLE_CLIENT_ID") || !this.config.get("GOOGLE_REFRESH_TOKEN")) {
             this.logger.warn("Google Drive backup skipped: missing Google OAuth credentials");
             return;
