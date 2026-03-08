@@ -49,6 +49,57 @@ export class AppMetricsService {
       });
    }
 
+   public async getSystemInfo() {
+      const isMac = process.platform === "darwin";
+      
+      // Local IP
+      let localIp = "Unknown";
+      const nets = os.networkInterfaces();
+      for (const ifaces of Object.values(nets)) {
+         for (const iface of ifaces || []) {
+            if (iface.family === "IPv4" && !iface.internal) {
+               localIp = iface.address;
+               break;
+            }
+         }
+         if (localIp !== "Unknown") break;
+      }
+
+      // Public IP
+      let publicIp = "Unknown";
+      try {
+         const { stdout } = await execAsync("curl -s --max-time 3 https://api.ipify.org");
+         if (stdout.trim()) publicIp = stdout.trim();
+      } catch {}
+
+      // MAC address
+      let macAddress = "Unknown";
+      for (const ifaces of Object.values(nets)) {
+         for (const iface of ifaces || []) {
+            if (!iface.internal && iface.mac && iface.mac !== "00:00:00:00:00:00") {
+               macAddress = iface.mac;
+               break;
+            }
+         }
+         if (macAddress !== "Unknown") break;
+      }
+
+      return {
+         hostname: os.hostname(),
+         platform: process.platform,
+         os: `${os.type()} ${os.release()}`,
+         arch: os.arch(),
+         localIp,
+         publicIp,
+         macAddress,
+         cpuModel: os.cpus()[0]?.model || "Unknown",
+         cpuCores: os.cpus().length,
+         totalMemory: os.totalmem(),
+         nodeVersion: process.version,
+         uptime: os.uptime(),
+      };
+   }
+
    public async getSystemMetrics() {
       const isMac = process.platform === "darwin";
 

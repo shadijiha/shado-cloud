@@ -165,6 +165,12 @@ export class AdminController {
       }
    }
 
+   @Get("metrics/system-info")
+   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   public getSystemInfo() {
+      return this.metrics.getSystemInfo();
+   }
+
    @Get("metrics/system")
    @UseGuards(AuthGuard("jwt"), AdminGuard)
    public getSystemMetrics() {
