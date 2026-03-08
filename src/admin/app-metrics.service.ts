@@ -21,6 +21,7 @@ const REDIS_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 export class AppMetricsService {
    // Max length of string values to dump
    private readonly maxLength = 150;
+   private prevCpuTimes: { idle: number; total: number }[] = [];
 
    constructor(@Inject(REDIS_CACHE) private readonly redis: Redis) {}
 
@@ -84,6 +85,86 @@ export class AppMetricsService {
          if (macAddress !== "Unknown") break;
       }
 
+      // Full CPU name
+      let cpuName = os.cpus()[0]?.model || "Unknown";
+      try {
+         if (isMac) {
+            const { stdout } = await execAsync("sysctl -n machdep.cpu.brand_string");
+            if (stdout.trim()) cpuName = stdout.trim();
+         } else {
+            const { stdout } = await execAsync("cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d: -f2");
+            if (stdout.trim()) cpuName = stdout.trim();
+         }
+      } catch {}
+
+      // Motherboard
+      let motherboard = "Unknown";
+      try {
+         if (isMac) {
+            const { stdout } = await execAsync("sysctl -n hw.model");
+            if (stdout.trim()) motherboard = stdout.trim();
+         } else {
+            const { stdout: mfg } = await execAsync("cat /sys/devices/virtual/dmi/id/board_vendor 2>/dev/null || echo Unknown");
+            const { stdout: prod } = await execAsync("cat /sys/devices/virtual/dmi/id/board_name 2>/dev/null || echo Unknown");
+            motherboard = `${mfg.trim()} ${prod.trim()}`.trim();
+         }
+      } catch {}
+
+      // Memory speed
+      let memorySpeed = "Unknown";
+      try {
+         if (isMac) {
+            const { stdout } = await execAsync("system_profiler SPMemoryDataType 2>/dev/null | grep Speed | head -1");
+            const match = stdout.match(/Speed:\s*(.+)/);
+            if (match) memorySpeed = match[1].trim();
+         } else {
+            const { stdout } = await execAsync("dmidecode -t memory 2>/dev/null | grep -i 'configured memory speed' | head -1 || echo ''");
+            const match = stdout.match(/:\s*(.+)/);
+            if (match && match[1].trim() !== "Unknown") memorySpeed = match[1].trim();
+         }
+      } catch {}
+
+      // Memory type
+      let memoryType = "Unknown";
+      try {
+         if (isMac) {
+            const { stdout } = await execAsync("system_profiler SPMemoryDataType 2>/dev/null | grep Type | head -1");
+            const match = stdout.match(/Type:\s*(.+)/);
+            if (match) memoryType = match[1].trim();
+         } else {
+            const { stdout } = await execAsync("dmidecode -t memory 2>/dev/null | grep -i '^\tType:' | head -1 || echo ''");
+            const match = stdout.match(/Type:\s*(.+)/);
+            if (match && match[1].trim() !== "Unknown") memoryType = match[1].trim();
+         }
+      } catch {}
+
+      // Mounted storage devices
+      let storageDevices: { name: string; mountPoint: string; total: number; used: number; free: number; percent: number }[] = [];
+      try {
+         if (isMac) {
+            const { stdout } = await execAsync("df -kl | grep '^/dev/'");
+            storageDevices = stdout.trim().split("\n").filter(Boolean).map(line => {
+               const p = line.split(/\s+/);
+               const total = parseInt(p[1]) * 1024;
+               const used = parseInt(p[2]) * 1024;
+               const free = parseInt(p[3]) * 1024;
+               return { name: p[0], mountPoint: p.slice(8).join(" ") || p[5], total, used, free, percent: total > 0 ? Math.round((used / total) * 100) : 0 };
+            });
+         } else {
+            const { stdout } = await execAsync("df -kT --exclude-type=tmpfs --exclude-type=devtmpfs --exclude-type=squashfs --exclude-type=overlay 2>/dev/null || df -k");
+            const lines = stdout.trim().split("\n").slice(1).filter(l => l.startsWith("/"));
+            storageDevices = lines.map(line => {
+               const p = line.split(/\s+/);
+               const hasType = stdout.includes("Type"); // df -kT includes type column
+               const offset = hasType ? 1 : 0;
+               const total = parseInt(p[1 + offset]) * 1024;
+               const used = parseInt(p[2 + offset]) * 1024;
+               const free = parseInt(p[3 + offset]) * 1024;
+               return { name: p[0], mountPoint: p[5 + offset], total, used, free, percent: total > 0 ? Math.round((used / total) * 100) : 0 };
+            });
+         }
+      } catch {}
+
       return {
          hostname: os.hostname(),
          platform: process.platform,
@@ -92,9 +173,13 @@ export class AppMetricsService {
          localIp,
          publicIp,
          macAddress,
-         cpuModel: os.cpus()[0]?.model || "Unknown",
+         cpu: cpuName,
          cpuCores: os.cpus().length,
+         motherboard,
          totalMemory: os.totalmem(),
+         memorySpeed,
+         memoryType,
+         storageDevices,
          nodeVersion: process.version,
          uptime: os.uptime(),
       };
@@ -251,11 +336,29 @@ export class AppMetricsService {
       } catch {}
 
       const cpus = os.cpus();
+
+      // Per-core usage via delta
+      const coreUsages: number[] = cpus.map((cpu, i) => {
+         const times = cpu.times;
+         const idle = times.idle;
+         const total = times.user + times.nice + times.sys + times.irq + times.idle;
+         const prev = this.prevCpuTimes[i];
+         let usage = 0;
+         if (prev) {
+            const idleDelta = idle - prev.idle;
+            const totalDelta = total - prev.total;
+            usage = totalDelta > 0 ? Math.round((1 - idleDelta / totalDelta) * 1000) / 10 : 0;
+         }
+         this.prevCpuTimes[i] = { idle, total };
+         return usage;
+      });
+
       return {
          cpu: {
             usage: cpuUsage,
             cores: cpus.length,
-            model: cpus[0]?.model || "Unknown"
+            model: cpus[0]?.model || "Unknown",
+            coreUsages,
          },
          memory: memUsage,
          disk: diskUsage,
