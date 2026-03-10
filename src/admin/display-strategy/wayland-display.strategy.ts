@@ -12,13 +12,16 @@ export class WaylandDisplayStrategy implements DisplayStrategy {
    constructor() {
       this.waylandEnv = { ...process.env };
 
+      // ydotool socket location
+      if (!this.waylandEnv.YDOTOOL_SOCKET) {
+         this.waylandEnv.YDOTOOL_SOCKET = "/tmp/.ydotool_socket";
+      }
+
       // When launched from SSH/tty, inherit the graphical session's env
       if (!process.env.WAYLAND_DISPLAY) {
          try {
-            // Find the graphical user's WAYLAND_DISPLAY and XDG_RUNTIME_DIR
             const uid = execSync("id -u", { encoding: "utf-8" }).trim();
             const runtimeDir = `/run/user/${uid}`;
-            // Find the wayland socket
             const socket = execSync(`ls ${runtimeDir}/wayland-* 2>/dev/null | head -1`, { encoding: "utf-8" }).trim();
             if (socket) {
                this.waylandEnv.WAYLAND_DISPLAY = socket.split("/").pop()!;
@@ -55,32 +58,32 @@ export class WaylandDisplayStrategy implements DisplayStrategy {
    }
 
    async mouseMove(x: number, y: number): Promise<void> {
-      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`);
+      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`, { env: this.waylandEnv });
    }
 
    async mouseClick(x: number, y: number, button: number): Promise<void> {
       const btnCode = button === 3 ? "0x111" : button === 2 ? "0x112" : "0x110";
-      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`);
-      await execAsync(`ydotool click ${btnCode}`);
+      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`, { env: this.waylandEnv });
+      await execAsync(`ydotool click ${btnCode}`, { env: this.waylandEnv });
    }
 
    async mouseScroll(x: number, y: number, scrollY: number): Promise<void> {
-      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`);
+      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`, { env: this.waylandEnv });
       const amount = scrollY > 0 ? 3 : -3;
-      await execAsync(`ydotool mousemove -w -- 0 ${amount}`);
+      await execAsync(`ydotool mousemove -w -- 0 ${amount}`, { env: this.waylandEnv });
    }
 
    async keyPress(key: string): Promise<void> {
       const mapped = WAYLAND_KEY_MAP[key];
       if (mapped) {
-         await execAsync(`ydotool key ${mapped}`);
+         await execAsync(`ydotool key ${mapped}`, { env: this.waylandEnv });
       } else {
-         await execAsync(`ydotool type "${key}"`);
+         await execAsync(`ydotool type "${key}"`, { env: this.waylandEnv });
       }
    }
 
    async typeChar(char: string): Promise<void> {
-      await execAsync(`ydotool type "${char}"`);
+      await execAsync(`ydotool type "${char}"`, { env: this.waylandEnv });
    }
 }
 
