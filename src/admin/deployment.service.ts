@@ -99,6 +99,12 @@ export class DeploymentService implements OnModuleInit {
       @InjectRepository(DeploymentProject) private readonly projectRepo: Repository<DeploymentProject>,
    ) {}
 
+   private async sendDeploymentEmail(options: Parameters<EmailService["sendEmail"]>[0]) {
+      if (await this.featureFlagService.isFeatureFlagEnabled(FeatureFlagNamespace.Admin, "allow_deployment_email_sending")) {
+         this.emailService.sendEmail(options);
+      }
+   }
+
    async onModuleInit() {
       await this.seedDefaults();
 
@@ -398,7 +404,7 @@ export class DeploymentService implements OnModuleInit {
             this.emit({ type: "deployment_complete", deployment });
             this.deploymentSubject?.complete();
             this.logger.error(`Deployment failed at ${stepConfig.step}: ${stepState.error}`);
-            this.emailService.sendEmail({
+            this.sendDeploymentEmail({
                subject: `Shado Cloud - ${projectSlug} deployment FAILED`,
                html: this.buildEmailHtml({
                   title: "Deployment Failed",
@@ -423,7 +429,7 @@ export class DeploymentService implements OnModuleInit {
       this.logger.log(`Deployment completed successfully`);
 
       const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
-      this.emailService.sendEmail({
+      this.sendDeploymentEmail({
          subject: `Shado Cloud - ${projectSlug} deployment SUCCESS`,
          html: this.buildEmailHtml({
             title: "Deployment Successful",
@@ -457,7 +463,7 @@ export class DeploymentService implements OnModuleInit {
          return;
       }
 
-      this.emailService.sendEmail({
+      this.sendDeploymentEmail({
          subject: `Shado Cloud - ${projectSlug} deployment started`,
          html: this.buildEmailHtml({
             title: "Deployment Started",
