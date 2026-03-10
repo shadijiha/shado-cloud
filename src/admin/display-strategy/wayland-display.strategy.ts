@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec, execSync } from "child_process";
 import { promisify } from "util";
 import { DisplayStrategy, ScreenInfo } from "./display-strategy.interface";
 import { networkInterfaces } from "os";
@@ -7,12 +7,32 @@ const execAsync = promisify(exec);
 
 export class WaylandDisplayStrategy implements DisplayStrategy {
    readonly name = "Wayland";
+   private readonly waylandEnv: NodeJS.ProcessEnv;
+
+   constructor() {
+      this.waylandEnv = { ...process.env };
+
+      // When launched from SSH/tty, inherit the graphical session's env
+      if (!process.env.WAYLAND_DISPLAY) {
+         try {
+            // Find the graphical user's WAYLAND_DISPLAY and XDG_RUNTIME_DIR
+            const uid = execSync("id -u", { encoding: "utf-8" }).trim();
+            const runtimeDir = `/run/user/${uid}`;
+            // Find the wayland socket
+            const socket = execSync(`ls ${runtimeDir}/wayland-* 2>/dev/null | head -1`, { encoding: "utf-8" }).trim();
+            if (socket) {
+               this.waylandEnv.WAYLAND_DISPLAY = socket.split("/").pop()!;
+               this.waylandEnv.XDG_RUNTIME_DIR = runtimeDir;
+            }
+         } catch { /* best effort */ }
+      }
+   }
 
    async getScreenInfo(): Promise<ScreenInfo> {
       try {
-         // Try gnome-randr or wlr-randr depending on compositor
          const { stdout } = await execAsync(
-            "gnome-randr 2>/dev/null || wlr-randr 2>/dev/null"
+            "gnome-randr 2>/dev/null || wlr-randr 2>/dev/null",
+            { env: this.waylandEnv },
          );
          const match = stdout.match(/(\d{3,5})x(\d{3,5})/);
          if (match) return { width: Number(match[1]), height: Number(match[2]) };
@@ -27,25 +47,27 @@ export class WaylandDisplayStrategy implements DisplayStrategy {
    }
 
    getScreenshotCommand(): string {
-      // grim is the standard Wayland screenshot tool
-      return "grim -t jpeg -q 20 /tmp/screen.jpg && base64 /tmp/screen.jpg";
+      // Build env prefix so the screenshot command inherits Wayland vars
+      const envPrefix = this.waylandEnv.WAYLAND_DISPLAY
+         ? `WAYLAND_DISPLAY=${this.waylandEnv.WAYLAND_DISPLAY} XDG_RUNTIME_DIR=${this.waylandEnv.XDG_RUNTIME_DIR} `
+         : "";
+      return `${envPrefix}grim -t jpeg -q 20 /tmp/screen.jpg && base64 /tmp/screen.jpg`;
    }
 
    async mouseMove(x: number, y: number): Promise<void> {
-      await execAsync(`ydotool mousemove --absolute -x ${x} -y ${y}`);
+      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`);
    }
 
    async mouseClick(x: number, y: number, button: number): Promise<void> {
-      // ydotool button codes: 0x110=left, 0x111=right, 0x112=middle
       const btnCode = button === 3 ? "0x111" : button === 2 ? "0x112" : "0x110";
-      await execAsync(`ydotool mousemove --absolute -x ${x} -y ${y}`);
+      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`);
       await execAsync(`ydotool click ${btnCode}`);
    }
 
    async mouseScroll(x: number, y: number, scrollY: number): Promise<void> {
-      await execAsync(`ydotool mousemove --absolute -x ${x} -y ${y}`);
+      await execAsync(`ydotool mousemove -a -x ${x} -y ${y}`);
       const amount = scrollY > 0 ? 3 : -3;
-      await execAsync(`ydotool mousemove --wheel -- 0 ${amount}`);
+      await execAsync(`ydotool mousemove -w -- 0 ${amount}`);
    }
 
    async keyPress(key: string): Promise<void> {

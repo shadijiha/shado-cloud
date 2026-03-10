@@ -14,24 +14,38 @@ export class DisplayStrategyFactory {
          return new MacDisplayStrategy();
       }
 
-      if (this.isWayland()) {
+      const detected = this.detectSessionType();
+      if (detected === "wayland") {
          return new WaylandDisplayStrategy();
       }
 
       return new X11DisplayStrategy();
    }
 
-   private static isWayland(): boolean {
-      // Check standard Wayland env vars
-      if (process.env.WAYLAND_DISPLAY) return true;
-      if (process.env.XDG_SESSION_TYPE === "wayland") return true;
+   static detectSessionType(): "wayland" | "x11" {
+      // Direct env check (works when running inside the graphical session)
+      if (process.env.WAYLAND_DISPLAY) return "wayland";
+      if (process.env.XDG_SESSION_TYPE === "wayland") return "wayland";
+      if (process.env.XDG_SESSION_TYPE === "x11") return "x11";
 
-      // Fallback: ask loginctl
+      // From SSH/tty: query loginctl for the graphical session
       try {
-         const out = execSync("loginctl show-session $(loginctl | grep $(whoami) | awk '{print $1}') -p Type --value 2>/dev/null", { encoding: "utf-8" }).trim();
-         return out === "wayland";
-      } catch {
-         return false;
-      }
+         const sessions = execSync("loginctl list-sessions --no-legend 2>/dev/null", { encoding: "utf-8" }).trim().split("\n");
+         for (const line of sessions) {
+            const sid = line.trim().split(/\s+/)[0];
+            if (!sid) continue;
+            const type = execSync(`loginctl show-session ${sid} -p Type --value 2>/dev/null`, { encoding: "utf-8" }).trim();
+            if (type === "wayland") return "wayland";
+            if (type === "x11") return "x11";
+         }
+      } catch { /* fall through */ }
+
+      // Process-based fallback
+      try {
+         const ps = execSync("ps -eo comm 2>/dev/null", { encoding: "utf-8" });
+         if (ps.includes("gdm-wayland-ses") || ps.includes("Xwayland")) return "wayland";
+      } catch { /* fall through */ }
+
+      return "x11";
    }
 }

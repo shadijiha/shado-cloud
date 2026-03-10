@@ -2,18 +2,40 @@
 # Generates mediamtx.yml with the correct capture command based on the display server.
 # Usage: ./generate-mediamtx-config.sh > ~/mediamtx.yml
 
-SESSION_TYPE="${XDG_SESSION_TYPE:-}"
-
-# Auto-detect if env var not set
-if [ -z "$SESSION_TYPE" ]; then
+# Detect the graphical session type (works even from SSH/tty)
+detect_display_server() {
     if [ "$(uname)" = "Darwin" ]; then
-        SESSION_TYPE="macos"
-    elif [ -n "$WAYLAND_DISPLAY" ]; then
-        SESSION_TYPE="wayland"
-    else
-        SESSION_TYPE="x11"
+        echo "macos"; return
     fi
-fi
+
+    # Check if we're already in a graphical session
+    case "${XDG_SESSION_TYPE:-}" in
+        x11|wayland) echo "$XDG_SESSION_TYPE"; return ;;
+    esac
+
+    # From SSH/tty: inspect the graphical session on the machine
+    local graphical_type
+    graphical_type=$(loginctl list-sessions --no-legend 2>/dev/null \
+        | while read -r sid rest; do
+            type=$(loginctl show-session "$sid" -p Type --value 2>/dev/null)
+            if [ "$type" = "wayland" ] || [ "$type" = "x11" ]; then
+                echo "$type"; break
+            fi
+        done)
+
+    if [ -n "$graphical_type" ]; then
+        echo "$graphical_type"; return
+    fi
+
+    # Last resort: check for running display processes
+    if pgrep -x Xwayland >/dev/null 2>&1 || pgrep -x gnome-shell >/dev/null 2>&1 && [ -n "$(pgrep -a gnome-shell | grep wayland)" ]; then
+        echo "wayland"; return
+    fi
+
+    echo "x11"
+}
+
+SESSION_TYPE=$(detect_display_server)
 
 case "$SESSION_TYPE" in
     wayland)
