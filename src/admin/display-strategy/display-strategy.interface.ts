@@ -39,7 +39,4 @@ export interface DisplayStrategy {
 
    /** Type a single character */
    typeChar(char: string): Promise<void>;
-
-   /** Get the ffmpeg runOnDemand command for MediaMTX at a given FPS */
-   getFfmpegCommand(fps: number): Promise<string | null>;
 }

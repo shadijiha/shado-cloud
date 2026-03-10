@@ -67,12 +67,6 @@ export class X11DisplayStrategy implements DisplayStrategy {
    async typeChar(char: string): Promise<void> {
       await execAsync(`xdotool type --clearmodifiers "${char}"`, { env: this.env });
    }
-
-   async getFfmpegCommand(fps: number): Promise<string> {
-      const { width, height } = await this.getScreenInfo();
-      const bitrate = Math.round(fps * 100); // ~1500k@15fps, 3000k@30fps, 6000k@60fps, 14400k@144fps
-      return `ffmpeg -f x11grab -framerate ${fps} -video_size ${width}x${height} -draw_mouse 1 -i :0 -f pulse -i default -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -b:v ${bitrate}k -maxrate ${bitrate}k -bufsize ${bitrate * 2}k -g ${fps} -c:a aac -b:a 128k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH`;
-   }
 }
 
 const X11_KEY_MAP: Record<string, string> = {

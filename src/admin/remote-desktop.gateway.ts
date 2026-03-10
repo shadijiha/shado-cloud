@@ -35,8 +35,6 @@ interface KeyEvent {
    type: "down" | "up";
 }
 
-const ALLOWED_FPS = [15, 30, 60, 144] as const;
-
 @WebSocketGateway({
    namespace: "/remote-desktop",
    cors: { origin: true, credentials: true },
@@ -107,21 +105,8 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
       }
    }
 
-   private async startStreaming() {
+   private startStreaming() {
       this.logger.log("Starting WebRTC stream via mediamtx");
-
-      // Patch MediaMTX with actual screen resolution
-      const cmd = await this.display.getFfmpegCommand(30);
-      if (cmd) {
-         try {
-            await fetch("http://127.0.0.1:9997/v3/config/paths/patch/screen", {
-               method: "PATCH",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({ runOnDemand: cmd }),
-            });
-         } catch { /* MediaMTX may not be running */ }
-      }
-
       const webrtcUrl = this.display.getStreamUrl();
       if (webrtcUrl) {
          this.server.emit("webrtc-url", webrtcUrl);
@@ -152,35 +137,6 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
          this.streamInterval = null;
       }
       this.logger.log("Stopped screen stream");
-   }
-
-   @SubscribeMessage("set-fps")
-   async handleSetFps(client: Socket, fps: number) {
-      if (!ALLOWED_FPS.includes(fps as any)) {
-         client.emit("error", `Invalid FPS. Allowed: ${ALLOWED_FPS.join(", ")}`);
-         return;
-      }
-
-      const cmd = await this.display.getFfmpegCommand(fps);
-      if (!cmd) {
-         client.emit("error", "FPS control not supported on this platform");
-         return;
-      }
-
-      try {
-         await fetch("http://127.0.0.1:9997/v3/config/paths/patch/screen", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ runOnDemand: cmd }),
-         });
-         // Kick the current stream so it restarts with new FPS
-         await fetch("http://127.0.0.1:9997/v3/paths/kick/screen", { method: "POST" });
-         this.server.emit("fps-changed", fps);
-         this.logger.log(`FPS changed to ${fps}`);
-      } catch (err) {
-         this.logger.error("Failed to change FPS: " + (err as Error).message);
-         client.emit("error", "Failed to change FPS");
-      }
    }
 
    @SubscribeMessage("mouse")

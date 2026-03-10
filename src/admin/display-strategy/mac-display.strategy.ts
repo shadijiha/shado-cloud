@@ -58,10 +58,6 @@ export class MacDisplayStrategy implements DisplayStrategy {
    async typeChar(char: string): Promise<void> {
       await execAsync(`cliclick t:${char}`);
    }
-
-   async getFfmpegCommand(_fps: number): Promise<null> {
-      return null; // MediaMTX not typically used on macOS dev
-   }
 }
 
 const MAC_KEY_MAP: Record<string, string> = {
