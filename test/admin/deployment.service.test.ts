@@ -85,7 +85,7 @@ describe("DeploymentService", () => {
             },
             {
                provide: FeatureFlagService,
-               useValue: { isFeatureFlagDisabled: jest.fn().mockResolvedValue(false) },
+               useValue: { isFeatureFlagDisabled: jest.fn().mockResolvedValue(false), isFeatureFlagEnabled: jest.fn().mockResolvedValue(true) },
             },
             {
                provide: REDIS_CACHE,

@@ -25,6 +25,12 @@ export interface DisplayStrategy {
    /** Click at position */
    mouseClick(x: number, y: number, button: number): Promise<void>;
 
+   /** Press mouse button at position (for drag start) */
+   mouseDown(x: number, y: number, button: number): Promise<void>;
+
+   /** Release mouse button at position (for drag end) */
+   mouseUp(x: number, y: number, button: number): Promise<void>;
+
    /** Scroll at position */
    mouseScroll(x: number, y: number, scrollY: number): Promise<void>;
 

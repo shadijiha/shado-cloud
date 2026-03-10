@@ -37,6 +37,14 @@ export class MacDisplayStrategy implements DisplayStrategy {
       await execAsync(`cliclick ${btn}:${x},${y}`);
    }
 
+   async mouseDown(x: number, y: number, _button: number): Promise<void> {
+      await execAsync(`cliclick dd:${x},${y}`);
+   }
+
+   async mouseUp(x: number, y: number, _button: number): Promise<void> {
+      await execAsync(`cliclick du:${x},${y}`);
+   }
+
    async mouseScroll(x: number, y: number, scrollY: number): Promise<void> {
       const dir = scrollY > 0 ? "-" : "+";
       await execAsync(`cliclick m:${x},${y} "scroll:${dir}3"`);

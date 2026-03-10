@@ -47,6 +47,14 @@ export class X11DisplayStrategy implements DisplayStrategy {
       await execAsync(`xdotool mousemove ${x} ${y} click ${button}`, { env: this.env });
    }
 
+   async mouseDown(x: number, y: number, button: number): Promise<void> {
+      await execAsync(`xdotool mousemove ${x} ${y} mousedown ${button}`, { env: this.env });
+   }
+
+   async mouseUp(x: number, y: number, button: number): Promise<void> {
+      await execAsync(`xdotool mousemove ${x} ${y} mouseup ${button}`, { env: this.env });
+   }
+
    async mouseScroll(x: number, y: number, scrollY: number): Promise<void> {
       const direction = scrollY > 0 ? 5 : 4;
       await execAsync(`xdotool mousemove ${x} ${y} click ${direction}`, { env: this.env });
@@ -62,7 +70,8 @@ export class X11DisplayStrategy implements DisplayStrategy {
 
    async getFfmpegCommand(fps: number): Promise<string> {
       const { width, height } = await this.getScreenInfo();
-      return `ffmpeg -f x11grab -framerate ${fps} -video_size ${width}x${height} -draw_mouse 1 -i :0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g ${fps} -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH`;
+      const bitrate = Math.round(fps * 100); // ~1500k@15fps, 3000k@30fps, 6000k@60fps, 14400k@144fps
+      return `ffmpeg -f x11grab -framerate ${fps} -video_size ${width}x${height} -draw_mouse 1 -i :0 -f pulse -i default -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -b:v ${bitrate}k -maxrate ${bitrate}k -bufsize ${bitrate * 2}k -g ${fps} -c:a aac -b:a 128k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH`;
    }
 }
 

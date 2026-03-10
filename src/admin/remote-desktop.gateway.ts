@@ -26,7 +26,7 @@ interface MouseEvent {
    x: number;
    y: number;
    button?: number; // 1=left, 2=middle, 3=right
-   type: "move" | "click" | "scroll";
+   type: "move" | "click" | "scroll" | "mousedown" | "mouseup";
    scrollY?: number;
 }
 
@@ -193,6 +193,10 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
             await this.display.mouseMove(x, y);
          } else if (event.type === "click") {
             await this.display.mouseClick(x, y, event.button || 1);
+         } else if (event.type === "mousedown") {
+            await this.display.mouseDown(x, y, event.button || 1);
+         } else if (event.type === "mouseup") {
+            await this.display.mouseUp(x, y, event.button || 1);
          } else if (event.type === "scroll") {
             await this.display.mouseScroll(x, y, event.scrollY || 0);
          }

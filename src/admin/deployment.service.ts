@@ -92,9 +92,9 @@ export class DeploymentService implements OnModuleInit {
 
    constructor(
       private readonly config: ConfigService<EnvVariables>,
-      private readonly logger: LoggerToDb,
-      private readonly emailService: EmailService,
-      private readonly featureFlagService: FeatureFlagService,
+      @Inject() private readonly logger: LoggerToDb,
+      @Inject() private readonly emailService: EmailService,
+      @Inject() private readonly featureFlagService: FeatureFlagService,
       @Inject(REDIS_CACHE) private readonly redis: Redis,
       @InjectRepository(DeploymentProject) private readonly projectRepo: Repository<DeploymentProject>,
    ) {}
