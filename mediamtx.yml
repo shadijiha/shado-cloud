@@ -5,7 +5,8 @@ logDestinations: [stdout]
 api: yes
 apiAddress: 127.0.0.1:9997
 
-rtsp: no
+rtsp: yes
+rtspAddress: 127.0.0.1:8554
 rtmp: no
 hls: no
 srt: no
@@ -14,9 +15,10 @@ webrtc: yes
 webrtcAddress: :8889
 webrtcAllowOrigin: '*'
 webrtcICEServers2: []
+webrtcAdditionalHosts: [38.41.212.86]
 
 paths:
   screen:
     source: publisher
-    runOnDemand: ffmpeg -f x11grab -framerate 30 -video_size 1920x1080 -draw_mouse 1 -i :0 -f pulse -i default -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g 30 -c:a aac -b:a 128k -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemand: ffmpeg -f x11grab -framerate 30 -video_size 2560x1440 -draw_mouse 1 -i :0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g 30 -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
     runOnDemandRestart: yes
