@@ -170,6 +170,36 @@ def main():
         warn("Created symlink to /usr/bin/chromium-browser")
     ok("System packages installed")
 
+    # ── X11 dummy display for headless operation ──────────────────────────────
+    step("1b/10", "Configuring X11 dummy display")
+    xorg_conf = """\
+Section "Device"
+    Identifier "DummyDevice"
+    Driver "dummy"
+    VideoRam 256000
+EndSection
+
+Section "Monitor"
+    Identifier "DummyMonitor"
+    HorizSync 28-80
+    VertRefresh 48-75
+    Modeline "1920x1080" 148.50 1920 2008 2052 2200 1080 1084 1089 1125 +hsync +vsync
+EndSection
+
+Section "Screen"
+    Identifier "DummyScreen"
+    Device "DummyDevice"
+    Monitor "DummyMonitor"
+    DefaultDepth 24
+    SubSection "Display"
+        Depth 24
+        Modes "1920x1080"
+    EndSubSection
+EndSection
+"""
+    run(f"echo '{xorg_conf}' | sudo tee /etc/X11/xorg.conf > /dev/null")
+    ok("X11 dummy display configured at /etc/X11/xorg.conf")
+
     # ── Git SSH setup ─────────────────────────────────────────────────────────
     ssh_dir = Path.home() / ".ssh"
     ssh_dir.mkdir(mode=0o700, exist_ok=True)
