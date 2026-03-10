@@ -28,9 +28,11 @@ export class X11DisplayStrategy implements DisplayStrategy {
    }
 
    getStreamUrl(): string {
-      const nets = networkInterfaces();
-      const ip = Object.values(nets).flat().find((n: any) => n.family === "IPv4" && !n.internal)?.address || "localhost";
-      return `http://${ip}:8889/screen/whep`;
+      return "/whep";
+   }
+
+   getScreenshotMimeType(): string {
+      return "image/jpeg";
    }
 
    getScreenshotCommand(): string {

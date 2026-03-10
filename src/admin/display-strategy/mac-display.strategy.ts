@@ -20,6 +20,10 @@ export class MacDisplayStrategy implements DisplayStrategy {
       return ""; // MediaMTX not typically used on macOS dev
    }
 
+   getScreenshotMimeType(): string {
+      return "image/jpeg";
+   }
+
    getScreenshotCommand(): string {
       return "screencapture -x -t jpg /tmp/screen.jpg && base64 /tmp/screen.jpg";
    }

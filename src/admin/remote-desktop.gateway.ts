@@ -116,10 +116,11 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
 
    private startMjpegFallback() {
       const captureCmd = this.display.getScreenshotCommand();
+      const mime = this.display.getScreenshotMimeType();
       this.streamInterval = setInterval(async () => {
          try {
             const { stdout } = await execAsync(captureCmd, { maxBuffer: 10 * 1024 * 1024, timeout: 1000 });
-            this.server.emit("frame", `data:image/jpeg;base64,${stdout.trim()}`);
+            this.server.emit("frame", `data:${mime};base64,${stdout.trim()}`);
          } catch {
             // Silent fail - WebRTC might be working
          }

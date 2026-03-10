@@ -16,6 +16,9 @@ export interface DisplayStrategy {
    /** Shell command for MJPEG screenshot fallback */
    getScreenshotCommand(): string;
 
+   /** MIME type of the screenshot output */
+   getScreenshotMimeType(): string;
+
    /** Move the mouse cursor */
    mouseMove(x: number, y: number): Promise<void>;
 
