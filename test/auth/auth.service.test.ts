@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 import { AuthService } from "src/auth/auth.service";
-import { AUTH_SERVICE } from "src/auth/auth.module";
+import { AUTH_SERVICE } from "src/auth/auth.constants";
 import { REDIS_CACHE } from "src/util";
 import { of } from "rxjs";
 
