@@ -117,12 +117,12 @@ export class AdminService {
       return result;
    }
 
-   private validateTableName(tableName: string) {
+   private validateTableName(tableName: string, allowCount = false) {
       const tables = this.dataSource.entityMetadatas.map((meta) => meta.tableName);
       if (!tables.includes(tableName)) {
          throw new HttpException(`Table ${tableName} does not exist`, HttpStatus.BAD_REQUEST);
       }
-      if (tableName === this.entityManager.getRepository(EncryptedPassword).metadata.tableName) {
+      if (!allowCount && tableName === this.entityManager.getRepository(EncryptedPassword).metadata.tableName) {
          throw new HttpException("Table is encrypted", HttpStatus.FORBIDDEN);
       }
    }
@@ -143,7 +143,7 @@ export class AdminService {
 
    public async getTableCount(tableName: string) {
       await this.checkDbAccess();
-      this.validateTableName(tableName);
+      this.validateTableName(tableName, true);
 
       const result = await this.dataSource
          .createQueryBuilder()
