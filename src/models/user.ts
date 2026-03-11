@@ -16,7 +16,7 @@ import { SearchStat } from "./stats/searchStat";
 
 // TODO: Remove this entity — the `user` table is fully owned by shado-auth-api.
 // This class exists only for TypeORM relations and will be replaced with plain userId columns.
-@Entity({ synchronize: false })
+@Entity()
 export class User extends BaseEntity {
    @ApiProperty()
    @PrimaryGeneratedColumn()
@@ -32,6 +32,9 @@ export class User extends BaseEntity {
 
    @Column({ select: false })
    password: string;
+
+   @Column({ select: false })
+   vault_key: string;
 
    @OneToMany(() => UploadedFile, (file) => file.user)
    files: UploadedFile[];
