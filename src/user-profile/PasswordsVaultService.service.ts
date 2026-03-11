@@ -1,22 +1,18 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { AuthService } from "src/auth/auth.service";
 import { EncryptedPassword } from "src/models/EncryptedPassword";
 import { type User } from "src/models/user";
-import { createCipheriv, createDecipheriv, randomBytes, scrypt } from "crypto";
-import { promisify } from "util";
+import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import { SoftException } from "src/util";
 import { Repository } from "typeorm";
 import { paginate, type Paginated, type PaginateQuery } from "nestjs-paginate";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ConfigService } from "@nestjs/config";
-import { EnvVariables } from "src/config/config.validator";
 
 @Injectable()
 export class PasswordsVaultService {
    public constructor(
       private readonly userService: AuthService,
       @InjectRepository(EncryptedPassword) private readonly encrtyptedPasswordRepo: Repository<EncryptedPassword>,
-      @Inject() private readonly config: ConfigService<EnvVariables>,
    ) {}
 
    public async all(userId: number, query: PaginateQuery): Promise<Paginated<EncryptedPassword>> {
@@ -32,13 +28,17 @@ export class PasswordsVaultService {
    }
 
    public async add(userId: number, username: string, website: string, passwordToStore: string) {
-      const user = await this.userService.getWithPassword(userId);
+      const user = await this.userService.getById(userId);
       if (!user) {
          throw new Error("User " + userId + " not found");
       }
 
-      // Encrypt
-      return await this.encrypt(username, new URL(website), passwordToStore, user);
+      const key = await this.userService.getVaultKey(userId);
+      if (!key) {
+         throw new Error("Failed to get vault key for user " + userId);
+      }
+
+      return await this.encrypt(username, new URL(website), passwordToStore, user, key);
    }
 
    public async get(userId: number, encryption_id: number): Promise<{ decrypted_password: string }> {
@@ -80,32 +80,22 @@ export class PasswordsVaultService {
     * @param text
     * @param user
     */
-   private async encrypt(username: string, website: URL, passwordToStore: string, user: User) {
-      if (!user.password) {
-         throw new Error("To encrypt text you need to select user's password from DB");
-      }
-
+   private async encrypt(username: string, website: URL, passwordToStore: string, user: User, derivedKeyHex: string) {
       const iv = randomBytes(16);
-      const password = user.password;
-
-      // The key length is dependent on the algorithm.
-      // In this case for aes256, it is 32 bytes.
-      const key = (await promisify(scrypt)(password, this.config.get("PASSWORD_VAULT_SALT"), 32)) as Buffer;
+      const key = Buffer.from(derivedKeyHex, "hex");
       const cipher = createCipheriv("aes-256-ctr", key, iv);
       const encryptedText = Buffer.concat([cipher.update(passwordToStore), cipher.final()]);
 
       // Store in DB
       const passwordVault = new EncryptedPassword();
       passwordVault.iv = iv.toString("hex");
-      passwordVault.encryption_key = key.toString("hex");
+      passwordVault.encryption_key = derivedKeyHex;
       passwordVault.password = encryptedText.toString("hex");
       passwordVault.password_length = passwordToStore.length;
       passwordVault.username = username;
       passwordVault.user = user;
       passwordVault.website = website.origin;
       this.encrtyptedPasswordRepo.save(passwordVault);
-
-      delete passwordVault.user.password;
 
       return passwordVault;
    }

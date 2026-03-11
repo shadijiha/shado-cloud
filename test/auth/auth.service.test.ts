@@ -1,4 +1,5 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { AuthService } from "src/auth/auth.service";
 import { AUTH_SERVICE } from "src/auth/auth.constants";
 import { REDIS_CACHE } from "src/util";
@@ -8,6 +9,7 @@ describe("AuthService", () => {
    let service: AuthService;
    let mockAuthClient: { send: jest.Mock };
    let mockCache: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
+   const serviceKey = "test-secret";
 
    beforeEach(async () => {
       mockAuthClient = { send: jest.fn() };
@@ -18,6 +20,7 @@ describe("AuthService", () => {
             AuthService,
             { provide: AUTH_SERVICE, useValue: mockAuthClient },
             { provide: REDIS_CACHE, useValue: mockCache },
+            { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(serviceKey) } },
          ],
       }).compile();
 
@@ -33,7 +36,7 @@ describe("AuthService", () => {
          mockAuthClient.send.mockReturnValue(of({ userId: 1 }));
          const result = await service.validateToken("valid-token");
          expect(result).toBe(1);
-         expect(mockAuthClient.send).toHaveBeenCalledWith("validate_token", { token: "valid-token" });
+         expect(mockAuthClient.send).toHaveBeenCalledWith("validate_token", { token: "valid-token", serviceKey });
       });
 
       it("should return null for invalid token", async () => {
@@ -59,19 +62,23 @@ describe("AuthService", () => {
 
          const result = await service.getById(1);
          expect(result).toEqual(mockUser);
-         expect(mockAuthClient.send).toHaveBeenCalledWith("get_user", { userId: 1 });
+         expect(mockAuthClient.send).toHaveBeenCalledWith("get_user", { userId: 1, serviceKey });
          expect(mockCache.set).toHaveBeenCalled();
       });
    });
 
-   describe("getWithPassword", () => {
-      it("should call get_user_with_password", async () => {
-         const mockUser = { id: 1, password: "hashed" };
-         mockAuthClient.send.mockReturnValue(of(mockUser));
+   describe("getVaultKey", () => {
+      it("should return vault key", async () => {
+         mockAuthClient.send.mockReturnValue(of({ key: "abcd1234" }));
+         const result = await service.getVaultKey(1);
+         expect(result).toBe("abcd1234");
+         expect(mockAuthClient.send).toHaveBeenCalledWith("get_vault_key", { userId: 1, serviceKey });
+      });
 
-         const result = await service.getWithPassword(1);
-         expect(result).toEqual(mockUser);
-         expect(mockAuthClient.send).toHaveBeenCalledWith("get_user_with_password", { userId: 1 });
+      it("should return null if user not found", async () => {
+         mockAuthClient.send.mockReturnValue(of(null));
+         const result = await service.getVaultKey(1);
+         expect(result).toBeNull();
       });
    });
 

@@ -48,11 +48,12 @@ export class AuthService {
       return user;
    }
 
-   /** Get user by ID including password hash */
-   async getWithPassword(userId: number): Promise<User | null> {
-      return firstValueFrom(
-         this.authClient.send<User | null>("get_user_with_password", { userId, serviceKey: this.serviceKey }),
+   /** Get the user's vault encryption key from auth-api */
+   async getVaultKey(userId: number): Promise<string | null> {
+      const result = await firstValueFrom(
+         this.authClient.send<{ key: string } | null>("get_vault_key", { userId, serviceKey: this.serviceKey }),
       );
+      return result?.key ?? null;
    }
 
    /** Check if userId is an admin */
