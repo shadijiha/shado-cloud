@@ -48,14 +48,6 @@ export class AuthService {
       return user;
    }
 
-   /** Get the user's vault encryption key from auth-api */
-   async getVaultKey(userId: number): Promise<string | null> {
-      const result = await firstValueFrom(
-         this.authClient.send<{ key: string } | null>("get_vault_key", { userId, serviceKey: this.serviceKey }),
-      );
-      return result?.key ?? null;
-   }
-
    /** Check if userId is an admin */
    async isAdmin(userId: number): Promise<boolean> {
       return firstValueFrom(

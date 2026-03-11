@@ -33,9 +33,6 @@ export class User extends BaseEntity {
    @Column({ select: false })
    password: string;
 
-   @Column({ select: false })
-   vault_key: string;
-
    @OneToMany(() => UploadedFile, (file) => file.user)
    files: UploadedFile[];
 

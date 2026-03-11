@@ -33,12 +33,7 @@ export class PasswordsVaultService {
          throw new Error("User " + userId + " not found");
       }
 
-      const key = await this.userService.getVaultKey(userId);
-      if (!key) {
-         throw new Error("Failed to get vault key for user " + userId);
-      }
-
-      return await this.encrypt(username, new URL(website), passwordToStore, user, key);
+      return await this.encrypt(username, new URL(website), passwordToStore, user);
    }
 
    public async get(userId: number, encryption_id: number): Promise<{ decrypted_password: string }> {
@@ -80,16 +75,15 @@ export class PasswordsVaultService {
     * @param text
     * @param user
     */
-   private async encrypt(username: string, website: URL, passwordToStore: string, user: User, derivedKeyHex: string) {
+   private async encrypt(username: string, website: URL, passwordToStore: string, user: User) {
       const iv = randomBytes(16);
-      const key = Buffer.from(derivedKeyHex, "hex");
+      const key = randomBytes(32);
       const cipher = createCipheriv("aes-256-ctr", key, iv);
       const encryptedText = Buffer.concat([cipher.update(passwordToStore), cipher.final()]);
 
-      // Store in DB
       const passwordVault = new EncryptedPassword();
       passwordVault.iv = iv.toString("hex");
-      passwordVault.encryption_key = derivedKeyHex;
+      passwordVault.encryption_key = key.toString("hex");
       passwordVault.password = encryptedText.toString("hex");
       passwordVault.password_length = passwordToStore.length;
       passwordVault.username = username;

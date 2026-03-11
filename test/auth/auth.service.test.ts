@@ -67,21 +67,6 @@ describe("AuthService", () => {
       });
    });
 
-   describe("getVaultKey", () => {
-      it("should return vault key", async () => {
-         mockAuthClient.send.mockReturnValue(of({ key: "abcd1234" }));
-         const result = await service.getVaultKey(1);
-         expect(result).toBe("abcd1234");
-         expect(mockAuthClient.send).toHaveBeenCalledWith("get_vault_key", { userId: 1, serviceKey });
-      });
-
-      it("should return null if user not found", async () => {
-         mockAuthClient.send.mockReturnValue(of(null));
-         const result = await service.getVaultKey(1);
-         expect(result).toBeNull();
-      });
-   });
-
    describe("isAdmin", () => {
       it("should return true for admin user", async () => {
          mockAuthClient.send.mockReturnValue(of(true));
