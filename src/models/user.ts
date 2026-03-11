@@ -14,7 +14,9 @@ import { TempUrl } from "./tempUrl";
 import { UploadedFile } from "./uploadedFile";
 import { SearchStat } from "./stats/searchStat";
 
-@Entity()
+// TODO: Remove this entity — the `user` table is fully owned by shado-auth-api.
+// This class exists only for TypeORM relations and will be replaced with plain userId columns.
+@Entity({ synchronize: false })
 export class User extends BaseEntity {
    @ApiProperty()
    @PrimaryGeneratedColumn()
