@@ -149,11 +149,12 @@ export class UserProfileService {
    }
 
    private async verifyPassword(userId: number, password: string): Promise<User> | never {
-      const user = await this.userService.getWithPassword(userId);
-      if (!(await argon2.verify(user.password, password))) {
+      const valid = await this.userService.verifyPassword(userId, password);
+      if (!valid) {
          throw new SoftException("Invalid password");
       }
 
+      const user = await this.userService.getById(userId);
       return user;
    }
 

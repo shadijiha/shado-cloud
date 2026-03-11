@@ -196,7 +196,7 @@ export class AdminController {
       },
    })
    public microserviceHeartbeat(@Body() body: { name: string; port: number }, @Headers("x-service-key") key: string) {
-      if (key !== this.config.get("COOKIE_NAME")) {
+      if (key !== this.config.get("SERVICE_SECRET")) {
          throw new UnauthorizedException();
       }
       this.metrics.heartbeat(body.name, body.port);

@@ -132,6 +132,9 @@ export class EnvVariables {
    @MinLength(5)
    COOKIE_NAME: string;
 
+   @MinLength(16)
+   SERVICE_SECRET: string;
+
    @Validate(DoesNotContainSubstringConstraint, ["/"])
    BACKEND_HOST_NAME: string;
 
