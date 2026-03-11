@@ -11,7 +11,7 @@ import {
    UseGuards,
    ValidationPipe,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
 import { LoggerToDb } from "./../logging";
@@ -21,7 +21,7 @@ import { DirectoriesService } from "./directories.service";
 import { DirListResponse, NewDirRequest, RenameDirRequest } from "./directoriesApiTypes";
 
 @Controller("directory")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(JwtAuthGuard)
 @ApiTags("Directories")
 export class DirectoriesController {
    constructor(

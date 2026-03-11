@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { AuthService } from "./../auth/auth.service";
 import { FilesService } from "./../files/files.service";
 import { type DirectoryInfo } from "./directoriesApiTypes";
@@ -20,7 +20,7 @@ import { EnvVariables } from "src/config/config.validator";
 export class DirectoriesService {
    constructor(
       private readonly userService: AuthService,
-      private readonly fileService: FilesService,
+      @Inject(forwardRef(() => FilesService)) private readonly fileService: FilesService,
       @InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
       @InjectRepository(SearchStat) private readonly searchStatRepo: Repository<SearchStat>,
       @Inject() private readonly logger: LoggerToDb,

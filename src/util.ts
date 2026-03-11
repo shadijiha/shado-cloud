@@ -1,37 +1,29 @@
 /**
- * Utlity functions
+ * Utility functions
  */
 import { createParamDecorator, type ExecutionContext } from "@nestjs/common";
 import { ApiBody } from "@nestjs/swagger";
 import { type Request } from "express";
-import { type CookiePayload } from "./auth/authApiTypes";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "./config/config.validator";
 
 export const REDIS_CACHE = "REDIS_CACHE" as const;
 
 /**
- * @example Use this function as decorator on top of controller functions
- * @returns Returns the logged in user
+ * Extracts the authenticated userId from the request.
+ * Requires JwtAuthGuard to have run first (sets request.authUserId).
  */
-export const AuthUser = createParamDecorator((data: unknown, ctx: ExecutionContext) => {
+export const AuthUser = createParamDecorator((_data: unknown, ctx: ExecutionContext) => {
    const request = ctx.switchToHttp().getRequest();
-   const config = request.configService;
-   const token = parseJwt(request.cookies[config.get("COOKIE_NAME")]);
-   const payload = token == null ? { userId: -1 } : (token as CookiePayload);
-
-   return payload.userId;
+   return request.authUserId ?? -1;
 });
 
-export function getUserIdFromRequest(
-   request: (Request & { configService: ConfigService<EnvVariables> }) | undefined,
-): number | -1 {
-   if (!request) {
-      return -1;
-   }
-   const token = parseJwt(request.cookies[request.configService?.get("COOKIE_NAME")]);
-   const payload = token == null ? { userId: -1 } : (token as CookiePayload);
-   return payload.userId;
+/**
+ * Gets userId from request — for use outside of guards (logging, interceptors).
+ * Falls back to -1 if not authenticated.
+ */
+export function getUserIdFromRequest(request: any): number | -1 {
+   return request?.authUserId ?? -1;
 }
 
 export const ApiFile =
@@ -53,37 +45,8 @@ export const ApiFile =
       })(target, propertyKey, descriptor);
    };
 
-/**
- * Parses the JWT token sent as cookie
- * @param token The token to parse
- * @returns Returns the json object with the JWT data
- */
-export function parseJwt(token: string | undefined): Object | null {
-   if (!token) {
-      return null;
-   }
-   const base64Url = token.split(".")[1];
-   const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-   const jsonPayload = decodeURIComponent(
-      Buffer.from(base64, "base64")
-         .toString()
-         .split("")
-         .map(function (c) {
-            return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
-         })
-         .join(""),
-   );
-
-   return JSON.parse(jsonPayload);
-}
-
 type Enum = Record<number, string>;
 
-/**
- * Converts an enum to array of string
- * @param _enum The enum type
- * @returns Returns all the values names of the enum
- */
 export function enumToArray(_enum: Enum): string[] {
    return Object.values(_enum)
       .filter((value) => typeof value === "string")
@@ -99,11 +62,6 @@ export class SoftException extends Error {
    }
 }
 
-/**
- * Returns true if the current enviroment is set to development
- * @param config
- * @returns
- */
 export function isDev(config: ConfigService<EnvVariables>) {
    return config.get("ENV") == "dev" || config.get("ENV") == "development";
 }

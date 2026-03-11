@@ -1,37 +1,36 @@
-import { Module } from "@nestjs/common";
-import { JwtModule } from "@nestjs/jwt";
-import { DirectoriesService } from "./../directories/directories.service";
-import { FilesService } from "./../files/files.service";
-import { AuthController } from "./auth.controller";
+import { Global, Module } from "@nestjs/common";
+import { ClientsModule, Transport } from "@nestjs/microservices";
+import { ConfigService } from "@nestjs/config";
+import { EnvVariables } from "src/config/config.validator";
 import { AuthService } from "./auth.service";
-import { AuthStrategy } from "./auth.strategy";
+import { JwtAuthGuard } from "./auth.guard";
+import { AUTH_SERVICE } from "./auth.constants";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "./../models/user";
 import { UploadedFile } from "./../models/uploadedFile";
-import { LoggerToDb } from "./../logging";
 import { SearchStat } from "./../models/stats/searchStat";
 import { FileAccessStat } from "./../models/stats/fileAccessStat";
 import { TempUrl } from "./../models/tempUrl";
-import { ConfigService } from "@nestjs/config";
-import { EnvVariables } from "src/config/config.validator";
 
+@Global()
 @Module({
-   controllers: [AuthController],
    imports: [
-      JwtModule.registerAsync({
-         useFactory: (config: ConfigService<EnvVariables>) => {
-            return {
-               secret: config.get("JWT_SECRET"),
-               signOptions: {
-                  expiresIn: `${AuthController.AUTH_EXPIRY_DAYS}d`,
+      ClientsModule.registerAsync([
+         {
+            name: AUTH_SERVICE,
+            useFactory: (config: ConfigService<EnvVariables>) => ({
+               transport: Transport.TCP,
+               options: {
+                  host: "127.0.0.1",
+                  port: Number(config.get("AUTH_TCP_PORT") ?? 11002),
                },
-            };
+            }),
+            inject: [ConfigService],
          },
-         inject: [ConfigService],
-      }),
+      ]),
       TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl]),
    ],
-   providers: [AuthStrategy, AuthService, FilesService, DirectoriesService],
-   exports: [AuthService, TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl])],
+   providers: [AuthService, JwtAuthGuard],
+   exports: [AuthService, JwtAuthGuard, ClientsModule, TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl])],
 })
 export class AuthModule {}

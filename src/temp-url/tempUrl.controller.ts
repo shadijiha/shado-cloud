@@ -12,7 +12,7 @@ import {
    Headers,
    Inject,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
@@ -29,7 +29,7 @@ export class TempUrlConstoller {
    constructor(private readonly tempUrlService: TempUrlService, @Inject() private readonly logger: LoggerToDb) {}
 
    @Post("generate")
-   @UseGuards(AuthGuard("jwt"))
+   @UseGuards(JwtAuthGuard)
    @ApiResponse({ type: TempURLGenerateResponse })
    public async generate(
       @Headers() headers: IncomingHttpHeaders,
@@ -96,7 +96,7 @@ export class TempUrlConstoller {
    }
 
    @Get("list")
-   @UseGuards(AuthGuard("jwt"))
+   @UseGuards(JwtAuthGuard)
    @ApiResponse({ type: [TempUrl] })
    public async list(@AuthUser() userId: number) {
       try {
@@ -108,7 +108,7 @@ export class TempUrlConstoller {
    }
 
    @Delete("delete/:key")
-   @UseGuards(AuthGuard("jwt"))
+   @UseGuards(JwtAuthGuard)
    @ApiParam({ name: "key", type: String })
    @ApiResponse({ type: OperationStatusResponse })
    public async delete(@Param("key") key, @AuthUser() userId: number): Promise<OperationStatusResponse> {

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Logger, Inject, Delete, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { JwtAuthGuard } from "src/auth/auth.guard";
 import { AdminGuard } from "../admin.strategy";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ServiceFunction } from "../../models/admin/serviceFunction";
@@ -20,7 +20,7 @@ import { basename, dirname } from "path";
 puppeteer.use(StealthPlugin());
 
 @Controller("admin/service_functions")
-@UseGuards(AuthGuard("jwt"), AdminGuard)
+@UseGuards(JwtAuthGuard, AdminGuard)
 export class ServiceFunctionsController {
     private readonly logger = new Logger(ServiceFunctionsController.name);
 

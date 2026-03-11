@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Inject, Param, Post, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Paginate, type Paginated, PaginateQuery } from "nestjs-paginate";
 import { OperationStatus, OperationStatusResponse } from "src/files/filesApiTypes";
@@ -10,7 +10,7 @@ import { PasswordsVaultService } from "./PasswordsVaultService.service";
 import { AddToVaultRequest, AddToVaultResponse, AllPasswordsResponse } from "./user-profile-types";
 
 @Controller("profile/vault")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(JwtAuthGuard)
 @ApiTags("User profile settings")
 export class PasswordsVaultController {
    constructor(

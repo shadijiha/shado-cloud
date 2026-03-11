@@ -5,7 +5,7 @@ A fully featured cloud drive with remote desktop streaming.
 ## Features
 
 - File upload, download, and sharing
-- Secure JWT authentication
+- Secure cookie-based authentication via [shado-auth-api](https://github.com/shadijiha/shado-auth-api) microservice
 - Remote desktop streaming via WebRTC
 - Admin panel
 - Music streaming via [Smusic](https://github.com/shadijiha/shado-music-api) *(separate microservice, not included in this repo)*
@@ -35,12 +35,23 @@ See [`setup-new-server-script/`](setup-new-server-script/) for details.
 │  FilesController                    │
 │  DirsController                     │
 │  TempUrlController                  │
-│  AuthController                     │
 │  AdminModule (Remote Desktop, etc.) │
 │  UserProfileModule                  │
-│  Swagger + JWT Auth (HTTP layer)    │
+│  Swagger (HTTP layer)               │
+└──────────────┬──────────────────────┘
+               │ TCP :11002
+               ▼
+┌─────────────────────────────────────┐
+│  shado-auth-api (HTTP :11001)       │
+│                                     │
+│  Login / Register / Logout / Me     │
+│  Token validation (TCP)             │
+│  User lookup (TCP)                  │
+│  Swagger: /api                      │
 └─────────────────────────────────────┘
 ```
+
+Authentication is fully handled by the [shado-auth-api](https://github.com/shadijiha/shado-auth-api) microservice. shado-cloud communicates with it over a TCP connection (localhost only) to validate cookies and look up users. The frontend calls shado-auth-api directly for login, register, logout, and me.
 
 ## Screenshots
 

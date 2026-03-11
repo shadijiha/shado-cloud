@@ -1,33 +1,26 @@
-import { type CanActivate, type ExecutionContext, Inject, Injectable } from "@nestjs/common";
+import { type CanActivate, type ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { InjectRepository } from "@nestjs/typeorm";
-import { type Request } from "express";
-import { AuthStrategy } from "src/auth/auth.strategy";
-import { type CookiePayload } from "src/auth/authApiTypes";
 import { EnvVariables } from "src/config/config.validator";
-import { User } from "src/models/user";
-import { parseJwt } from "src/util";
-import { Repository } from "typeorm";
+import { AuthService } from "src/auth/auth.service";
 
 @Injectable()
 export class AdminGuard implements CanActivate {
    public constructor(
-      @InjectRepository(User) private readonly userRepo: Repository<User>,
+      private readonly authService: AuthService,
       @Inject() private readonly config: ConfigService<EnvVariables>,
    ) {}
 
    async canActivate(ctx: ExecutionContext): Promise<boolean> {
       const request = ctx.switchToHttp().getRequest();
-      const payload = parseJwt(request.cookies[this.config.get<string>("COOKIE_NAME")]) as CookiePayload;
+      const token = request.cookies?.[this.config.get<string>("COOKIE_NAME")];
+      if (!token) return false;
 
-      if (!payload?.userId) {
-         return false;
-      }
+      const userId = await this.authService.validateToken(token);
+      if (!userId) return false;
 
-      const user = await this.userRepo.findOne({ where: { id: payload.userId } });
-      if (user) {
-         return user.is_admin;
-      }
-      return false;
+      // Attach userId for @AuthUser()
+      request.authUserId = userId;
+
+      return this.authService.isAdmin(userId);
    }
 }

@@ -132,9 +132,6 @@ export class EnvVariables {
    @MinLength(5)
    COOKIE_NAME: string;
 
-   @MinLength(4)
-   JWT_SECRET: string;
-
    @Validate(DoesNotContainSubstringConstraint, ["/"])
    BACKEND_HOST_NAME: string;
 
@@ -144,6 +141,15 @@ export class EnvVariables {
    @Validate(ContainsReferenceValueConstraint, ["BACKEND_HOST_NAME"])
    @Validate(DoesNotEndWithConstraint, ["/"])
    BACKEND_HOST: string;
+
+   /**
+    * Auth microservice
+    */
+   @IsInt()
+   @IsOptional()
+   @Min(1200)
+   @Max(90000)
+   AUTH_TCP_PORT: number | undefined;
 
    /**
     * Github webhooks env

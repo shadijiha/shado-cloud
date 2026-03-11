@@ -43,7 +43,10 @@ async function bootstrap() {
 
    const config = new DocumentBuilder()
       .setTitle("Shado Cloud")
-      .setDescription("The Shado Cloud API description")
+      .setDescription(
+         "The Shado Cloud API description\n\n" +
+         "**Authentication (login, register, logout, me) is handled by the Shado Auth API microservice.**",
+      )
       .setVersion("1.0")
       .addTag("")
       .addServer(

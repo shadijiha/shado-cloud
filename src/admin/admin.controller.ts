@@ -27,7 +27,7 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { Observable } from "rxjs";
-import { AuthGuard } from "@nestjs/passport";
+import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { LoggerToDb } from "src/logging";
 import { Log } from "src/models/log";
@@ -48,7 +48,7 @@ import { isDev } from "src/util";
 
 /**
  * Each function of this controller needs to be decorated with
- * @UseGuards(AuthGuard("jwt"), AdminGuard)
+ * @UseGuards(JwtAuthGuard, AdminGuard)
  * The reason it is not being used on the controller, is because redeploy needs to be public
  */
 @Controller("admin")
@@ -65,7 +65,7 @@ export class AdminController {
 
    @Get("logs")
    @ApiResponse({ type: [Log] })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    async logs() {
       try {
          return await this.adminService.all();
@@ -76,13 +76,13 @@ export class AdminController {
    }
 
    @Get("logInfo")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    async logInfo() {
       this.logger.log("This is a debug log to test logging");
    }
 
    @Delete("delete")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    @ApiBody({
       schema: {
          type: "object",
@@ -166,19 +166,19 @@ export class AdminController {
    }
 
    @Get("metrics/system-info")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getSystemInfo() {
       return this.metrics.getSystemInfo();
    }
 
    @Get("metrics/system")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getSystemMetrics() {
       return this.metrics.getSystemMetrics();
    }
 
    @Get("metrics/microservices")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getMicroserviceStatuses() {
       return this.metrics.getMicroserviceStatuses();
    }
@@ -196,7 +196,7 @@ export class AdminController {
       },
    })
    public microserviceHeartbeat(@Body() body: { name: string; port: number }, @Headers("x-service-key") key: string) {
-      if (key !== this.config.get("JWT_SECRET")) {
+      if (key !== this.config.get("COOKIE_NAME")) {
          throw new UnauthorizedException();
       }
       this.metrics.heartbeat(body.name, body.port);
@@ -208,19 +208,19 @@ export class AdminController {
       name: "section",
       description: "Redis info section name",
    })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public redisInfo(@Param("section") section: string | undefined) {
       return this.metrics.redisInfo(section);
    }
 
    @Get("redis/dump")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public redisDumb() {
       return this.metrics.dumpRedisCache();
    }
 
    @Delete("redis/flush")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async redisFlush() {
       await this.metrics.flushRedis();
       this.logger.log("Redis cache flushed by admin");
@@ -231,7 +231,7 @@ export class AdminController {
     * Feature flag endpoints
     */
    @Get("featureFlags")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getFeatureFlags() {
       return this.featureFlagService.getFeatureFlags();
    }
@@ -242,7 +242,7 @@ export class AdminController {
       description: "Feature flag namespace",
       enum: FeatureFlagNamespace,
    })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getFeatureFlagsByNamespace(
       @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
    ) {
@@ -259,7 +259,7 @@ export class AdminController {
       name: "key",
       description: "Feature flag key",
    })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getFeatureFlag(
       @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
       @Param("key") key: string,
@@ -277,7 +277,7 @@ export class AdminController {
       name: "key",
       description: "Feature flag key",
    })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public enableFeatureFlag(
       @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
       @Param("key") key: string,
@@ -295,7 +295,7 @@ export class AdminController {
       name: "key",
       description: "Feature flag key",
    })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public disableFeatureFlag(
       @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
       @Param("key") key: string,
@@ -304,7 +304,7 @@ export class AdminController {
    }
 
    @Post("featureFlag")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    @UsePipes(new ValidationPipeline())
    public createFeatureFlag(@Body() body: CreateFeatureFlagRequest) {
       return this.featureFlagService.createFeatureFlag(body);
@@ -320,7 +320,7 @@ export class AdminController {
       name: "key",
       description: "Feature flag key",
    })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public deleteFeatureFlag(
       @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
       @Param("key") key: string,
@@ -338,7 +338,7 @@ export class AdminController {
       name: "key",
       description: "Feature flag key",
    })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    @UsePipes(new ValidationPipeline())
    public updateFeatureFlag(
       @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
@@ -352,7 +352,7 @@ export class AdminController {
     * Database endpoints
     */
    @Get("database/db/tables")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getTables() {
       return this.adminService.getTables();
    }
@@ -363,14 +363,14 @@ export class AdminController {
       description: "Table name",
    })
    @UsePipes(new ValidationPipeline())
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getTable(@Param("table") table: string, @Body() body: DatabaseGetTableRequest) {
       return this.adminService.getTable(table, body);
    }
 
    @Get("database/db/tables/:table/count")
    @ApiParam({ name: "table", description: "Table name" })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getTableCount(@Param("table") table: string) {
       return this.adminService.getTableCount(table);
    }
@@ -378,7 +378,7 @@ export class AdminController {
    @Delete("database/db/tables/:table/row/:id")
    @ApiParam({ name: "table", description: "Table name" })
    @ApiParam({ name: "id", description: "Row primary key" })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public deleteRow(@Param("table") table: string, @Param("id") id: string) {
       return this.adminService.deleteRow(table, id);
    }
@@ -386,7 +386,7 @@ export class AdminController {
    @Patch("database/db/tables/:table/row/:id")
    @ApiParam({ name: "table", description: "Table name" })
    @ApiParam({ name: "id", description: "Row primary key" })
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public updateRow(@Param("table") table: string, @Param("id") id: string, @Body() body: Record<string, any>) {
       return this.adminService.updateRow(table, id, body);
    }
@@ -395,7 +395,7 @@ export class AdminController {
     * Server setup backup endpoint
     */
    @Post("server-setup")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async getServerSetup(
       @Body() body: { sudoPassword?: string },
       @Res({ passthrough: true }) res: Response,
@@ -411,19 +411,19 @@ export class AdminController {
    }
 
    @Sse("server-setup/stream")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public serverSetupStream(): Observable<MessageEvent> {
       return this.adminService.generateServerSetupBackupStream();
    }
 
    @Sse("cloud-backup/stream")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public cloudBackupStream(): Observable<MessageEvent> {
       return this.adminService.generateCloudBackupStream();
    }
 
    @Get("backup/download")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async downloadBackup(
       @Query("file") file: string,
       @Res() res: Response,
@@ -466,27 +466,27 @@ export class AdminController {
    }
 
    @Post("backgrounds")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    @UseInterceptors(FileInterceptor("file"))
    public uploadBackground(@UploadedFile() file: Express.Multer.File) {
       return this.adminService.uploadBackgroundImage(file);
    }
 
    @Delete("backgrounds/:filename")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public deleteBackground(@Param("filename") filename: string) {
       return this.adminService.deleteBackgroundImage(filename);
    }
 
    // Deployment Pipeline
    @Get("deployment/projects")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getDeploymentProjects() {
       return this.deploymentService.getProjects();
    }
 
    @Post("deployment/projects")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async createDeploymentProject(@Body() body: { slug: string; name: string; workDir: string; pm2ProcessName?: string; branch?: string; steps: any[] }) {
       const { DeploymentProject } = await import("../models/admin/deploymentProject");
       const project = new DeploymentProject();
@@ -500,7 +500,7 @@ export class AdminController {
    }
 
    @Put("deployment/projects/:slug")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async updateDeploymentProject(@Param("slug") slug: string, @Body() body: Partial<{ name: string; workDir: string; pm2ProcessName: string; branch: string; steps: any[]; enabled: boolean }>) {
       const project = await this.deploymentService.getProject(slug);
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
@@ -514,20 +514,20 @@ export class AdminController {
    }
 
    @Delete("deployment/projects/:slug")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async deleteDeploymentProject(@Param("slug") slug: string) {
       await this.deploymentService.deleteProject(slug);
       return { success: true };
    }
 
    @Get("deployment/steps/:project")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public getDeploymentSteps(@Param("project") project: string) {
       return this.deploymentService.getSteps(project);
    }
 
    @Patch("deployment/steps/:project/:step/skip")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async toggleStepSkip(@Param("project") projectSlug: string, @Param("step") step: string, @Body("skip") skip: boolean) {
       const project = await this.deploymentService.getProject(projectSlug);
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
@@ -541,7 +541,7 @@ export class AdminController {
    }
 
    @Get("deployment/status")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async getDeploymentStatus() {
       return {
          isRunning: await this.deploymentService.isRunning(),
@@ -551,7 +551,7 @@ export class AdminController {
    }
 
    @Get("deployment/stream")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    @Sse()
    public streamDeployment(): Observable<MessageEvent> {
       const subject = this.deploymentService.getSubject();
@@ -562,7 +562,7 @@ export class AdminController {
    }
 
    @Get("deployment/start/:project")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    @Sse()
    public async startDeployment(
       @Param("project") project: string,
@@ -572,14 +572,14 @@ export class AdminController {
    }
 
    @Post("deployment/cancel")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async cancelDeployment(): Promise<{ success: boolean }> {
       await this.deploymentService.cancelDeployment();
       return { success: true };
    }
 
    @Get("deployment/retry/:step")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    @Sse()
    public async retryStep(@Param("step") step: string): Promise<Observable<MessageEvent>> {
       const subject = await this.deploymentService.retryStep(step);
@@ -588,7 +588,7 @@ export class AdminController {
 
    // Environment file management
    @Get("env/:project")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async getEnvFile(@Param("project") projectSlug: string): Promise<string> {
       const project = await this.deploymentService.getProject(projectSlug);
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
@@ -605,7 +605,7 @@ export class AdminController {
    }
 
    @Put("env/:project")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    public async saveEnvFile(
       @Param("project") projectSlug: string,
       @Body("content") content: string,
@@ -627,7 +627,7 @@ export class AdminController {
    }
 
    @Get("version")
-   @UseGuards(AuthGuard("jwt"), AdminGuard)
+   @UseGuards(JwtAuthGuard, AdminGuard)
    async getVersion() {
       const { version } = await import("../../package.json");
       return { version, env: isDev(this.config) ? "dev" : "prod" };

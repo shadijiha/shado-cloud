@@ -12,7 +12,7 @@ import {
    UseInterceptors,
    ValidationPipe,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { JwtAuthGuard } from "src/auth/auth.guard";
 import { FileInterceptor } from "@nestjs/platform-express/multer";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { OperationStatusResponse } from "src/files/filesApiTypes";
@@ -23,7 +23,7 @@ import { UserProfileService } from "./UserProfile.service";
 import { Observable, Subject } from "rxjs";
 
 @Controller("profile")
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(JwtAuthGuard)
 @ApiTags("User profile settings")
 export class UserProfileController {
    constructor(private readonly profileService: UserProfileService, @Inject() private readonly logger: LoggerToDb) {}

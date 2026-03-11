@@ -12,6 +12,8 @@ import { User } from "src/models/user";
 import crypto from "crypto";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { DeploymentService } from "src/admin/deployment.service";
+import { AuthService } from "src/auth/auth.service";
+import { JwtAuthGuard } from "src/auth/auth.guard";
 
 describe("AdminController", () => {
    let adminController: AdminController;
@@ -52,6 +54,20 @@ describe("AdminController", () => {
                provide: AdminGuard,
                useValue: {
                   canActivate: jest.fn().mockReturnValue(true),
+               },
+            },
+            {
+               provide: JwtAuthGuard,
+               useValue: {
+                  canActivate: jest.fn().mockReturnValue(true),
+               },
+            },
+            {
+               provide: AuthService,
+               useValue: {
+                  validateToken: jest.fn().mockResolvedValue(1),
+                  getById: jest.fn(),
+                  isAdmin: jest.fn().mockResolvedValue(true),
                },
             },
             {

@@ -501,7 +501,12 @@ export class FilesService {
          );
       }
 
-      return path.join(this.config.get("CLOUD_DIR"), user.email);
+      const dir = path.join(this.config.get("CLOUD_DIR"), user.email);
+      // Lazily create user directory on first access (e.g. after registering via auth API)
+      if (!this.fs.existsSync(dir)) {
+         this.fs.mkdirSync(dir, { recursive: true });
+      }
+      return dir;
    }
 
    public async absolutePath(userId: number, relativePath: string) {
