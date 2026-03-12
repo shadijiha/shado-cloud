@@ -15,8 +15,13 @@ export class AuthTrafficService {
    private startedAt = new Date();
 
    record(pattern: string, payload: any, response: any) {
-      const sent = Buffer.byteLength(JSON.stringify(payload));
-      const received = Buffer.byteLength(JSON.stringify(response ?? ""));
+      // NestJS TCP transport wraps messages as: <JSON>{"pattern":"...","data":...,"id":"..."}\n
+      // Estimate wire bytes by including the framing overhead
+      const payloadJson = JSON.stringify(payload);
+      const responseJson = JSON.stringify(response ?? "");
+      const id = '"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"'; // 38 chars, UUID placeholder
+      const sent = Buffer.byteLength(`{"pattern":"${pattern}","data":${payloadJson},"id":${id}}`) + 1; // +1 for delimiter
+      const received = Buffer.byteLength(`{"response":${responseJson},"isDisposed":false,"id":${id}}`) + 1;
 
       const rec = this.traffic.get(pattern) ?? { requests: 0, bytesSent: 0, bytesReceived: 0 };
       rec.requests++;
