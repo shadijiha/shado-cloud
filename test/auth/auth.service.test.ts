@@ -6,6 +6,7 @@ import { REDIS_CACHE } from "src/util";
 import { of } from "rxjs";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { User } from "src/models/user";
+import { AuthTrafficService } from "src/auth/auth-traffic.service";
 
 describe("AuthService", () => {
    let service: AuthService;
@@ -22,6 +23,7 @@ describe("AuthService", () => {
       const module: TestingModule = await Test.createTestingModule({
          providers: [
             AuthService,
+            AuthTrafficService,
             { provide: AUTH_SERVICE, useValue: mockAuthClient },
             { provide: REDIS_CACHE, useValue: mockCache },
             { provide: getRepositoryToken(User), useValue: mockUserRepo },

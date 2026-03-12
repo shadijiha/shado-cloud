@@ -4,6 +4,7 @@ import { REDIS_CACHE } from "src/util";
 import * as os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { AuthTrafficService } from "src/auth/auth-traffic.service";
 
 const execAsync = promisify(exec);
 
@@ -23,7 +24,10 @@ export class AppMetricsService {
    private readonly maxLength = 150;
    private prevCpuTimes: { idle: number; total: number }[] = [];
 
-   constructor(@Inject(REDIS_CACHE) private readonly redis: Redis) {}
+   constructor(
+      @Inject(REDIS_CACHE) private readonly redis: Redis,
+      private readonly authTraffic: AuthTrafficService,
+   ) {}
 
    public async heartbeat(name: string, port: number) {
       const entry: MicroserviceEntry = { name, port, lastHeartbeat: new Date() };
@@ -38,7 +42,9 @@ export class AppMetricsService {
    public async getMicroserviceStatuses() {
       const all = await this.redis.hgetall(REDIS_MS_KEY);
       const now = Date.now();
-      return Object.values(all).map((raw) => {
+      const authTrafficStats = this.authTraffic.getStats();
+
+      const services = Object.values(all).map((raw) => {
          const svc: MicroserviceEntry = JSON.parse(raw);
          const age = now - new Date(svc.lastHeartbeat).getTime();
          return {
@@ -46,8 +52,22 @@ export class AppMetricsService {
             port: svc.port,
             status: age < HEARTBEAT_TIMEOUT_MS ? "up" as const : "down" as const,
             lastHeartbeat: svc.lastHeartbeat,
+            traffic: svc.name === "shado-auth-api" ? authTrafficStats : undefined,
          };
       });
+
+      // Always include auth-api traffic even if it hasn't registered via heartbeat
+      if (!services.some(s => s.name === "shado-auth-api")) {
+         services.push({
+            name: "shado-auth-api",
+            port: 11002,
+            status: "up",
+            lastHeartbeat: new Date() as any,
+            traffic: authTrafficStats,
+         });
+      }
+
+      return services;
    }
 
    public async getSystemInfo() {

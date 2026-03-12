@@ -11,6 +11,7 @@ import { UploadedFile } from "./../models/uploadedFile";
 import { SearchStat } from "./../models/stats/searchStat";
 import { FileAccessStat } from "./../models/stats/fileAccessStat";
 import { TempUrl } from "./../models/tempUrl";
+import { AuthTrafficService } from "./auth-traffic.service";
 
 @Global()
 @Module({
@@ -30,7 +31,7 @@ import { TempUrl } from "./../models/tempUrl";
       ]),
       TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl]),
    ],
-   providers: [AuthService, JwtAuthGuard],
-   exports: [AuthService, JwtAuthGuard, ClientsModule, TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl])],
+   providers: [AuthService, JwtAuthGuard, AuthTrafficService],
+   exports: [AuthService, JwtAuthGuard, AuthTrafficService, ClientsModule, TypeOrmModule.forFeature([User, UploadedFile, SearchStat, FileAccessStat, TempUrl])],
 })
 export class AuthModule {}
