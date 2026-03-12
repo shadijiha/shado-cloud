@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import argon2 from "argon2";
 import path from "path";
 import { AuthService } from "../auth/auth.service";
 import { FilesService } from "../files/files.service";
@@ -31,18 +30,24 @@ export class UserProfileService {
    ) {}
 
    public async changePassword(userId: number, old_password: string, new_password: string) {
-      // Get the old password of the user
-      const user = await this.verifyPassword(userId, old_password);
-      user.password = await argon2.hash(new_password);
-      this.userRepo.save(user);
+      const user = await this.userService.getById(userId);
+      if (!user) throw new SoftException("User not found");
+
+      const ok = await this.userService.changePassword(user.shadoUserId, old_password, new_password);
+      if (!ok) throw new SoftException("Invalid password");
 
       this.logger.log("User changed their password");
    }
 
    public async changeName(userId: number, password: string, new_name: string) {
-      const user = await this.verifyPassword(userId, password);
-      user.name = new_name;
-      this.userRepo.save(user);
+      const user = await this.userService.getById(userId);
+      if (!user) throw new SoftException("User not found");
+
+      const valid = await this.userService.verifyPassword(user.shadoUserId, password);
+      if (!valid) throw new SoftException("Invalid password");
+
+      const ok = await this.userService.changeName(user.shadoUserId, new_name);
+      if (!ok) throw new SoftException("Failed to change name");
    }
 
    public async changePicture(userId: number, password: string, file: Express.Multer.File, crop: ProfileCropData) {
@@ -149,12 +154,14 @@ export class UserProfileService {
    }
 
    private async verifyPassword(userId: number, password: string): Promise<User> | never {
-      const valid = await this.userService.verifyPassword(userId, password);
+      const user = await this.userService.getById(userId);
+      if (!user) throw new SoftException("User not found");
+
+      const valid = await this.userService.verifyPassword(user.shadoUserId, password);
       if (!valid) {
          throw new SoftException("Invalid password");
       }
 
-      const user = await this.userService.getById(userId);
       return user;
    }
 

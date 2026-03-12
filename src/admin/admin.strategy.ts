@@ -1,4 +1,4 @@
-import { type CanActivate, type ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { type CanActivate, type ExecutionContext, Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { AuthService } from "src/auth/auth.service";
@@ -15,12 +15,13 @@ export class AdminGuard implements CanActivate {
       const token = request.cookies?.[this.config.get<string>("COOKIE_NAME")];
       if (!token) return false;
 
-      const userId = await this.authService.validateToken(token);
-      if (!userId) return false;
+      const shadoUserId = await this.authService.validateToken(token);
+      if (!shadoUserId) return false;
 
-      // Attach userId for @AuthUser()
-      request.authUserId = userId;
+      const user = await this.authService.getUser(shadoUserId);
+      if (!user) return false;
 
-      return this.authService.isAdmin(userId);
+      request.authUserId = user.id;
+      return this.authService.isAdmin(shadoUserId);
    }
 }

@@ -6,10 +6,10 @@ import { ConfigService } from "@nestjs/config";
 
 describe("AdminGuard", () => {
    let guard: AdminGuard;
-   let authService: { validateToken: jest.Mock; isAdmin: jest.Mock };
+   let authService: { validateToken: jest.Mock; isAdmin: jest.Mock; getUser: jest.Mock };
 
    beforeEach(async () => {
-      authService = { validateToken: jest.fn(), isAdmin: jest.fn() };
+      authService = { validateToken: jest.fn(), isAdmin: jest.fn(), getUser: jest.fn() };
 
       const module: TestingModule = await Test.createTestingModule({
          providers: [
@@ -34,7 +34,8 @@ describe("AdminGuard", () => {
    }
 
    it("should return true if user is admin", async () => {
-      authService.validateToken.mockResolvedValue(1);
+      authService.validateToken.mockResolvedValue("uuid-1");
+      authService.getUser.mockResolvedValue({ id: 1 });
       authService.isAdmin.mockResolvedValue(true);
 
       const result = await guard.canActivate(mockContext({ shado_cloud_prod: "token" }));
@@ -42,7 +43,8 @@ describe("AdminGuard", () => {
    });
 
    it("should return false if user is not admin", async () => {
-      authService.validateToken.mockResolvedValue(2);
+      authService.validateToken.mockResolvedValue("uuid-2");
+      authService.getUser.mockResolvedValue({ id: 2 });
       authService.isAdmin.mockResolvedValue(false);
 
       const result = await guard.canActivate(mockContext({ shado_cloud_prod: "token" }));

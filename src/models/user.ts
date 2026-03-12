@@ -14,24 +14,17 @@ import { TempUrl } from "./tempUrl";
 import { UploadedFile } from "./uploadedFile";
 import { SearchStat } from "./stats/searchStat";
 
-// TODO: Remove this entity — the `user` table is fully owned by shado-auth-api.
-// This class exists only for TypeORM relations and will be replaced with plain userId columns.
+// Local record for shado-cloud DB relations.
+// Authentication & profile (name, password, is_admin) are owned by shado-auth-api's ShadoUser.
 @Entity()
 export class User extends BaseEntity {
    @ApiProperty()
    @PrimaryGeneratedColumn()
    id: number;
 
-   @ApiProperty()
+   @ApiProperty({ description: "UUID from shado-auth-api ShadoUser" })
    @Column({ unique: true })
-   email: string;
-
-   @ApiProperty()
-   @Column()
-   name: string;
-
-   @Column({ select: false })
-   password: string;
+   shadoUserId: string;
 
    @OneToMany(() => UploadedFile, (file) => file.user)
    files: UploadedFile[];
@@ -46,10 +39,6 @@ export class User extends BaseEntity {
    encrypted_passwords: EncryptedPassword[];
 
    @ApiProperty()
-   @Column({ default: false })
-   is_admin: boolean;
-
-   @ApiProperty()
    @CreateDateColumn()
    created_at: Date;
 
@@ -58,7 +47,7 @@ export class User extends BaseEntity {
    updated_at: Date;
 
    /**
-    * @returns Returns the maximum allows data a user can store on Shado Cloud in bytes
+    * @returns Returns the maximum allowed data a user can store on Shado Cloud in bytes
     */
    public getMaxData(): number {
       return 5 * 1024 * 1024 * 1024; // 5 GB

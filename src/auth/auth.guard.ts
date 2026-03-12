@@ -4,8 +4,8 @@ import { EnvVariables } from "src/config/config.validator";
 import { AuthService } from "./auth.service";
 
 /**
- * Replaces @UseGuards(JwtAuthGuard).
- * Extracts the cookie, validates via auth microservice, attaches userId to request.
+ * Extracts the cookie, validates via auth microservice (shadoUserId),
+ * resolves to local User, attaches numeric userId to request.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -19,11 +19,14 @@ export class JwtAuthGuard implements CanActivate {
       const token = request.cookies?.[this.config.get("COOKIE_NAME")];
       if (!token) throw new UnauthorizedException();
 
-      const userId = await this.authService.validateToken(token);
-      if (!userId) throw new UnauthorizedException();
+      const shadoUserId = await this.authService.validateToken(token);
+      if (!shadoUserId) throw new UnauthorizedException();
 
-      // Attach userId so @AuthUser() can read it
-      request.authUserId = userId;
+      const user = await this.authService.getUser(shadoUserId);
+      if (!user) throw new UnauthorizedException();
+
+      // Downstream gets numeric userId for DB relations
+      request.authUserId = user.id;
       return true;
    }
 }

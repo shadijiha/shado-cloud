@@ -94,7 +94,6 @@ describe("AdminService", () => {
                               columns: [
                                  { propertyName: "id" },
                                  { propertyName: "username" },
-                                 { propertyName: "password" },
                               ],
                               primaryColumns: [{ propertyName: "id" }],
                            },
@@ -305,7 +304,7 @@ describe("AdminService", () => {
          expect(result).toEqual({ success: true });
       });
 
-      it("should strip password field from user table updates", async () => {
+      it("should pass all valid fields through for user table updates", async () => {
          const featureFlagService = service["featureFlagService"] as any;
          featureFlagService.isFeatureFlagDisabled.mockResolvedValue(false);
 
@@ -314,7 +313,7 @@ describe("AdminService", () => {
 
          await service.updateRow("user", "1", { username: "test", password: "secret" });
 
-         // set should have been called — password should be stripped
+         // password is not a column on User anymore, so it gets filtered out by column validation
          expect(qb.set).toHaveBeenCalledWith({ username: "test" });
       });
 

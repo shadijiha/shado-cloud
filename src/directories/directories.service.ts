@@ -115,8 +115,11 @@ export class DirectoriesService {
    }
 
    public async createNewUserDir(user: User) {
-      if (!this.fs.existsSync(path.join(this.config.get("CLOUD_DIR"), user.email))) {
-         this.fs.mkdirSync(path.join(this.config.get("CLOUD_DIR"), user.email));
+      const email = await this.userService.getEmail(user.id);
+      if (!email) return;
+      const dir = path.join(this.config.get("CLOUD_DIR"), email);
+      if (!this.fs.existsSync(dir)) {
+         this.fs.mkdirSync(dir);
       }
    }
 

@@ -6,7 +6,7 @@ import { AuthService } from "src/auth/auth.service";
 
 describe("AdminGuard", () => {
    let guard: AdminGuard;
-   let authService: { validateToken: jest.Mock; isAdmin: jest.Mock };
+   let authService: { validateToken: jest.Mock; isAdmin: jest.Mock; getUser: jest.Mock };
 
    const createMockContext = (cookie: string | undefined): ExecutionContext =>
       ({
@@ -18,7 +18,7 @@ describe("AdminGuard", () => {
       }) as unknown as ExecutionContext;
 
    beforeEach(async () => {
-      authService = { validateToken: jest.fn(), isAdmin: jest.fn() };
+      authService = { validateToken: jest.fn(), isAdmin: jest.fn(), getUser: jest.fn() };
 
       const module: TestingModule = await Test.createTestingModule({
          providers: [
@@ -47,8 +47,17 @@ describe("AdminGuard", () => {
       expect(result).toBe(false);
    });
 
+   it("should return false when user not found locally", async () => {
+      authService.validateToken.mockResolvedValue("uuid-1");
+      authService.getUser.mockResolvedValue(null);
+      const ctx = createMockContext("valid-token");
+      const result = await guard.canActivate(ctx);
+      expect(result).toBe(false);
+   });
+
    it("should return false when user is not admin", async () => {
-      authService.validateToken.mockResolvedValue(1);
+      authService.validateToken.mockResolvedValue("uuid-1");
+      authService.getUser.mockResolvedValue({ id: 1 });
       authService.isAdmin.mockResolvedValue(false);
       const ctx = createMockContext("valid-token");
       const result = await guard.canActivate(ctx);
@@ -56,7 +65,8 @@ describe("AdminGuard", () => {
    });
 
    it("should return true when user is admin", async () => {
-      authService.validateToken.mockResolvedValue(1);
+      authService.validateToken.mockResolvedValue("uuid-1");
+      authService.getUser.mockResolvedValue({ id: 1 });
       authService.isAdmin.mockResolvedValue(true);
       const ctx = createMockContext("valid-token");
       const result = await guard.canActivate(ctx);

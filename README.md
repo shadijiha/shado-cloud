@@ -32,6 +32,11 @@ See [`setup-new-server-script/`](setup-new-server-script/) for details.
 ┌─────────────────────────────────────┐
 │     shado-cloud (HTTP :9000)        │
 │                                     │
+│  Local User entity (numeric id)     │
+│  ├── shadoUserId (UUID → auth-api)  │
+│  ├── files, logs, temp URLs, etc.   │
+│  └── no auth data stored locally    │
+│                                     │
 │  FilesController                    │
 │  DirsController                     │
 │  TempUrlController                  │
@@ -44,14 +49,23 @@ See [`setup-new-server-script/`](setup-new-server-script/) for details.
 ┌─────────────────────────────────────┐
 │  shado-auth-api (HTTP :11001)       │
 │                                     │
+│  ShadoUser (UUID, source of truth)  │
+│  Owns: email, name, password,       │
+│        is_admin                     │
+│                                     │
 │  Login / Register / Logout / Me     │
 │  Token validation (TCP)             │
 │  User lookup (TCP)                  │
+│  Change password / name (TCP)       │
 │  Swagger: /api                      │
 └─────────────────────────────────────┘
 ```
 
-Authentication is fully handled by the [shado-auth-api](https://github.com/shadijiha/shado-auth-api) microservice. shado-cloud communicates with it over a TCP connection (localhost only) to validate cookies and look up users. The frontend calls shado-auth-api directly for login, register, logout, and me.
+Authentication and user profile data (email, name, password, admin status) are fully owned by [shado-auth-api](https://github.com/shadijiha/shado-auth-api) via the `ShadoUser` entity (UUID primary key).
+
+shado-cloud maintains a local `User` entity with an auto-increment numeric `id` for DB relations (files, logs, temp URLs, etc.) and a `shadoUserId` column linking to the auth-api. The local `User` stores no auth or profile data — when shado-cloud needs the user's email or name, it fetches it from auth-api via TCP. Profile mutations (change password, change name) are forwarded to auth-api.
+
+The frontend calls shado-auth-api directly for login, register, logout, and me. All other requests go to shado-cloud, which validates the auth cookie via TCP.
 
 ## Screenshots
 

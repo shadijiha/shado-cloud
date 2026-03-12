@@ -11,7 +11,6 @@ import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { DatabaseGetTableRequest } from "./adminApiTypes";
 import { EncryptedPassword } from "src/models/EncryptedPassword";
-import { User } from "src/models/user";
 import * as path from "path";
 import archiver from "archiver";
 import { Observable, Subject } from "rxjs";
@@ -107,13 +106,6 @@ export class AdminService {
 
       const result = await qb.getRawMany();
 
-      // If table is user remove password
-      if (this.entityManager.getRepository(User).metadata.tableName == tableName) {
-         for (const row of result) {
-            row.password = "<hidden>";
-         }
-      }
-
       return result;
    }
 
@@ -192,11 +184,6 @@ export class AdminService {
 
       if (Object.keys(filtered).length === 0) {
          throw new HttpException("No valid columns to update", HttpStatus.BAD_REQUEST);
-      }
-
-      // Block updating password fields on user table
-      if (this.entityManager.getRepository(User).metadata.tableName === tableName) {
-         delete filtered["password"];
       }
 
       if (Object.keys(filtered).length === 0) {

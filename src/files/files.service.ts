@@ -490,9 +490,8 @@ export class FilesService {
    }
 
    public async getUserRootPath(userId: number): Promise<string> {
-      // Get user
-      const user = await this.userService.getById(userId);
-      if (!user) {
+      const email = await this.userService.getEmail(userId);
+      if (!email) {
          throw new HttpException(
             {
                errors: [{ field: "", message: "Invalid user Id" }],
@@ -501,7 +500,7 @@ export class FilesService {
          );
       }
 
-      const dir = path.join(this.config.get("CLOUD_DIR"), user.email);
+      const dir = path.join(this.config.get("CLOUD_DIR"), email);
       // Lazily create user directory on first access (e.g. after registering via auth API)
       if (!this.fs.existsSync(dir)) {
          this.fs.mkdirSync(dir, { recursive: true });
