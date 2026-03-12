@@ -13,4 +13,5 @@ export const connection = new DataSource({
     cli: {
         migrationsDir: "src/migrations",
     },
+    migrationsTableName: "cloud_api_migrations",
 });
