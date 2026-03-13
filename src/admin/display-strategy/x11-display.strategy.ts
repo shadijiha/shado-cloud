@@ -10,15 +10,32 @@ export class X11DisplayStrategy implements DisplayStrategy {
    private readonly env: NodeJS.ProcessEnv;
 
    constructor() {
+      const display = process.env.DISPLAY || ":0";
+
       const xauth = process.env.XAUTHORITY
-         || (() => { try { return execSync("find /run -name Xauthority 2>/dev/null").toString().trim().split("\n")[0]; } catch { return ""; } })()
+         || this.findXauthority()
          || `${process.env.HOME || "/root"}/.Xauthority`;
 
       this.env = {
          ...process.env,
-         DISPLAY: process.env.DISPLAY || ":0",
+         DISPLAY: display,
          XAUTHORITY: xauth,
       };
+
+      // Try to grant local access to the X display (needed when running as a different user via PM2/systemd)
+      try { execSync(`DISPLAY=${display} XAUTHORITY=${xauth} xhost +local: 2>/dev/null`); } catch {}
+   }
+
+   private findXauthority(): string {
+      try {
+         const paths = execSync(
+            "find /run /tmp /home -maxdepth 3 -name '.Xauthority' -o -name 'Xauthority' 2>/dev/null"
+         ).toString().trim().split("\n").filter(Boolean);
+         for (const p of paths) {
+            try { if (require("fs").statSync(p).size > 0) return p; } catch {}
+         }
+      } catch {}
+      return "";
    }
 
    async getScreenInfo(): Promise<ScreenInfo> {
