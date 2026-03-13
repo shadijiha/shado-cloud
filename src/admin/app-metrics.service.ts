@@ -20,8 +20,6 @@ const REDIS_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
 @Injectable()
 export class AppMetricsService {
-   // Max length of string values to dump
-   private readonly maxLength = 150;
    private prevCpuTimes: { idle: number; total: number }[] = [];
 
    constructor(
@@ -391,67 +389,64 @@ export class AppMetricsService {
 
 
 
-   public async redisInfo(section: string): Promise<string> {
-      return await this.redis.info(section);
+   /**
+    * Execute a raw Redis command via the ioredis client.
+    * Parses the command string into tokens and calls redis.call().
+    */
+   public async execRedisCommand(command: string): Promise<any> {
+      const tokens = this.parseRedisCommand(command.trim());
+      if (tokens.length === 0) throw new Error("Empty command");
+      const [cmd, ...args] = tokens;
+      return await (this.redis as any).call(cmd, ...args);
    }
 
-   public async flushRedis(): Promise<string> {
-      return await this.redis.flushdb();
-   }
-
-   // Method to dump all Redis keys and their values
-   public async dumpRedisCache() {
-      const allKeys: string[] = await this.getAllKeys();
-      const keyValuePairs: Record<string, string | object> = {};
-
-      for (const key of allKeys) {
-         const type = await this.redis.type(key);
-         switch (type) {
-            case "string": {
-               const v = await this.redis.get(key);
-               if (v) keyValuePairs[key] = this.trimString(v);
-               break;
-            }
-            case "hash": {
-               keyValuePairs[key] = await this.redis.hgetall(key);
-               break;
-            }
-            case "list": {
-               keyValuePairs[key] = await this.redis.lrange(key, 0, -1);
-               break;
-            }
-            case "set": {
-               keyValuePairs[key] = await this.redis.smembers(key);
-               break;
-            }
-            case "zset": {
-               keyValuePairs[key] = await this.redis.zrange(key, 0, -1);
-               break;
-            }
+   private parseRedisCommand(input: string): string[] {
+      const tokens: string[] = [];
+      let i = 0;
+      while (i < input.length) {
+         if (input[i] === " ") { i++; continue; }
+         if (input[i] === '"' || input[i] === "'") {
+            const quote = input[i++];
+            let token = "";
+            while (i < input.length && input[i] !== quote) token += input[i++];
+            i++; // skip closing quote
+            tokens.push(token);
+         } else {
+            let token = "";
+            while (i < input.length && input[i] !== " ") token += input[i++];
+            tokens.push(token);
          }
       }
-      return keyValuePairs;
+      return tokens;
    }
 
-   // Helper method to fetch all keys using SCAN to avoid blocking the Redis server
-   private async getAllKeys(): Promise<string[]> {
-      let cursor = "0";
-      let allKeys: string[] = [];
+   /**
+    * Read redis-server logs. Asks Redis for its logfile path via CONFIG GET.
+    */
+   public async getRedisLogs(lines = 100): Promise<string> {
+      // Ask Redis where its logfile is
+      const [, logPath] = await this.redis.config("GET", "logfile") as [string, string];
 
-      do {
-         const result = await this.redis.scan(cursor, "COUNT", 200);
-         cursor = result[0];
-         allKeys = allKeys.concat(result[1]);
-      } while (cursor !== "0"); // Continue until all keys are retrieved
-
-      return allKeys;
-   }
-
-   // Helper method to trim long string values
-   private trimString(value: string): string {
-      if (value.length > this.maxLength) {
-         return value.slice(0, this.maxLength) + "..."; // Truncate and add ellipsis
+      if (logPath) {
+         try {
+            const { stdout } = await execAsync(`tail -n ${lines} "${logPath}"`);
+            if (stdout.trim()) return stdout;
+         } catch (e) {
+            return `Found logfile config "${logPath}" but failed to read: ${(e as Error).message}`;
+         }
       }
-      return value; // Return the string as-is if it's shorter than maxLength
+
+      // Fallback: journalctl on Linux (Redis may log to stdout/systemd)
+      if (process.platform !== "darwin") {
+         try {
+            const { stdout } = await execAsync(`journalctl -u redis-server -n ${lines} --no-pager 2>/dev/null || journalctl -u redis -n ${lines} --no-pager`);
+            if (stdout.trim()) return stdout;
+         } catch {}
+      }
+
+      return logPath
+         ? `Redis logfile is "${logPath}" but it could not be read`
+         : "Redis logfile is not configured (empty string). Redis may be logging to stdout.";
    }
+
 }

@@ -203,28 +203,33 @@ export class AdminController {
       return { ok: true };
    }
 
-   @Get("redis/info/:section")
-   @ApiParam({
-      name: "section",
-      description: "Redis info section name",
+   @Post("redis/exec")
+   @ApiBody({
+      schema: {
+         type: "object",
+         properties: { command: { type: "string", example: "GET mykey" } },
+      },
    })
    @UseGuards(JwtAuthGuard, AdminGuard)
-   public redisInfo(@Param("section") section: string | undefined) {
-      return this.metrics.redisInfo(section);
+   public async redisExec(@Body("command") command: string) {
+      if (!command?.trim()) {
+         throw new HttpException("Command is required", HttpStatus.BAD_REQUEST);
+      }
+      this.logger.log(`Redis CLI: ${command}`);
+      try {
+         const result = await this.metrics.execRedisCommand(command);
+         return { result };
+      } catch (e) {
+         return { error: (e as Error).message };
+      }
    }
 
-   @Get("redis/dump")
+   @Get("redis/logs")
    @UseGuards(JwtAuthGuard, AdminGuard)
-   public redisDumb() {
-      return this.metrics.dumpRedisCache();
-   }
-
-   @Delete("redis/flush")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   public async redisFlush() {
-      await this.metrics.flushRedis();
-      this.logger.log("Redis cache flushed by admin");
-      return { success: true };
+   public async redisLogs(@Query("lines") lines?: string) {
+      const n = parseInt(lines) || 100;
+      const logs = await this.metrics.getRedisLogs(n);
+      return { logs };
    }
 
    /**
