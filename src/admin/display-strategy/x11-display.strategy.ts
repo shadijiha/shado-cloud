@@ -1,35 +1,27 @@
 import { exec, execSync } from "child_process";
 import { promisify } from "util";
 import { DisplayStrategy, ScreenInfo } from "./display-strategy.interface";
-import { networkInterfaces } from "os";
 
 const execAsync = promisify(exec);
 
 export class X11DisplayStrategy implements DisplayStrategy {
    readonly name = "X11";
-   private readonly env: NodeJS.ProcessEnv;
+   private readonly envPrefix: string;
 
    constructor() {
       const display = process.env.DISPLAY || ":0";
+      const xauth = process.env.XAUTHORITY || this.findXauthority() || `${process.env.HOME || "/root"}/.Xauthority`;
 
-      const xauth = process.env.XAUTHORITY
-         || this.findXauthority()
-         || `${process.env.HOME || "/root"}/.Xauthority`;
+      this.envPrefix = `DISPLAY=${display} XAUTHORITY=${xauth}`;
 
-      this.env = {
-         ...process.env,
-         DISPLAY: display,
-         XAUTHORITY: xauth,
-      };
-
-      // Try to grant local access to the X display (needed when running as a different user via PM2/systemd)
-      try { execSync(`DISPLAY=${display} XAUTHORITY=${xauth} xhost +local: 2>/dev/null`); } catch {}
+      // Grant local access so PM2/systemd users can connect to X
+      try { execSync(`${this.envPrefix} xhost +local: 2>/dev/null`); } catch {}
    }
 
    private findXauthority(): string {
       try {
          const paths = execSync(
-            "find /run /tmp /home -maxdepth 3 -name '.Xauthority' -o -name 'Xauthority' 2>/dev/null"
+            "find /run /tmp /home -maxdepth 3 \\( -name '.Xauthority' -o -name 'Xauthority' \\) 2>/dev/null"
          ).toString().trim().split("\n").filter(Boolean);
          for (const p of paths) {
             try { if (require("fs").statSync(p).size > 0) return p; } catch {}
@@ -38,8 +30,12 @@ export class X11DisplayStrategy implements DisplayStrategy {
       return "";
    }
 
+   private exec(cmd: string) {
+      return execAsync(`${this.envPrefix} ${cmd}`);
+   }
+
    async getScreenInfo(): Promise<ScreenInfo> {
-      const { stdout } = await execAsync("xdpyinfo | grep dimensions | awk '{print $2}'", { env: this.env });
+      const { stdout } = await this.exec("xdpyinfo | grep dimensions | awk '{print $2}'");
       const [w, h] = stdout.trim().split("x").map(Number);
       return { width: w || 1920, height: h || 1080 };
    }
@@ -53,36 +49,36 @@ export class X11DisplayStrategy implements DisplayStrategy {
    }
 
    getScreenshotCommand(): string {
-      return "scrot -p -o /tmp/screen.jpg -q 20 && base64 /tmp/screen.jpg";
+      return `${this.envPrefix} scrot -p -o /tmp/screen.jpg -q 20 && base64 /tmp/screen.jpg`;
    }
 
    async mouseMove(x: number, y: number): Promise<void> {
-      await execAsync(`xdotool mousemove ${x} ${y}`, { env: this.env });
+      await this.exec(`xdotool mousemove ${x} ${y}`);
    }
 
    async mouseClick(x: number, y: number, button: number): Promise<void> {
-      await execAsync(`xdotool mousemove ${x} ${y} click ${button}`, { env: this.env });
+      await this.exec(`xdotool mousemove ${x} ${y} click ${button}`);
    }
 
    async mouseDown(x: number, y: number, button: number): Promise<void> {
-      await execAsync(`xdotool mousemove ${x} ${y} mousedown ${button}`, { env: this.env });
+      await this.exec(`xdotool mousemove ${x} ${y} mousedown ${button}`);
    }
 
    async mouseUp(x: number, y: number, button: number): Promise<void> {
-      await execAsync(`xdotool mousemove ${x} ${y} mouseup ${button}`, { env: this.env });
+      await this.exec(`xdotool mousemove ${x} ${y} mouseup ${button}`);
    }
 
    async mouseScroll(x: number, y: number, scrollY: number): Promise<void> {
       const direction = scrollY > 0 ? 5 : 4;
-      await execAsync(`xdotool mousemove ${x} ${y} click ${direction}`, { env: this.env });
+      await this.exec(`xdotool mousemove ${x} ${y} click ${direction}`);
    }
 
    async keyPress(key: string): Promise<void> {
-      await execAsync(`xdotool key ${X11_KEY_MAP[key] || key}`, { env: this.env });
+      await this.exec(`xdotool key ${X11_KEY_MAP[key] || key}`);
    }
 
    async typeChar(char: string): Promise<void> {
-      await execAsync(`xdotool type --clearmodifiers "${char}"`, { env: this.env });
+      await this.exec(`xdotool type --clearmodifiers "${char}"`);
    }
 }
 
