@@ -215,13 +215,6 @@ export class EnvVariables {
    @IsOptional()
    @IsString()
    GOOGLE_REFRESH_TOKEN: string;
-
-   /**
-    * Display
-    */
-   @IsOptional()
-   @IsString()
-   DISPLAY: string;
 }
 
 export function validate(config: Record<string, unknown>) {

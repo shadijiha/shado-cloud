@@ -6,32 +6,45 @@ const execAsync = promisify(exec);
 
 export class X11DisplayStrategy implements DisplayStrategy {
    readonly name = "X11";
-   private readonly envPrefix: string;
 
-   constructor() {
-      const display = process.env.DISPLAY || ":0";
-      const xauth = process.env.XAUTHORITY || this.findXauthority() || `${process.env.HOME || "/root"}/.Xauthority`;
+   /**
+    * Detects DISPLAY and XAUTHORITY at call time (not constructor time)
+    * so it picks up changes after reboots / session restarts.
+    */
+   private getEnvPrefix(): string {
+      const display = process.env.DISPLAY || this.detectDisplay();
+      const xauth = process.env.XAUTHORITY || this.findXauthority();
+      return `DISPLAY=${display} XAUTHORITY=${xauth}`;
+   }
 
-      this.envPrefix = `DISPLAY=${display} XAUTHORITY=${xauth}`;
-
-      // Grant local access so PM2/systemd users can connect to X
-      try { execSync(`${this.envPrefix} xhost +local: 2>/dev/null`); } catch {}
+   private detectDisplay(): string {
+      try {
+         const sockets = execSync("ls /tmp/.X11-unix/ 2>/dev/null").toString().trim();
+         const match = sockets.match(/X(\d+)/g);
+         if (match && match.length > 0) {
+            const num = match[match.length - 1].replace("X", "");
+            return `:${num}`;
+         }
+      } catch {}
+      return ":0";
    }
 
    private findXauthority(): string {
       try {
-         const paths = execSync(
-            "find /run /tmp /home -maxdepth 3 \\( -name '.Xauthority' -o -name 'Xauthority' \\) 2>/dev/null"
-         ).toString().trim().split("\n").filter(Boolean);
-         for (const p of paths) {
-            try { if (require("fs").statSync(p).size > 0) return p; } catch {}
-         }
+         const uid = execSync("id -u").toString().trim();
+         const gdmPath = `/run/user/${uid}/gdm/Xauthority`;
+         if (require("fs").existsSync(gdmPath)) return gdmPath;
       } catch {}
-      return "";
+      try {
+         const home = process.env.HOME || "/root";
+         const homePath = `${home}/.Xauthority`;
+         if (require("fs").existsSync(homePath)) return homePath;
+      } catch {}
+      return `${process.env.HOME || "/root"}/.Xauthority`;
    }
 
    private exec(cmd: string) {
-      return execAsync(`${this.envPrefix} ${cmd}`);
+      return execAsync(`${this.getEnvPrefix()} ${cmd}`);
    }
 
    async getScreenInfo(): Promise<ScreenInfo> {
@@ -49,7 +62,7 @@ export class X11DisplayStrategy implements DisplayStrategy {
    }
 
    getScreenshotCommand(): string {
-      return `${this.envPrefix} scrot -p -o /tmp/screen.jpg -q 20 && base64 /tmp/screen.jpg`;
+      return `${this.getEnvPrefix()} scrot -p -o /tmp/screen.jpg -q 20 && base64 /tmp/screen.jpg`;
    }
 
    async mouseMove(x: number, y: number): Promise<void> {
