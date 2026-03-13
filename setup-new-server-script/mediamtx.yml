@@ -20,5 +20,5 @@ webrtcAdditionalHosts: [38.41.212.86]
 paths:
   screen:
     source: publisher
-    runOnDemand: ffmpeg -f x11grab -framerate 30 -video_size 2560x1440 -draw_mouse 1 -i :0 -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g 30 -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemand: /home/shadi/mediamtx-ffmpeg.sh
     runOnDemandRestart: yes

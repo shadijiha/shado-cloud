@@ -171,11 +171,16 @@ def main():
     ok("System packages installed")
 
     # ── X11 dummy display for headless operation ──────────────────────────────
-    step("1b/10", "Configuring X11 dummy display")
+    # A headless server has no physical monitor. The X11 "dummy" driver creates
+    # a virtual framebuffer so that Xorg, xdotool, scrot, and ffmpeg (x11grab)
+    # all work as if a real display were attached. Without this, there is no
+    # screen to capture or interact with for remote desktop streaming.
+    step("1b/10", "Configuring X11 dummy display + GDM auto-login")
     xorg_conf = """\
 Section "Device"
     Identifier "DummyDevice"
     Driver "dummy"
+    # VideoRam must be large enough for the highest resolution (2560x1440x32bpp ≈ 14MB)
     VideoRam 256000
 EndSection
 
@@ -183,7 +188,10 @@ Section "Monitor"
     Identifier "DummyMonitor"
     HorizSync 28-80
     VertRefresh 48-75
+    # Modelines define the exact pixel timings for each resolution.
+    # These are required because the dummy driver has no EDID from a real monitor.
     Modeline "1920x1080" 148.50 1920 2008 2052 2200 1080 1084 1089 1125 +hsync +vsync
+    Modeline "2560x1440" 312.25 2560 2752 3024 3488 1440 1443 1448 1493 -hsync +vsync
 EndSection
 
 Section "Screen"
@@ -193,12 +201,43 @@ Section "Screen"
     DefaultDepth 24
     SubSection "Display"
         Depth 24
-        Modes "1920x1080"
+        # List preferred resolution first — Xorg picks the first one it can use.
+        Modes "2560x1440" "1920x1080"
     EndSubSection
 EndSection
 """
     run(f"echo '{xorg_conf}' | sudo tee /etc/X11/xorg.conf > /dev/null")
     ok("X11 dummy display configured at /etc/X11/xorg.conf")
+
+    # GDM auto-login: On a headless server, nobody is physically present to
+    # type a password at the login screen. Without auto-login, GDM sits at the
+    # greeter — which means:
+    #   1. No user desktop session exists (no ~/.Xauthority for the user)
+    #   2. xdotool/scrot/ffmpeg cannot authenticate to the X server
+    #   3. The X display number may differ from what the app expects
+    # Auto-login ensures a real user session starts on every boot, creating
+    # the Xauthority file and a predictable DISPLAY.
+    # WaylandEnable=false forces X11 — Wayland doesn't support x11grab/xdotool.
+    print("  Configuring GDM auto-login...")
+    gdm_conf = f"""\
+[daemon]
+AutomaticLoginEnable=True
+AutomaticLogin={USER}
+# Force X11 instead of Wayland — xdotool, scrot, and ffmpeg x11grab
+# do not work under Wayland.
+WaylandEnable=false
+
+[security]
+
+[xdmcp]
+
+[chooser]
+
+[debug]
+"""
+    run(f"echo '{gdm_conf}' | sudo tee /etc/gdm3/custom.conf > /dev/null")
+    run("sudo systemctl enable gdm", check=False)
+    ok("GDM auto-login configured")
 
     # ── Git SSH setup ─────────────────────────────────────────────────────────
     ssh_dir = Path.home() / ".ssh"
@@ -450,7 +489,9 @@ FLUSH PRIVILEGES;
     # ── 10. Services (MediaMTX, Apache, PM2) ──────────────────────────────────
     step("10/10", "Configuring services")
 
-    # MediaMTX
+    # MediaMTX — a lightweight media server that re-publishes the screen capture
+    # as a WebRTC stream. The browser connects to MediaMTX's WHEP endpoint to
+    # get a low-latency live view of the server's desktop.
     print("  Installing MediaMTX...")
     arch_out = run_quiet("dpkg --print-architecture").stdout.strip()
     mtx_arch = "linux_arm64v8" if arch_out in ("arm64", "aarch64") else "linux_amd64"
@@ -459,27 +500,63 @@ FLUSH PRIVILEGES;
         f"mediamtx_{MTX_VERSION}_{mtx_arch}.tar.gz -O /tmp/mediamtx.tar.gz"
     )
     run("tar -xzf /tmp/mediamtx.tar.gz -C /tmp && sudo mv /tmp/mediamtx /usr/local/bin/")
-    shutil.copy2(cloud_app / "mediamtx.yml", Path.home() / "mediamtx.yml")
+    shutil.copy2(cloud_app / "setup-new-server-script" / "mediamtx.yml", Path.home() / "mediamtx.yml")
     ok("MediaMTX installed")
 
-    # MediaMTX systemd
+    # ffmpeg wrapper script for MediaMTX's runOnDemand.
+    # Why a wrapper instead of an inline ffmpeg command in mediamtx.yml?
+    #   - The X display number (e.g. :0, :1) can change across reboots depending
+    #     on how GDM assigns it. Hardcoding ":0" breaks after some reboots.
+    #   - The screen resolution may also change (e.g. if xrandr modeline applies
+    #     differently). Hardcoding "1920x1080" would capture the wrong area.
+    #   - This script detects both at runtime by:
+    #     1. Reading /tmp/.X11-unix/ to find the actual X socket number
+    #     2. Using xdotool getdisplaygeometry to get the real resolution
+    #   - XAUTHORITY points to GDM's auth file at /run/user/<uid>/gdm/Xauthority
+    #     because GDM auto-login creates the session there (not ~/.Xauthority).
+    ffmpeg_wrapper = Path.home() / "mediamtx-ffmpeg.sh"
+    ffmpeg_wrapper.write_text("""\
+#!/bin/bash
+# Auto-detect the X display number from the socket file
+export DISPLAY=:$(ls /tmp/.X11-unix/ | grep -oP '\\d+' | tail -1)
+# GDM stores Xauthority here (not ~/.Xauthority) when using auto-login
+export XAUTHORITY=/run/user/$(id -u)/gdm/Xauthority
+# Get actual screen resolution so ffmpeg captures the full display
+RES=$(xdotool getdisplaygeometry | tr ' ' 'x')
+exec ffmpeg -f x11grab -framerate 30 -video_size ${RES} -draw_mouse 1 -i ${DISPLAY} -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g 30 -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+""")
+    ffmpeg_wrapper.chmod(0o755)
+    ok("MediaMTX ffmpeg wrapper created (auto-detects display + resolution)")
+
+    # MediaMTX systemd service.
+    # Key details:
+    #   - After=display-manager.service: ensures GDM starts first
+    #   - ExecStartPre: busy-waits until an X socket appears in /tmp/.X11-unix/.
+    #     This is necessary because GDM takes a few seconds after boot to create
+    #     the X session. Without this wait, mediamtx would start before X is
+    #     ready, and ffmpeg's x11grab would fail with "Can't open display".
+    #   - RestartSec=3: avoids rapid restart loops if something goes wrong
     user = USER
     home = str(Path.home())
     run(f"""sudo tee /etc/systemd/system/mediamtx.service > /dev/null <<'EOF'
 [Unit]
 Description=MediaMTX
-After=network.target
+After=display-manager.service
+Wants=display-manager.service
 
 [Service]
 User={user}
+# Wait for X to be ready — GDM takes a few seconds to create the display
+ExecStartPre=/bin/bash -c 'until ls /tmp/.X11-unix/X* >/dev/null 2>&1; do sleep 1; done; sleep 2'
 ExecStart=/usr/local/bin/mediamtx {home}/mediamtx.yml
 Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 EOF""")
     run("sudo systemctl daemon-reload && sudo systemctl enable mediamtx", check=False)
-    ok("MediaMTX service configured")
+    ok("MediaMTX service configured (auto-waits for X display)")
 
     # Apache + HTTPS (Let's Encrypt)
     print("  Configuring Apache...")
@@ -541,10 +618,32 @@ EOF""")
             run(line.strip())
     ok("PM2 configured with startup")
 
-    # Disable screen blanking
+    # ~/.xsessionrc runs automatically when the desktop session starts (on every
+    # boot, thanks to GDM auto-login). It's the right place for display setup
+    # that must happen inside the user's X session.
     xsession = Path.home() / ".xsessionrc"
-    xsession.write_text("xset s off\nxset -dpms\nxset s noblank\n")
-    ok("Screen blanking disabled")
+    xsession.write_text(
+        # xhost +local: allows any local user to connect to this X display.
+        # Without this, processes running under PM2 or systemd (which may run
+        # as the same user but in a different PAM session) get "Authorization
+        # required" errors from xdotool/scrot because they lack the X cookie.
+        "xhost +local: >/dev/null 2>&1\n"
+        # Disable screen blanking and power management — on a headless server
+        # the screen would go black after idle timeout, causing the WebRTC
+        # stream to show a black screen until mouse movement wakes it up.
+        "xset s off\n"
+        "xset -dpms\n"
+        "xset s noblank\n"
+        # Set QHD resolution on the dummy display. The dummy driver doesn't
+        # auto-detect modes like a real monitor, so we must manually create
+        # the modeline and apply it. This runs on every session start to
+        # ensure the resolution is correct even if xorg.conf modes didn't
+        # apply during Xorg startup.
+        'xrandr --newmode "2560x1440" 312.25 2560 2752 3024 3488 1440 1443 1448 1493 -hsync +vsync 2>/dev/null\n'
+        'xrandr --addmode DUMMY0 "2560x1440" 2>/dev/null\n'
+        'xrandr --output DUMMY0 --mode "2560x1440" 2>/dev/null\n'
+    )
+    ok("~/.xsessionrc configured: xhost, screen blanking, QHD resolution")
 
     # Cleanup
     Path("/tmp/mediamtx.tar.gz").unlink(missing_ok=True)
