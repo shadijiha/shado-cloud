@@ -30,7 +30,7 @@ export class FileAccessStat extends BaseEntity {
    @ApiProperty()
    count: number;
 
-   @Column()
+   @Column({ default: "unknown" })
    @ApiProperty()
    user_agent: string;
 
