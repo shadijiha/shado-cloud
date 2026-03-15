@@ -7,6 +7,8 @@ import { promisify } from "util";
 import { AuthTrafficService } from "src/auth/auth-traffic.service";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { type Readable } from "stream";
+import { ConfigService } from "@nestjs/config";
+import { EnvVariables } from "src/config/config.validator";
 
 const execAsync = promisify(exec);
 
@@ -28,6 +30,7 @@ export class AppMetricsService {
       @Inject(REDIS_CACHE) private readonly redis: Redis,
       private readonly authTraffic: AuthTrafficService,
       @Inject() private readonly fs: AbstractFileSystem,
+      private readonly config: ConfigService<EnvVariables>,
    ) {}
 
    public async heartbeat(name: string, port: number) {
@@ -71,10 +74,10 @@ export class AppMetricsService {
       }
 
       // Always include shado-cloud itself
-      if (!services.some(s => s.name === "shado-cloud")) {
+      if (!services.some(s => s.name === "shado-cloud-backend")) {
          services.unshift({
-            name: "shado-cloud",
-            port: 9000,
+            name: "shado-cloud-backend",
+            port: this.config.get("APP_PORT") || 9000,
             status: "up",
             lastHeartbeat: new Date() as any,
             traffic: undefined,
@@ -87,8 +90,38 @@ export class AppMetricsService {
 
    public async getPm2Logs(processName: string, lines: number = 100): Promise<string> {
       try {
-         const { stdout } = await execAsync(`pm2 logs ${processName} --nostream --lines ${lines} 2>&1`, { maxBuffer: 5 * 1024 * 1024 });
-         return stdout;
+         // Get both log file paths from pm2
+         const { stdout: jlist } = await execAsync(`pm2 jlist`, { maxBuffer: 5 * 1024 * 1024 });
+         const processes = JSON.parse(jlist);
+         const proc = processes.find((p: any) => p.name === processName);
+         if (!proc) return `Process "${processName}" not found in pm2`;
+
+         const outLog = proc.pm2_env?.pm_out_log_path;
+         const errLog = proc.pm2_env?.pm_err_log_path;
+
+         // Read both logs, merge and sort by timestamp
+         const readTail = async (file: string) => {
+            try {
+               const { stdout } = await execAsync(`tail -n ${lines} "${file}"`, { maxBuffer: 5 * 1024 * 1024 });
+               return stdout.split("\n").filter(Boolean);
+            } catch { return []; }
+         };
+
+         const [outLines, errLines] = await Promise.all([
+            outLog ? readTail(outLog) : Promise.resolve([]),
+            errLog ? readTail(errLog) : Promise.resolve([]),
+         ]);
+
+         const all = [...outLines, ...errLines];
+         // Sort by timestamp if lines start with a date pattern
+         all.sort((a, b) => {
+            const ta = a.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})/);
+            const tb = b.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})/);
+            if (ta && tb) return ta[1].localeCompare(tb[1]);
+            return 0;
+         });
+
+         return all.slice(-lines).join("\n");
       } catch (e) {
          return (e as any).stdout || (e as Error).message;
       }
