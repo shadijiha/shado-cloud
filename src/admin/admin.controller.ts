@@ -33,7 +33,7 @@ import { LoggerToDb } from "src/logging";
 import { Log } from "src/models/log";
 import { AdminService } from "./admin.service";
 import { AdminGuard } from "./admin.strategy";
-import { AppMetricsService } from "./app-metrics.service";
+import { AppMetricsService, type MicroserviceEntry } from "./app-metrics.service";
 import crypto from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
@@ -202,11 +202,11 @@ export class AdminController {
          },
       },
    })
-   public microserviceHeartbeat(@Body() body: { name: string; port: number }, @Headers("x-service-key") key: string) {
+   public microserviceHeartbeat(@Body() body: { name: string; port: number; traffic?: MicroserviceEntry["traffic"] }, @Headers("x-service-key") key: string) {
       if (key !== this.config.get("SERVICE_SECRET")) {
          throw new UnauthorizedException();
       }
-      this.metrics.heartbeat(body.name, body.port);
+      this.metrics.heartbeat(body.name, body.port, body.traffic);
       return { ok: true };
    }
 

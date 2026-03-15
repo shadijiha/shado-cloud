@@ -4,11 +4,11 @@ import { REDIS_CACHE } from "src/util";
 import * as os from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { AuthTrafficService } from "src/auth/auth-traffic.service";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { type Readable } from "stream";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
+import { TrafficService } from "src/traffic.service";
 
 const execAsync = promisify(exec);
 
@@ -16,6 +16,14 @@ export interface MicroserviceEntry {
    name: string;
    port: number;
    lastHeartbeat: Date;
+   traffic?: {
+      since: string;
+      totalRequests: number;
+      totalBytesSent: number;
+      totalBytesReceived: number;
+      totalBytes: number;
+      byPattern: Record<string, { requests: number; bytesSent: number; bytesReceived: number }>;
+   };
 }
 
 const HEARTBEAT_TIMEOUT_MS = 60_000; // consider dead after 60s without heartbeat
@@ -28,13 +36,13 @@ export class AppMetricsService {
 
    constructor(
       @Inject(REDIS_CACHE) private readonly redis: Redis,
-      private readonly authTraffic: AuthTrafficService,
       @Inject() private readonly fs: AbstractFileSystem,
       private readonly config: ConfigService<EnvVariables>,
+      private readonly trafficService: TrafficService,
    ) {}
 
-   public async heartbeat(name: string, port: number) {
-      const entry: MicroserviceEntry = { name, port, lastHeartbeat: new Date() };
+   public async heartbeat(name: string, port: number, traffic?: MicroserviceEntry["traffic"]) {
+      const entry: MicroserviceEntry = { name, port, lastHeartbeat: new Date(), traffic };
       await this.redis.hset(REDIS_MS_KEY, name, JSON.stringify(entry));
       await this.redis.expire(REDIS_MS_KEY, REDIS_TTL_SECONDS);
    }
@@ -46,7 +54,6 @@ export class AppMetricsService {
    public async getMicroserviceStatuses() {
       const all = await this.redis.hgetall(REDIS_MS_KEY);
       const now = Date.now();
-      const authTrafficStats = this.authTraffic.getStats();
 
       const services = Object.values(all).map((raw) => {
          const svc: MicroserviceEntry = JSON.parse(raw);
@@ -56,22 +63,10 @@ export class AppMetricsService {
             port: svc.port,
             status: age < HEARTBEAT_TIMEOUT_MS ? "up" as const : "down" as const,
             lastHeartbeat: svc.lastHeartbeat,
-            traffic: svc.name === "shado-auth-api" ? authTrafficStats : undefined,
+            traffic: this.trimTraffic(svc.traffic),
             isSelf: false,
          };
       });
-
-      // Always include auth-api traffic even if it hasn't registered via heartbeat
-      if (!services.some(s => s.name === "shado-auth-api")) {
-         services.push({
-            name: "shado-auth-api",
-            port: 11002,
-            status: "up",
-            lastHeartbeat: new Date() as any,
-            traffic: authTrafficStats,
-            isSelf: false,
-         });
-      }
 
       // Always include shado-cloud itself
       if (!services.some(s => s.name === "shado-cloud-backend")) {
@@ -80,12 +75,20 @@ export class AppMetricsService {
             port: this.config.get("APP_PORT") || 9000,
             status: "up",
             lastHeartbeat: new Date() as any,
-            traffic: undefined,
+            traffic: this.trimTraffic(this.trafficService.getStats()),
             isSelf: true,
          });
       }
 
       return services;
+   }
+
+   private trimTraffic(traffic?: MicroserviceEntry["traffic"]): MicroserviceEntry["traffic"] {
+      if (!traffic?.byPattern) return traffic;
+      const top = Object.entries(traffic.byPattern)
+         .sort(([, a], [, b]) => (b.bytesSent + b.bytesReceived) - (a.bytesSent + a.bytesReceived))
+         .slice(0, 3);
+      return { ...traffic, byPattern: Object.fromEntries(top) };
    }
 
    public async getPm2Logs(processName: string, lines: number = 100): Promise<{ stdout: string; stderr: string }> {

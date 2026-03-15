@@ -12,6 +12,8 @@ import { UserProfileModule } from "./user-profile/user-profile.module";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD, INQUIRER } from "@nestjs/core";
 import { CORPMiddleware } from "./corp.middleware";
+import { TrafficMiddleware } from "./traffic.middleware";
+import { TrafficService } from "./traffic.service";
 import { LoggerToDb } from "./logging";
 import { Log } from "./models/log";
 import { DataSource } from "typeorm";
@@ -122,14 +124,16 @@ export class GlobalUtilityModule {}
    controllers: [AppController],
    providers: [
       AppService,
+      TrafficService,
       {
          provide: APP_GUARD,
          useClass: ThrottlerGuard,
       },
    ],
+   exports: [TrafficService],
 })
 export class AppModule {
    configure(consumer: MiddlewareConsumer) {
-      consumer.apply(CORPMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL });
+      consumer.apply(CORPMiddleware, TrafficMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL });
    }
 }
