@@ -67,8 +67,9 @@ import { ReplicationModule } from "./replication/replication.module";
          inject: [ConfigService],
       },
       FeatureFlagService,
+      TrafficService,
    ],
-   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService],
+   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService],
 })
 export class GlobalUtilityModule {}
 
@@ -124,13 +125,11 @@ export class GlobalUtilityModule {}
    controllers: [AppController],
    providers: [
       AppService,
-      TrafficService,
       {
          provide: APP_GUARD,
          useClass: ThrottlerGuard,
       },
    ],
-   exports: [TrafficService],
 })
 export class AppModule {
    configure(consumer: MiddlewareConsumer) {
