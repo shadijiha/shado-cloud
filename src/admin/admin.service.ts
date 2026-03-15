@@ -218,7 +218,6 @@ export class AdminService {
 
       const errors: string[] = [];
       const sudoPrefix = sudoPassword ? `echo '${sudoPassword}' | sudo -S` : "";
-      const isMac = process.platform === "darwin";
 
       // 1. MySQL dump
       try {
@@ -231,20 +230,39 @@ export class AdminService {
          errors.push(`MySQL dump failed: ${(e as Error).message}`);
       }
 
-      // 2. Apache configs (all sites-available)
-      const apacheDir = isMac
-         ? "/opt/homebrew/etc/httpd"
-         : "/etc/apache2/sites-available";
+      // 2-5. Collect config files
+      const configErrors = await this.collectServerConfigFiles(tmpDir, sudoPrefix);
+      errors.push(...configErrors);
+
+      if (errors.length > 0) {
+         this.fs.writeFileSync(`${tmpDir}/errors.txt`, errors.join("\n"));
+      }
+
+      const zipBuffer = await this.createZipBuffer(tmpDir);
+      this.fs.rmdirSync(tmpDir, { recursive: true });
+      return zipBuffer;
+   }
+
+   /**
+    * Collects Apache configs, .env, Cloudflare tunnel config/credentials, and origin certs into tmpDir.
+    * Shared by both the direct and streaming backup methods.
+    */
+   private async collectServerConfigFiles(tmpDir: string, sudoPrefix: string = ""): Promise<string[]> {
+      const errors: string[] = [];
+      const isMac = process.platform === "darwin";
+
+      // Apache configs (all sites-available)
+      const apacheDir = isMac ? "/opt/homebrew/etc/httpd" : "/etc/apache2/sites-available";
       try {
          this.fs.mkdirSync(`${tmpDir}/apache`, { recursive: true });
-         const listCmd = sudoPassword && !isMac
+         const listCmd = sudoPrefix && !isMac
             ? `${sudoPrefix} ls ${apacheDir}/*.conf 2>/dev/null`
             : `ls ${apacheDir}/*.conf 2>/dev/null`;
          const result = await this.execSync(listCmd);
          const confFiles = result.stdout.trim().split("\n").filter(Boolean);
          for (const file of confFiles) {
             const filename = path.basename(file);
-            if (sudoPassword && !isMac) {
+            if (sudoPrefix && !isMac) {
                await this.execSync(`${sudoPrefix} cat ${file} > ${tmpDir}/apache/${filename}`);
             } else {
                const content = this.fs.readFileSync(file, "utf-8");
@@ -252,30 +270,29 @@ export class AdminService {
             }
          }
       } catch (err) {
-         const e = err as Error & {code: string};
+         const e = err as Error & { code: string };
          if (e.code === "EACCES" || e.message?.includes("Permission denied")) {
             throw new HttpException("SUDO_REQUIRED", HttpStatus.FORBIDDEN);
          }
          errors.push(`Apache config failed: ${e.message}`);
       }
 
-      // 3. .env file
+      // .env file
       try {
-         const envPath = path.join(process.cwd(), ".env");
-         const content = this.fs.readFileSync(envPath, "utf-8");
+         const content = this.fs.readFileSync(path.join(process.cwd(), ".env"), "utf-8");
          this.fs.writeFileSync(`${tmpDir}/env-file.txt`, content);
       } catch (e) {
          errors.push(`.env file failed: ${(e as Error).message}`);
       }
 
-      // 4. Cloudflare tunnel config and credentials
+      // Cloudflare tunnel config and credentials
       const cloudflaredDir = "/etc/cloudflared";
       try {
          const configPath = `${cloudflaredDir}/config.yml`;
          if (this.fs.existsSync(configPath)) {
             const content = this.fs.readFileSync(configPath, "utf-8");
             this.fs.writeFileSync(`${tmpDir}/cloudflared-config.yml`, content);
-         } else if (sudoPassword) {
+         } else if (sudoPrefix) {
             await this.execSync(`${sudoPrefix} cat ${configPath} > ${tmpDir}/cloudflared-config.yml`);
          }
       } catch (e) {
@@ -283,15 +300,14 @@ export class AdminService {
       }
 
       try {
-         // Copy all credential JSON files
-         const listCmd = sudoPassword
+         const listCmd = sudoPrefix
             ? `${sudoPrefix} ls ${cloudflaredDir}/*.json 2>/dev/null`
             : `ls ${cloudflaredDir}/*.json 2>/dev/null`;
          const result = await this.execSync(listCmd);
          const jsonFiles = result.stdout.trim().split("\n").filter(Boolean);
          for (const file of jsonFiles) {
             const filename = path.basename(file);
-            if (sudoPassword) {
+            if (sudoPrefix) {
                await this.execSync(`${sudoPrefix} cat ${file} > ${tmpDir}/${filename}`);
             } else {
                const content = this.fs.readFileSync(file, "utf-8");
@@ -302,32 +318,21 @@ export class AdminService {
          errors.push(`Cloudflare credentials failed: ${(e as Error).message}`);
       }
 
-      // 5. Cloudflare origin certificate
-      try {
-         for (const certFile of ["/etc/ssl/cloudflare-origin.pem", "/etc/ssl/cloudflare-origin.key"]) {
+      // Cloudflare origin certificate
+      for (const certFile of ["/etc/ssl/cloudflare-origin.pem", "/etc/ssl/cloudflare-origin.key"]) {
+         try {
             if (this.fs.existsSync(certFile)) {
                const content = this.fs.readFileSync(certFile, "utf-8");
                this.fs.writeFileSync(`${tmpDir}/${path.basename(certFile)}`, content);
-            } else if (sudoPassword) {
+            } else if (sudoPrefix) {
                await this.execSync(`${sudoPrefix} cat ${certFile} > ${tmpDir}/${path.basename(certFile)} 2>/dev/null || true`);
             }
+         } catch (e) {
+            errors.push(`Cloudflare origin cert failed: ${(e as Error).message}`);
          }
-      } catch (e) {
-         errors.push(`Cloudflare origin cert failed: ${(e as Error).message}`);
       }
 
-      // Write errors log if any
-      if (errors.length > 0) {
-         this.fs.writeFileSync(`${tmpDir}/errors.txt`, errors.join("\n"));
-      }
-
-      // Create zip
-      const zipBuffer = await this.createZipBuffer(tmpDir);
-
-      // Cleanup
-      this.fs.rmdirSync(tmpDir, { recursive: true });
-
-      return zipBuffer;
+      return errors;
    }
 
    private createZipBuffer(sourceDir: string): Promise<Buffer> {
@@ -359,8 +364,6 @@ export class AdminService {
       const tmpDir = `/tmp/server-setup-${Date.now()}`;
       const zipPath = `/tmp/server-backup-${Date.now()}.zip`;
       this.fs.mkdirSync(tmpDir, { recursive: true });
-
-      const isMac = process.platform === "darwin";
 
       // Step 1: MySQL dump with progress
       subject.next({ data: { type: "progress", step: "Dumping MySQL databases...", percent: 0, phase: "mysql" } });
@@ -406,26 +409,14 @@ export class AdminService {
          subject.next({ data: { type: "progress", step: "MySQL dump failed", phase: "mysql" } });
       }
 
-      // Step 2: Apache config (quick)
-      subject.next({ data: { type: "progress", step: "Copying Apache config...", phase: "copy" } });
-      try {
-         const apacheConfPath = isMac ? "/opt/homebrew/etc/httpd/httpd.conf" : "/etc/apache2/sites-available/000-default.conf";
-         const content = this.fs.readFileSync(apacheConfPath, "utf-8");
-         this.fs.writeFileSync(`${tmpDir}/apache-config.conf`, content);
-      } catch (e) {
-         this.fs.writeFileSync(`${tmpDir}/apache-error.txt`, (e as Error).message);
+      // Step 2-5: Collect config files (shared with direct backup)
+      subject.next({ data: { type: "progress", step: "Copying config files...", phase: "copy" } });
+      const errors = await this.collectServerConfigFiles(tmpDir);
+      if (errors.length > 0) {
+         this.fs.writeFileSync(`${tmpDir}/errors.txt`, errors.join("\n"));
       }
 
-      // Step 3: .env file (quick)
-      subject.next({ data: { type: "progress", step: "Copying .env file...", phase: "copy" } });
-      try {
-         const content = this.fs.readFileSync(path.join(process.cwd(), ".env"), "utf-8");
-         this.fs.writeFileSync(`${tmpDir}/env-file.txt`, content);
-      } catch (e) {
-         this.fs.writeFileSync(`${tmpDir}/env-error.txt`, (<Error>e).message);
-      }
-
-      // Step 4: Create zip with byte progress
+      // Step 6: Create zip with byte progress
       subject.next({ data: { type: "progress", step: "Scanning files...", percent: 0, phase: "zip" } });
       const totalSize = await this.getDirSize(tmpDir);
 
