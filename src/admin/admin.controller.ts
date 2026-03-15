@@ -183,6 +183,14 @@ export class AdminController {
       return this.metrics.getMicroserviceStatuses();
    }
 
+   @Get("metrics/microservices/:name/logs")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public async getMicroserviceLogs(@Param("name") name: string, @Query("lines") lines?: string) {
+      const logLines = lines ? parseInt(lines) : 100;
+      const logs = await this.metrics.getPm2Logs(name, logLines);
+      return { logs };
+   }
+
    @Post("microservices/heartbeat")
    @HttpCode(HttpStatus.OK)
    @ApiBody({

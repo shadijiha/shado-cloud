@@ -54,6 +54,7 @@ export class AppMetricsService {
             status: age < HEARTBEAT_TIMEOUT_MS ? "up" as const : "down" as const,
             lastHeartbeat: svc.lastHeartbeat,
             traffic: svc.name === "shado-auth-api" ? authTrafficStats : undefined,
+            isSelf: false,
          };
       });
 
@@ -65,10 +66,32 @@ export class AppMetricsService {
             status: "up",
             lastHeartbeat: new Date() as any,
             traffic: authTrafficStats,
+            isSelf: false,
+         });
+      }
+
+      // Always include shado-cloud itself
+      if (!services.some(s => s.name === "shado-cloud")) {
+         services.unshift({
+            name: "shado-cloud",
+            port: 9000,
+            status: "up",
+            lastHeartbeat: new Date() as any,
+            traffic: undefined,
+            isSelf: true,
          });
       }
 
       return services;
+   }
+
+   public async getPm2Logs(processName: string, lines: number = 100): Promise<string> {
+      try {
+         const { stdout } = await execAsync(`pm2 logs ${processName} --nostream --lines ${lines} 2>&1`, { maxBuffer: 5 * 1024 * 1024 });
+         return stdout;
+      } catch (e) {
+         return (e as any).stdout || (e as Error).message;
+      }
    }
 
    public async getSystemInfo() {
