@@ -163,7 +163,7 @@ export class FilesService {
       for (const i of parts) {
          const partPath = path.join(tmpDir, `part_${i}`);
          const content = this.fs.readFileSync(partPath, "binary" as BufferEncoding);
-         buffers.push(Buffer.from(content, "binary"));
+         buffers.push(typeof content === "string" ? Buffer.from(content, "binary") : content);
          this.fs.unlinkSync(partPath);
       }
       this.fs.writeFileSync(upload.dir, Buffer.concat(buffers));
