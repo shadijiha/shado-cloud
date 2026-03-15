@@ -18,7 +18,7 @@ import {
 } from "@nestjs/common";
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiConsumes, ApiParam, ApiProduces, ApiProperty, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiConsumes, ApiOperation, ApiParam, ApiProduces, ApiProperty, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { LoggerToDb } from "./../logging";
 import { ApiFile, AuthUser } from "src/util";
@@ -47,6 +47,7 @@ export class FilesConstoller {
    }
 
    @Post("upload")
+   @ApiOperation({ summary: "Upload a file", description: "Upload a single file. For files larger than 100MB behind a Cloudflare Tunnel, use the chunked upload endpoints instead as Cloudflare's free plan rejects request bodies exceeding 100MB." })
    @ApiResponse({ type: OperationStatusResponse })
    @ApiConsumes("multipart/form-data")
    @ApiFile()
@@ -58,6 +59,49 @@ export class FilesConstoller {
    ) {
       return await this.logger.errorWrapper(async () => {
          await this.fileService.upload(userId, file, body.dest);
+      });
+   }
+
+   @Post("upload/chunked/init")
+   @ApiOperation({ summary: "Initialize a chunked upload", description: "Starts a chunked upload session. Use this for large files (>100MB) that would be rejected by Cloudflare Tunnel's request body size limit. Returns an uploadId to use for subsequent chunk uploads." })
+   @ApiResponse({ type: OperationStatusResponse })
+   public async chunkedUploadInit(
+      @AuthUser() userId: number,
+      @Body() body: { dest: string; filename: string; totalSize: number },
+   ) {
+      return await this.logger.errorWrapper(async () => {
+         return await this.fileService.chunkedUploadInit(userId, body.dest, body.filename, body.totalSize);
+      });
+   }
+
+   @Post("upload/chunked/:uploadId")
+   @ApiOperation({ summary: "Upload a chunk", description: "Uploads a single chunk of a file. Each chunk must be under 100MB to pass through Cloudflare Tunnel. Chunks are identified by index and reassembled on completion." })
+   @ApiParam({ name: "uploadId", description: "Upload session ID returned by the init endpoint" })
+   @ApiResponse({ type: OperationStatusResponse })
+   @ApiConsumes("multipart/form-data")
+   @ApiFile()
+   @UseInterceptors(FileInterceptor("file"))
+   public async chunkedUploadPart(
+      @AuthUser() userId: number,
+      @UploadedFile() file: Express.Multer.File,
+      @Param("uploadId") uploadId: string,
+      @Body() body: { index: string },
+   ) {
+      return await this.logger.errorWrapper(async () => {
+         await this.fileService.chunkedUploadPart(userId, uploadId, parseInt(body.index), file);
+      });
+   }
+
+   @Post("upload/chunked/:uploadId/complete")
+   @ApiOperation({ summary: "Complete a chunked upload", description: "Assembles all uploaded chunks into the final file and saves it. Must be called after all chunks have been uploaded." })
+   @ApiParam({ name: "uploadId", description: "Upload session ID returned by the init endpoint" })
+   @ApiResponse({ type: OperationStatusResponse })
+   public async chunkedUploadComplete(
+      @AuthUser() userId: number,
+      @Param("uploadId") uploadId: string,
+   ) {
+      return await this.logger.errorWrapper(async () => {
+         await this.fileService.chunkedUploadComplete(userId, uploadId);
       });
    }
 

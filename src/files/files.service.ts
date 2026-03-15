@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { HttpException, Inject, Injectable } from "@nestjs/common";
 import { AuthService } from "./../auth/auth.service";
 import path from "path";
@@ -117,6 +118,76 @@ export class FilesService {
       } catch (e) {
          return [false, (e as Error).message];
       }
+   }
+
+   private chunkedUploads = new Map<string, { userId: number; dest: string; filename: string; totalSize: number; dir: string; received: Set<number> }>();
+
+   public async chunkedUploadInit(userId: number, dest: string, filename: string, totalSize: number) {
+      const usedData = await this.getUsedData(userId);
+      const user = await this.userService.getById(userId);
+      if (usedData.total() + totalSize > (await user.getMaxData())) {
+         throw new Error("You don't have enough space to upload this file");
+      }
+
+      const cleanName = path.join(dest, this.replaceIllegalChars(filename));
+      const dir = await this.absolutePath(userId, cleanName);
+      if (!(await this.isOwner(userId, dir))) {
+         throw new Error("You don't have permission to upload here");
+      }
+
+      const uploadId = crypto.randomUUID();
+      const tmpDir = dir + ".chunked_tmp";
+      this.fs.mkdirSync(tmpDir, { recursive: true });
+      this.chunkedUploads.set(uploadId, { userId, dest, filename, totalSize, dir, received: new Set() });
+      return { uploadId };
+   }
+
+   public async chunkedUploadPart(userId: number, uploadId: string, index: number, file: Express.Multer.File) {
+      const upload = this.chunkedUploads.get(uploadId);
+      if (!upload || upload.userId !== userId) throw new Error("Invalid upload session");
+
+      const tmpDir = upload.dir + ".chunked_tmp";
+      this.fs.writeFileSync(path.join(tmpDir, `part_${index}`), file.buffer);
+      upload.received.add(index);
+   }
+
+   public async chunkedUploadComplete(userId: number, uploadId: string) {
+      const upload = this.chunkedUploads.get(uploadId);
+      if (!upload || upload.userId !== userId) throw new Error("Invalid upload session");
+
+      const tmpDir = upload.dir + ".chunked_tmp";
+      const parts = Array.from(upload.received).sort((a, b) => a - b);
+
+      // Concatenate all parts by reading each as binary
+      const buffers: Buffer[] = [];
+      for (const i of parts) {
+         const partPath = path.join(tmpDir, `part_${i}`);
+         const content = this.fs.readFileSync(partPath, "binary" as BufferEncoding);
+         buffers.push(Buffer.from(content, "binary"));
+         this.fs.unlinkSync(partPath);
+      }
+      this.fs.writeFileSync(upload.dir, Buffer.concat(buffers));
+
+      // Clean up temp dir
+      try { this.fs.rmdirSync(tmpDir); } catch {}
+
+      // Save to DB (same logic as regular upload)
+      const root = await this.getUserRootPath(userId);
+      const relative = path.relative(root, upload.dir);
+      let fileDB = await this.uploadedFileRepo.findOne({
+         where: { absolute_path: relative, user: { id: userId } },
+      });
+      if (fileDB) {
+         await this.invalidateThumbnailsFor(userId, fileDB);
+      } else {
+         fileDB = new UploadedFile();
+         fileDB.absolute_path = relative;
+         fileDB.user = await this.userService.getById(userId);
+         fileDB.mime = mime.lookup(upload.filename) || "application/octet-stream";
+         this.uploadedFileRepo.save(fileDB);
+      }
+
+      this.chunkedUploads.delete(uploadId);
    }
 
    public async new(userId: number, name: string): Promise<void> | never {
