@@ -88,42 +88,31 @@ export class AppMetricsService {
       return services;
    }
 
-   public async getPm2Logs(processName: string, lines: number = 100): Promise<string> {
+   public async getPm2Logs(processName: string, lines: number = 100): Promise<{ stdout: string; stderr: string }> {
       try {
-         // Get both log file paths from pm2
          const { stdout: jlist } = await execAsync(`pm2 jlist`, { maxBuffer: 5 * 1024 * 1024 });
          const processes = JSON.parse(jlist);
          const proc = processes.find((p: any) => p.name === processName);
-         if (!proc) return `Process "${processName}" not found in pm2`;
+         if (!proc) return { stdout: `Process "${processName}" not found in pm2`, stderr: "" };
 
          const outLog = proc.pm2_env?.pm_out_log_path;
          const errLog = proc.pm2_env?.pm_err_log_path;
 
-         // Read both logs, merge and sort by timestamp
          const readTail = async (file: string) => {
             try {
                const { stdout } = await execAsync(`tail -n ${lines} "${file}"`, { maxBuffer: 5 * 1024 * 1024 });
-               return stdout.split("\n").filter(Boolean);
-            } catch { return []; }
+               return stdout;
+            } catch { return ""; }
          };
 
-         const [outLines, errLines] = await Promise.all([
-            outLog ? readTail(outLog) : Promise.resolve([]),
-            errLog ? readTail(errLog) : Promise.resolve([]),
+         const [stdout, stderr] = await Promise.all([
+            outLog ? readTail(outLog) : Promise.resolve(""),
+            errLog ? readTail(errLog) : Promise.resolve(""),
          ]);
 
-         const all = [...outLines, ...errLines];
-         // Sort by timestamp if lines start with a date pattern
-         all.sort((a, b) => {
-            const ta = a.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})/);
-            const tb = b.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})/);
-            if (ta && tb) return ta[1].localeCompare(tb[1]);
-            return 0;
-         });
-
-         return all.slice(-lines).join("\n");
+         return { stdout, stderr };
       } catch (e) {
-         return (e as any).stdout || (e as Error).message;
+         return { stdout: "", stderr: (e as any).stdout || (e as Error).message };
       }
    }
 

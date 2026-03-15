@@ -187,8 +187,7 @@ export class AdminController {
    @UseGuards(JwtAuthGuard, AdminGuard)
    public async getMicroserviceLogs(@Param("name") name: string, @Query("lines") lines?: string) {
       const logLines = lines ? parseInt(lines) : 100;
-      const logs = await this.metrics.getPm2Logs(name, logLines);
-      return { logs };
+      return await this.metrics.getPm2Logs(name, logLines);
    }
 
    @Post("microservices/heartbeat")
