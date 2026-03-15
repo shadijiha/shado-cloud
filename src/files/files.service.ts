@@ -169,7 +169,7 @@ export class FilesService {
       this.fs.writeFileSync(upload.dir, Buffer.concat(buffers));
 
       // Clean up temp dir
-      try { this.fs.rmdirSync(tmpDir); } catch {}
+      try { this.fs.rmdirSync(tmpDir, { recursive: true }); } catch (e) { this.logger.logException(e); }
 
       // Save to DB (same logic as regular upload)
       const root = await this.getUserRootPath(userId);
