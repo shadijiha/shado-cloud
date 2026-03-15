@@ -231,16 +231,25 @@ export class AdminService {
          errors.push(`MySQL dump failed: ${(e as Error).message}`);
       }
 
-      // 2. Apache config
-      const apacheConfPath = isMac 
-         ? "/opt/homebrew/etc/httpd/httpd.conf"
-         : "/etc/apache2/sites-available/000-default.conf";
+      // 2. Apache configs (all sites-available)
+      const apacheDir = isMac
+         ? "/opt/homebrew/etc/httpd"
+         : "/etc/apache2/sites-available";
       try {
-         if (sudoPassword && !isMac) {
-            await this.execSync(`${sudoPrefix} cat ${apacheConfPath} > ${tmpDir}/apache-config.conf`);
-         } else {
-            const content = this.fs.readFileSync(apacheConfPath, "utf-8");
-            this.fs.writeFileSync(`${tmpDir}/apache-config.conf`, content);
+         this.fs.mkdirSync(`${tmpDir}/apache`, { recursive: true });
+         const listCmd = sudoPassword && !isMac
+            ? `${sudoPrefix} ls ${apacheDir}/*.conf 2>/dev/null`
+            : `ls ${apacheDir}/*.conf 2>/dev/null`;
+         const result = await this.execSync(listCmd);
+         const confFiles = result.stdout.trim().split("\n").filter(Boolean);
+         for (const file of confFiles) {
+            const filename = path.basename(file);
+            if (sudoPassword && !isMac) {
+               await this.execSync(`${sudoPrefix} cat ${file} > ${tmpDir}/apache/${filename}`);
+            } else {
+               const content = this.fs.readFileSync(file, "utf-8");
+               this.fs.writeFileSync(`${tmpDir}/apache/${filename}`, content);
+            }
          }
       } catch (err) {
          const e = err as Error & {code: string};
@@ -257,6 +266,54 @@ export class AdminService {
          this.fs.writeFileSync(`${tmpDir}/env-file.txt`, content);
       } catch (e) {
          errors.push(`.env file failed: ${(e as Error).message}`);
+      }
+
+      // 4. Cloudflare tunnel config and credentials
+      const cloudflaredDir = "/etc/cloudflared";
+      try {
+         const configPath = `${cloudflaredDir}/config.yml`;
+         if (this.fs.existsSync(configPath)) {
+            const content = this.fs.readFileSync(configPath, "utf-8");
+            this.fs.writeFileSync(`${tmpDir}/cloudflared-config.yml`, content);
+         } else if (sudoPassword) {
+            await this.execSync(`${sudoPrefix} cat ${configPath} > ${tmpDir}/cloudflared-config.yml`);
+         }
+      } catch (e) {
+         errors.push(`Cloudflare config failed: ${(e as Error).message}`);
+      }
+
+      try {
+         // Copy all credential JSON files
+         const listCmd = sudoPassword
+            ? `${sudoPrefix} ls ${cloudflaredDir}/*.json 2>/dev/null`
+            : `ls ${cloudflaredDir}/*.json 2>/dev/null`;
+         const result = await this.execSync(listCmd);
+         const jsonFiles = result.stdout.trim().split("\n").filter(Boolean);
+         for (const file of jsonFiles) {
+            const filename = path.basename(file);
+            if (sudoPassword) {
+               await this.execSync(`${sudoPrefix} cat ${file} > ${tmpDir}/${filename}`);
+            } else {
+               const content = this.fs.readFileSync(file, "utf-8");
+               this.fs.writeFileSync(`${tmpDir}/${filename}`, content);
+            }
+         }
+      } catch (e) {
+         errors.push(`Cloudflare credentials failed: ${(e as Error).message}`);
+      }
+
+      // 5. Cloudflare origin certificate
+      try {
+         for (const certFile of ["/etc/ssl/cloudflare-origin.pem", "/etc/ssl/cloudflare-origin.key"]) {
+            if (this.fs.existsSync(certFile)) {
+               const content = this.fs.readFileSync(certFile, "utf-8");
+               this.fs.writeFileSync(`${tmpDir}/${path.basename(certFile)}`, content);
+            } else if (sudoPassword) {
+               await this.execSync(`${sudoPrefix} cat ${certFile} > ${tmpDir}/${path.basename(certFile)} 2>/dev/null || true`);
+            }
+         }
+      } catch (e) {
+         errors.push(`Cloudflare origin cert failed: ${(e as Error).message}`);
       }
 
       // Write errors log if any

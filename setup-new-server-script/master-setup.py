@@ -377,14 +377,19 @@ WaylandEnable=false
             env_dest.write_text(content)
             ok(".env copied and patched")
 
-    # Apache config — use the repo version (HTTP-only) so Apache can start,
-        # then Certbot will add SSL config automatically
-        apache_src = extract_dir / "apache-config.conf"
-        run(f"sudo cp {cloud_app / 'deploy/shado-cloud.conf'} /etc/apache2/sites-available/shado-cloud.conf")
-        # Save the production config for reference
-        if apache_src.exists():
-            run(f"sudo cp {apache_src} /etc/apache2/sites-available/shado-cloud-production-backup.conf")
-        ok("Apache config installed (HTTP-only, Certbot will add SSL)")
+    # Apache config — restore all sites-available configs from backup
+        apache_backup_dir = extract_dir / "apache"
+        if apache_backup_dir.is_dir():
+            for conf in apache_backup_dir.glob("*.conf"):
+                run(f"sudo cp {conf} /etc/apache2/sites-available/{conf.name}")
+            ok(f"Apache configs restored ({len(list(apache_backup_dir.glob('*.conf')))} files)")
+        else:
+            # Fallback: legacy single-file backup
+            apache_src = extract_dir / "apache-config.conf"
+            run(f"sudo cp {cloud_app / 'deploy/shado-cloud.conf'} /etc/apache2/sites-available/shado-cloud.conf")
+            if apache_src.exists():
+                run(f"sudo cp {apache_src} /etc/apache2/sites-available/shado-cloud-production-backup.conf")
+            ok("Apache config installed (legacy single-file backup)")
 
         # Start MySQL & Redis (native installs)
         print("  Installing MySQL and Redis...")
@@ -436,6 +441,27 @@ FLUSH PRIVILEGES;
             print("  Importing MySQL dump...")
             run(f"sudo mysql < {sql_dump}")
             ok("Database seeded")
+
+        # Restore Cloudflare tunnel config and credentials
+        cf_config = extract_dir / "cloudflared-config.yml"
+        cf_origin_pem = extract_dir / "cloudflare-origin.pem"
+        cf_origin_key = extract_dir / "cloudflare-origin.key"
+
+        if cf_config.exists():
+            print("  Restoring Cloudflare tunnel config...")
+            run("sudo mkdir -p /etc/cloudflared")
+            run(f"sudo cp {cf_config} /etc/cloudflared/config.yml")
+            # Copy tunnel credential JSON files
+            for json_file in extract_dir.glob("*.json"):
+                run(f"sudo cp {json_file} /etc/cloudflared/{json_file.name}")
+            ok("Cloudflare tunnel config restored")
+
+        if cf_origin_pem.exists() and cf_origin_key.exists():
+            print("  Restoring Cloudflare origin certificate...")
+            run(f"sudo cp {cf_origin_pem} /etc/ssl/cloudflare-origin.pem")
+            run(f"sudo cp {cf_origin_key} /etc/ssl/cloudflare-origin.key")
+            run("sudo chmod 600 /etc/ssl/cloudflare-origin.key")
+            ok("Cloudflare origin certificate restored")
 
         # Cleanup
         shutil.rmtree(extract_dir, ignore_errors=True)
@@ -606,6 +632,24 @@ EOF""")
     else:
         warn("No domains provided — skipping HTTPS. Run 'sudo certbot --apache' later.")
 
+    # Cloudflare Tunnel (cloudflared)
+    print("  Installing cloudflared...")
+    if shutil.which("cloudflared") is None:
+        run("curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null")
+        run('echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list')
+        run("sudo apt update && sudo apt install -y cloudflared")
+    else:
+        ok("cloudflared already installed")
+
+    if Path("/etc/cloudflared/config.yml").exists():
+        # Config was restored from backup — install as systemd service
+        run("sudo cloudflared service install 2>/dev/null || true", check=False)
+        run("sudo systemctl enable cloudflared", check=False)
+        run("sudo systemctl restart cloudflared", check=False)
+        ok("Cloudflare tunnel service configured from backup")
+    else:
+        warn("No cloudflared config found — run 'cloudflared tunnel create <name>' and configure manually")
+
     # PM2
     print("  Setting up PM2 processes...")
     run(f'cd {cloud_app} && pm2 start "npm run start:prod" --name "shado-cloud-backend"')
@@ -671,7 +715,8 @@ EOF""")
 
   {R}NOTE: Log out and back in for Docker group permissions.{N}
 
-  {Y}⚠ Don't forget to forward ports 80 and 443 in your router settings!{N}
+  {Y}⚠ Don't forget to verify your Cloudflare tunnel is running!{N}
+    {Y}sudo systemctl status cloudflared{N}
     This device IP: {C}{local_ip}{N}
     Router admin:   {C}http://{gateway}{N}
 """)
