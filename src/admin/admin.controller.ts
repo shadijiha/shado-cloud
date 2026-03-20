@@ -165,18 +165,6 @@ export class AdminController {
       }
    }
 
-   @Get("metrics/system-info")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   public getSystemInfo() {
-      return this.metrics.getSystemInfo();
-   }
-
-   @Get("metrics/system")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   public getSystemMetrics() {
-      return this.metrics.getSystemMetrics();
-   }
-
    @Get("metrics/microservices")
    @UseGuards(JwtAuthGuard, AdminGuard)
    public getMicroserviceStatuses() {
