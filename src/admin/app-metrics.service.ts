@@ -62,6 +62,7 @@ export class AppMetricsService {
          return {
             name: svc.name,
             port: svc.port,
+            tcpPort: svc.tcpPort,
             status: age < HEARTBEAT_TIMEOUT_MS ? "up" as const : "down" as const,
             lastHeartbeat: svc.lastHeartbeat,
             traffic: this.trimTraffic(svc.traffic),

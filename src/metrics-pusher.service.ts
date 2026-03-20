@@ -59,8 +59,8 @@ export class MetricsPusherService implements OnModuleInit {
                ],
             }),
          );
-      } catch {
-         this.logger.warn("Failed to push metrics to shado-metrics");
+      } catch (err) {
+         this.logger.warn(`Failed to push metrics to shado-metrics: ${(err as Error).message}`);
       }
    }
 }
