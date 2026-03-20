@@ -30,6 +30,8 @@ export class MetricsPusherService implements OnModuleInit {
    private totalQueryTimeMs = 0;
    private lastDbQueries = 0;
    private lastQueryTimeMs = 0;
+   private cacheHits = 0;
+   private lastCacheHits = 0;
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
@@ -50,6 +52,17 @@ export class MetricsPusherService implements OnModuleInit {
          this.dbQueries++;
          return result;
       };
+
+      // Wrap QueryResultCache.getFromCache to track cache hits
+      const cache = (this.dataSource as any).queryResultCache;
+      if (cache) {
+         const origGet = cache.getFromCache.bind(cache);
+         cache.getFromCache = async (...args: any[]) => {
+            const result = await origGet(...args);
+            if (result) this.cacheHits++;
+            return result;
+         };
+      }
 
       setInterval(() => this.flush(), 15_000);
    }
@@ -73,6 +86,9 @@ export class MetricsPusherService implements OnModuleInit {
       this.lastQueryTimeMs = this.totalQueryTimeMs;
       const avgQueryMs = dbDelta > 0 ? Math.round((timeDelta / dbDelta) * 100) / 100 : 0;
 
+      const cacheDelta = this.cacheHits - this.lastCacheHits;
+      this.lastCacheHits = this.cacheHits;
+
       try {
          await firstValueFrom(
             this.metricsClient.send("metrics.put", {
@@ -83,6 +99,7 @@ export class MetricsPusherService implements OnModuleInit {
                   { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeDelta, unit: "Bytes", timestamp: now },
                   { namespace: "shado-cloud", metric: "db_queries", value: dbDelta, unit: "Count", timestamp: now },
                   { namespace: "shado-cloud", metric: "db_avg_query_ms", value: avgQueryMs, unit: "Milliseconds", timestamp: now },
+                  { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheDelta, unit: "Count", timestamp: now },
                ],
             }),
          );
