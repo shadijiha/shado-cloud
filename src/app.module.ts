@@ -20,7 +20,6 @@ import { DataSource } from "typeorm";
 import { AbstractFileSystem } from "./file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "./file-system/file-system.service";
 import { InstrumentedFileSystemService } from "./file-system/instrumented-file-system.service";
-import { metricsTypeOrmLogger } from "./metrics-typeorm-logger";
 import { MetricsPusherService, METRICS_SERVICE } from "./metrics-pusher.service";
 import { ClientsModule, Transport } from "@nestjs/microservices";
 import { ConfigModule, ConfigService } from "@nestjs/config";
@@ -116,9 +115,7 @@ export class GlobalUtilityModule {}
                database: config.get<string>("DB_NAME"),
                entities: ["dist/src/models/**/*{.ts,.js}"],
                synchronize: isDev(config),
-               logger: metricsTypeOrmLogger,
-               logging: true,
-               maxQueryExecutionTime: 0,
+               logging: false,
                extra: { timezone: "+00:00" },
                // Only define cache if REDIS_HOST is defined in env
                cache: {

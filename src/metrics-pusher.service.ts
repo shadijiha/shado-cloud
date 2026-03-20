@@ -1,17 +1,17 @@
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
 import { ConfigService } from "@nestjs/config";
+import { DataSource } from "typeorm";
 import { firstValueFrom } from "rxjs";
 import { EnvVariables } from "./config/config.validator";
 import { TrafficService } from "./traffic.service";
-import { metricsTypeOrmLogger } from "./metrics-typeorm-logger";
 
 const METRICS_SERVICE = "METRICS_SERVICE";
 export { METRICS_SERVICE };
 
 /**
  * Periodically pushes metrics to shado-metrics via TCP.
- * Tracks: request_count, fs_bytes_read, fs_bytes_written (as deltas per flush).
+ * Tracks: request_count, fs_bytes_read, fs_bytes_written, db_queries, db_avg_query_ms.
  */
 @Injectable()
 export class MetricsPusherService implements OnModuleInit {
@@ -24,6 +24,10 @@ export class MetricsPusherService implements OnModuleInit {
    public fsBytesWritten = 0;
    private lastFsBytesRead = 0;
    private lastFsBytesWritten = 0;
+
+   // DB counters — incremented by wrapped DataSource.query
+   private dbQueries = 0;
+   private totalQueryTimeMs = 0;
    private lastDbQueries = 0;
    private lastQueryTimeMs = 0;
 
@@ -31,11 +35,22 @@ export class MetricsPusherService implements OnModuleInit {
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
       private readonly config: ConfigService<EnvVariables>,
       private readonly traffic: TrafficService,
+      private readonly dataSource: DataSource,
    ) {
       this.serviceKey = this.config.get("SERVICE_SECRET");
    }
 
    onModuleInit() {
+      // Wrap DataSource.query to track count + timing
+      const origQuery = this.dataSource.query.bind(this.dataSource);
+      this.dataSource.query = async (...args: any[]) => {
+         const start = performance.now();
+         const result = await origQuery(...args);
+         this.totalQueryTimeMs += performance.now() - start;
+         this.dbQueries++;
+         return result;
+      };
+
       setInterval(() => this.flush(), 15_000);
    }
 
@@ -51,12 +66,12 @@ export class MetricsPusherService implements OnModuleInit {
       this.lastFsBytesRead = this.fsBytesRead;
       this.lastFsBytesWritten = this.fsBytesWritten;
 
-      const dbDelta = metricsTypeOrmLogger.dbQueries - this.lastDbQueries;
-      this.lastDbQueries = metricsTypeOrmLogger.dbQueries;
+      const dbDelta = this.dbQueries - this.lastDbQueries;
+      this.lastDbQueries = this.dbQueries;
 
-      const timeDelta = metricsTypeOrmLogger.totalQueryTimeMs - this.lastQueryTimeMs;
-      this.lastQueryTimeMs = metricsTypeOrmLogger.totalQueryTimeMs;
-      const avgQueryMs = dbDelta > 0 ? timeDelta / dbDelta : 0;
+      const timeDelta = this.totalQueryTimeMs - this.lastQueryTimeMs;
+      this.lastQueryTimeMs = this.totalQueryTimeMs;
+      const avgQueryMs = dbDelta > 0 ? Math.round((timeDelta / dbDelta) * 100) / 100 : 0;
 
       try {
          await firstValueFrom(
@@ -67,7 +82,7 @@ export class MetricsPusherService implements OnModuleInit {
                   { namespace: "shado-cloud", metric: "fs_bytes_read", value: readDelta, unit: "Bytes", timestamp: now },
                   { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeDelta, unit: "Bytes", timestamp: now },
                   { namespace: "shado-cloud", metric: "db_queries", value: dbDelta, unit: "Count", timestamp: now },
-                  { namespace: "shado-cloud", metric: "db_avg_query_ms", value: Math.round(avgQueryMs * 100) / 100, unit: "Milliseconds", timestamp: now },
+                  { namespace: "shado-cloud", metric: "db_avg_query_ms", value: avgQueryMs, unit: "Milliseconds", timestamp: now },
                ],
             }),
          );
