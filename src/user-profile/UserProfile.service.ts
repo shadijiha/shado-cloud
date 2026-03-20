@@ -76,21 +76,22 @@ export class UserProfileService {
 
       const most_search_raw = await this.searchStatRepo
          .createQueryBuilder("search")
-         .addSelect("count(search.text) AS Total")
+         .select("search.text", "text")
+         .addSelect("COUNT(search.text)", "Total")
          .where(`search.${userTbMeta.name}Id = :id`, { id: userId })
          .groupBy("search.text")
          .orderBy("Total", "DESC")
          .limit(5)
-         .getRawAndEntities();
+         .getRawMany();
 
       const most_accesed_files: ProfileStats = {
          most_accesed_files: most_accesed_files_raw.map(({ Total, ...file }) => ({
             access_count: Total,
             file,
          })),
-         most_searched: most_search_raw.raw.map((e, i) => ({
+         most_searched: most_search_raw.map((e) => ({
             search_count: e.Total,
-            search: most_search_raw.entities[i],
+            search: { text: e.text } as any,
          })),
          used_data: await this.fileService.getUsedData(userId),
       };
