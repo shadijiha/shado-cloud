@@ -25,13 +25,12 @@ export class MetricsPusherService implements OnModuleInit {
    private lastFsBytesRead = 0;
    private lastFsBytesWritten = 0;
 
-   // DB counters — incremented by wrapped DataSource.query
+   // DB counters
    private dbQueries = 0;
-   private totalQueryTimeMs = 0;
    private lastDbQueries = 0;
-   private lastQueryTimeMs = 0;
    private cacheHits = 0;
    private lastCacheHits = 0;
+   private queryTimings: number[] = [];
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
@@ -43,12 +42,15 @@ export class MetricsPusherService implements OnModuleInit {
    }
 
    onModuleInit() {
+      // Initialize from current stats to avoid a huge delta on first flush
+      this.lastRequestCount = this.traffic.getStats().totalRequests;
+
       // Wrap DataSource.query to track count + timing
       const origQuery = this.dataSource.query.bind(this.dataSource);
       this.dataSource.query = async (...args: any[]) => {
          const start = performance.now();
          const result = await origQuery(...args);
-         this.totalQueryTimeMs += performance.now() - start;
+         this.queryTimings.push(Math.round((performance.now() - start) * 100) / 100);
          this.dbQueries++;
          return result;
       };
@@ -82,25 +84,25 @@ export class MetricsPusherService implements OnModuleInit {
       const dbDelta = this.dbQueries - this.lastDbQueries;
       this.lastDbQueries = this.dbQueries;
 
-      const timeDelta = this.totalQueryTimeMs - this.lastQueryTimeMs;
-      this.lastQueryTimeMs = this.totalQueryTimeMs;
-      const avgQueryMs = dbDelta > 0 ? Math.round((timeDelta / dbDelta) * 100) / 100 : 0;
+      const timings = this.queryTimings.splice(0);
 
       const cacheDelta = this.cacheHits - this.lastCacheHits;
       this.lastCacheHits = this.cacheHits;
+
+      const datapoints: any[] = [
+         { namespace: "shado-cloud", metric: "request_count", value: requestDelta, unit: "Count", timestamp: now },
+         { namespace: "shado-cloud", metric: "fs_bytes_read", value: readDelta, unit: "Bytes", timestamp: now },
+         { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeDelta, unit: "Bytes", timestamp: now },
+         { namespace: "shado-cloud", metric: "db_queries", value: dbDelta, unit: "Count", timestamp: now },
+         { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheDelta, unit: "Count", timestamp: now },
+         ...timings.map(ms => ({ namespace: "shado-cloud", metric: "db_query_ms", value: ms, unit: "Milliseconds", timestamp: now })),
+      ];
 
       try {
          await firstValueFrom(
             this.metricsClient.send("metrics.put", {
                serviceKey: this.serviceKey,
-               datapoints: [
-                  { namespace: "shado-cloud", metric: "request_count", value: requestDelta, unit: "Count", timestamp: now },
-                  { namespace: "shado-cloud", metric: "fs_bytes_read", value: readDelta, unit: "Bytes", timestamp: now },
-                  { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeDelta, unit: "Bytes", timestamp: now },
-                  { namespace: "shado-cloud", metric: "db_queries", value: dbDelta, unit: "Count", timestamp: now },
-                  { namespace: "shado-cloud", metric: "db_avg_query_ms", value: avgQueryMs, unit: "Milliseconds", timestamp: now },
-                  { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheDelta, unit: "Count", timestamp: now },
-               ],
+               datapoints,
             }),
          );
       } catch (err) {
