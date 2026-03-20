@@ -13,7 +13,7 @@ import { AuthTrafficService } from "./auth-traffic.service";
 
 /**
  * Communicates with shado-auth-api via TCP microservice.
- * Auth methods (validateToken, isAdmin, verifyPassword, changePassword, changeName) use shadoUserId (UUID string).
+ * Auth methods (validateCookies, isAdmin, verifyPassword, changePassword, changeName) use shadoUserId (UUID string).
  * getUser() resolves a shadoUserId to a local User (numeric id) for DB relations.
  */
 @Injectable()
@@ -37,10 +37,10 @@ export class AuthService {
       return result;
    }
 
-   /** Validate a JWT cookie value → returns shadoUserId (UUID) or null */
-   async validateToken(token: string): Promise<string | null> {
+   /** Validate raw cookie header → returns shadoUserId (UUID) or null */
+   async validateCookies(cookies: string): Promise<string | null> {
       const result = await this.send<{ userId: string | null }>(
-         "validate_token", { token, serviceKey: this.serviceKey },
+         "validate_cookie", { cookies, serviceKey: this.serviceKey },
       );
       return result.userId;
    }

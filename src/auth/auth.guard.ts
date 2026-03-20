@@ -1,25 +1,20 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { EnvVariables } from "src/config/config.validator";
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 
 /**
- * Extracts the cookie, validates via auth microservice (shadoUserId),
+ * Forwards raw cookies to auth-api for validation,
  * resolves to local User, attaches numeric userId to request.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-   constructor(
-      private readonly authService: AuthService,
-      @Inject() private readonly config: ConfigService<EnvVariables>,
-   ) {}
+   constructor(private readonly authService: AuthService) {}
 
    async canActivate(ctx: ExecutionContext): Promise<boolean> {
       const request = ctx.switchToHttp().getRequest();
-      const token = request.cookies?.[this.config.get("COOKIE_NAME")];
-      if (!token) throw new UnauthorizedException();
+      const cookies = request.headers.cookie;
+      if (!cookies) throw new UnauthorizedException();
 
-      const shadoUserId = await this.authService.validateToken(token);
+      const shadoUserId = await this.authService.validateCookies(cookies);
       if (!shadoUserId) throw new UnauthorizedException();
 
       const user = await this.authService.getUser(shadoUserId);

@@ -14,7 +14,6 @@ import { promisify } from "util";
 import { AuthService } from "../auth/auth.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
-import * as cookie from "cookie";
 import { LoggerToDb } from "../logging";
 import { DisplayStrategy, DisplayStrategyFactory } from "./display-strategy";
 
@@ -48,7 +47,6 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
 
    constructor(
       private authService: AuthService,
-      private config: ConfigService<EnvVariables>,
       @Inject() private readonly logger: LoggerToDb,
    ) {
       this.display = DisplayStrategyFactory.create();
@@ -57,14 +55,13 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
 
    async handleConnection(client: Socket) {
       try {
-         const cookies = cookie.parse(client.handshake.headers.cookie || "");
-         const token = cookies[this.config.get("COOKIE_NAME")!];
-         if (!token) {
+         const rawCookies = client.handshake.headers.cookie || "";
+         if (!rawCookies) {
             this.logger.warn(`Unauthorized connection attempt: ${client.id} - no session`);
             client.disconnect();
             return;
          }
-         const userId = await this.authService.validateToken(token);
+         const userId = await this.authService.validateCookies(rawCookies);
          if (!userId) {
             this.logger.warn(`Unauthorized connection attempt: ${client.id} - invalid token`);
             client.disconnect();

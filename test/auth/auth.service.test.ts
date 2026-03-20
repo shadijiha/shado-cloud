@@ -38,17 +38,17 @@ describe("AuthService", () => {
       expect(service).toBeDefined();
    });
 
-   describe("validateToken", () => {
-      it("should return shadoUserId for valid token", async () => {
+   describe("validateCookies", () => {
+      it("should return shadoUserId for valid cookies", async () => {
          mockAuthClient.send.mockReturnValue(of({ userId: "uuid-1" }));
-         const result = await service.validateToken("valid-token");
+         const result = await service.validateCookies("shado_auth=valid-token");
          expect(result).toBe("uuid-1");
-         expect(mockAuthClient.send).toHaveBeenCalledWith("validate_token", { token: "valid-token", serviceKey });
+         expect(mockAuthClient.send).toHaveBeenCalledWith("validate_cookie", { cookies: "shado_auth=valid-token", serviceKey });
       });
 
-      it("should return null for invalid token", async () => {
+      it("should return null for invalid cookies", async () => {
          mockAuthClient.send.mockReturnValue(of({ userId: null }));
-         const result = await service.validateToken("bad-token");
+         const result = await service.validateCookies("shado_auth=bad-token");
          expect(result).toBeNull();
       });
    });

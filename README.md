@@ -65,7 +65,7 @@ Authentication and user profile data (email, name, password, admin status) are f
 
 shado-cloud maintains a local `User` entity with an auto-increment numeric `id` for DB relations (files, logs, temp URLs, etc.) and a `shadoUserId` column linking to the auth-api. The local `User` stores no auth or profile data — when shado-cloud needs the user's email or name, it fetches it from auth-api via TCP. Profile mutations (change password, change name) are forwarded to auth-api.
 
-The frontend calls shado-auth-api directly for login, register, logout, and me. All other requests go to shado-cloud, which validates the auth cookie via TCP.
+The frontend calls shado-auth-api directly for login, register, logout, and me. All other requests go to shado-cloud, which validates the auth cookie via TCP (`validate_cookie` — raw cookie header is forwarded to auth-api, which owns all cookie knowledge).
 
 ## Screenshots
 

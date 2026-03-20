@@ -129,9 +129,6 @@ export class EnvVariables {
    @MinLength(3)
    PASSWORD_VAULT_SALT: string;
 
-   @MinLength(5)
-   COOKIE_NAME: string;
-
    @MinLength(16)
    SERVICE_SECRET: string;
 
