@@ -39,14 +39,20 @@ export class MetricsPusherService implements OnApplicationBootstrap {
    }
 
    onApplicationBootstrap() {
-      // Wrap DataSource.query to track count + timing
-      const origQuery = this.dataSource.query.bind(this.dataSource);
-      this.dataSource.query = async (...args: any[]) => {
-         const start = performance.now();
-         const result = await origQuery(...args);
-         this.queryTimings.push(Math.round((performance.now() - start) * 100) / 100);
-         this.dbQueries++;
-         return result;
+      // Wrap QueryRunner.query — all TypeORM operations go through this
+      const origCreateQueryRunner = this.dataSource.createQueryRunner.bind(this.dataSource);
+      const self = this;
+      this.dataSource.createQueryRunner = (...args: any[]) => {
+         const qr = origCreateQueryRunner(...args);
+         const origQuery = qr.query.bind(qr);
+         qr.query = async (...qArgs: any[]) => {
+            const start = performance.now();
+            const result = await origQuery(...qArgs);
+            self.queryTimings.push(Math.round((performance.now() - start) * 100) / 100);
+            self.dbQueries++;
+            return result;
+         };
+         return qr;
       };
 
       // Wrap QueryResultCache.getFromCache to track cache hits
