@@ -116,6 +116,7 @@ export class GlobalUtilityModule {}
                entities: ["dist/src/models/**/*{.ts,.js}"],
                synchronize: isDev(config),
                logging: false,
+               extra: { timezone: "+00:00" },
                // Only define cache if REDIS_HOST is defined in env
                cache: {
                   type: "redis",
