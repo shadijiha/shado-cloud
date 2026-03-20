@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { firstValueFrom } from "rxjs";
 import { EnvVariables } from "./config/config.validator";
 import { TrafficService } from "./traffic.service";
+import { metricsTypeOrmLogger } from "./metrics-typeorm-logger";
 
 const METRICS_SERVICE = "METRICS_SERVICE";
 export { METRICS_SERVICE };
@@ -23,6 +24,8 @@ export class MetricsPusherService implements OnModuleInit {
    public fsBytesWritten = 0;
    private lastFsBytesRead = 0;
    private lastFsBytesWritten = 0;
+   private lastDbQueries = 0;
+   private lastQueryTimeMs = 0;
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
@@ -48,6 +51,13 @@ export class MetricsPusherService implements OnModuleInit {
       this.lastFsBytesRead = this.fsBytesRead;
       this.lastFsBytesWritten = this.fsBytesWritten;
 
+      const dbDelta = metricsTypeOrmLogger.dbQueries - this.lastDbQueries;
+      this.lastDbQueries = metricsTypeOrmLogger.dbQueries;
+
+      const timeDelta = metricsTypeOrmLogger.totalQueryTimeMs - this.lastQueryTimeMs;
+      this.lastQueryTimeMs = metricsTypeOrmLogger.totalQueryTimeMs;
+      const avgQueryMs = dbDelta > 0 ? timeDelta / dbDelta : 0;
+
       try {
          await firstValueFrom(
             this.metricsClient.send("metrics.put", {
@@ -56,6 +66,8 @@ export class MetricsPusherService implements OnModuleInit {
                   { namespace: "shado-cloud", metric: "request_count", value: requestDelta, unit: "Count", timestamp: now },
                   { namespace: "shado-cloud", metric: "fs_bytes_read", value: readDelta, unit: "Bytes", timestamp: now },
                   { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeDelta, unit: "Bytes", timestamp: now },
+                  { namespace: "shado-cloud", metric: "db_queries", value: dbDelta, unit: "Count", timestamp: now },
+                  { namespace: "shado-cloud", metric: "db_avg_query_ms", value: Math.round(avgQueryMs * 100) / 100, unit: "Milliseconds", timestamp: now },
                ],
             }),
          );
