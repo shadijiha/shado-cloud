@@ -136,6 +136,7 @@ describe("FilesService", () => {
                provide: FeatureFlagService,
                useValue: {
                   isFeatureFlagDisabled: jest.fn().mockResolvedValue(true),
+                  isFeatureFlagEnabled: jest.fn().mockResolvedValue(false),
                },
             },
          ],

@@ -391,6 +391,11 @@ export class FilesService {
       if (fileMime.includes("image")) {
          if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
+         // If raw thumbnails flag is enabled, skip resizing and return the original file
+         if (await this.featureFlagService.isFeatureFlagEnabled(FeatureFlagNamespace.Files, "disable_thumbnail_resizing_with_sharp")) {
+            return this.fs.createReadStream(dir);
+         }
+
          // Check if thumbnail already exists
          const uploadedFile = await this.uploadedFileRepo.findOne({
             where: { absolute_path: path.normalize(path_), user: { id: userId } },
