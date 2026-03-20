@@ -2,8 +2,8 @@ import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
 import { ConfigService } from "@nestjs/config";
 import { firstValueFrom } from "rxjs";
-import { EnvVariables } from "../config/config.validator";
-import { TrafficService } from "../traffic.service";
+import { EnvVariables } from "./config/config.validator";
+import { TrafficService } from "./traffic.service";
 
 const METRICS_SERVICE = "METRICS_SERVICE";
 export { METRICS_SERVICE };
