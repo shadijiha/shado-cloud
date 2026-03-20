@@ -152,6 +152,19 @@ export class EnvVariables {
    AUTH_TCP_PORT: number | undefined;
 
    /**
+    * Metrics microservice
+    */
+   @IsString()
+   @IsOptional()
+   METRICS_TCP_HOST: string;
+
+   @IsInt()
+   @IsOptional()
+   @Min(1200)
+   @Max(90000)
+   METRICS_TCP_PORT: number | undefined;
+
+   /**
     * Github webhooks env
     */
    @IsOptional()

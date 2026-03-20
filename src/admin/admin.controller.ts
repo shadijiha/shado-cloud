@@ -202,11 +202,11 @@ export class AdminController {
          },
       },
    })
-   public microserviceHeartbeat(@Body() body: { name: string; port: number; traffic?: MicroserviceEntry["traffic"] }, @Headers("x-service-key") key: string) {
+   public microserviceHeartbeat(@Body() body: { name: string; port: number; tcpPort?: number; traffic?: MicroserviceEntry["traffic"] }, @Headers("x-service-key") key: string) {
       if (key !== this.config.get("SERVICE_SECRET")) {
          throw new UnauthorizedException();
       }
-      this.metrics.heartbeat(body.name, body.port, body.traffic);
+      this.metrics.heartbeat(body.name, body.port, body.tcpPort, body.traffic);
       return { ok: true };
    }
 

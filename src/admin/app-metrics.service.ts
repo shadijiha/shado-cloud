@@ -15,6 +15,7 @@ const execAsync = promisify(exec);
 export interface MicroserviceEntry {
    name: string;
    port: number;
+   tcpPort?: number;
    lastHeartbeat: Date;
    traffic?: {
       since: string;
@@ -41,8 +42,8 @@ export class AppMetricsService {
       private readonly trafficService: TrafficService,
    ) {}
 
-   public async heartbeat(name: string, port: number, traffic?: MicroserviceEntry["traffic"]) {
-      const entry: MicroserviceEntry = { name, port, lastHeartbeat: new Date(), traffic };
+   public async heartbeat(name: string, port: number, tcpPort?: number, traffic?: MicroserviceEntry["traffic"]) {
+      const entry: MicroserviceEntry = { name, port, tcpPort, lastHeartbeat: new Date(), traffic };
       await this.redis.hset(REDIS_MS_KEY, name, JSON.stringify(entry));
       await this.redis.expire(REDIS_MS_KEY, REDIS_TTL_SECONDS);
    }

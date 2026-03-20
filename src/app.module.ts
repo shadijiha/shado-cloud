@@ -19,6 +19,9 @@ import { Log } from "./models/log";
 import { DataSource } from "typeorm";
 import { AbstractFileSystem } from "./file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "./file-system/file-system.service";
+import { InstrumentedFileSystemService } from "./file-system/instrumented-file-system.service";
+import { MetricsPusherService, METRICS_SERVICE } from "./metrics-pusher.service";
+import { ClientsModule, Transport } from "@nestjs/microservices";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables, ReplicationRole, validate } from "./config/config.validator";
 import { isDev, REDIS_CACHE } from "./util";
@@ -30,7 +33,22 @@ import { ReplicationModule } from "./replication/replication.module";
 
 @Global()
 @Module({
-   imports: [TypeOrmModule.forFeature([FeatureFlag])],
+   imports: [
+      TypeOrmModule.forFeature([FeatureFlag]),
+      ClientsModule.registerAsync([
+         {
+            name: METRICS_SERVICE,
+            useFactory: (config: ConfigService<EnvVariables>) => ({
+               transport: Transport.TCP,
+               options: {
+                  host: config.get("METRICS_TCP_HOST") || "127.0.0.1",
+                  port: Number(config.get("METRICS_TCP_PORT") ?? 14002),
+               },
+            }),
+            inject: [ConfigService],
+         },
+      ]),
+   ],
    providers: [
       {
          provide: LoggerToDb,
@@ -52,8 +70,10 @@ import { ReplicationModule } from "./replication/replication.module";
       },
       {
          provide: AbstractFileSystem,
-         useClass: NodeFileSystemService,
+         useClass: InstrumentedFileSystemService,
       },
+      NodeFileSystemService,
+      MetricsPusherService,
       {
          provide: REDIS_CACHE,
          useFactory: (config: ConfigService<EnvVariables>) => {
@@ -69,7 +89,7 @@ import { ReplicationModule } from "./replication/replication.module";
       FeatureFlagService,
       TrafficService,
    ],
-   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService],
+   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, ClientsModule],
 })
 export class GlobalUtilityModule {}
 
