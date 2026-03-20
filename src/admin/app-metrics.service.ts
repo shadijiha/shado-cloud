@@ -75,6 +75,7 @@ export class AppMetricsService {
          services.unshift({
             name: "shado-cloud-backend",
             port: this.config.get("APP_PORT") || 9000,
+            tcpPort: undefined,
             status: "up",
             lastHeartbeat: new Date() as any,
             traffic: this.trimTraffic(this.trafficService.getStats()),
