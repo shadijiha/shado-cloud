@@ -1,10 +1,14 @@
-import { Inject, Injectable, NestMiddleware } from "@nestjs/common";
+import { Inject, Injectable, NestMiddleware, Optional } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
 import { TrafficService } from "./traffic.service";
+import { MetricsPusherService } from "./metrics-pusher.service";
 
 @Injectable()
 export class TrafficMiddleware implements NestMiddleware {
-   constructor(@Inject(TrafficService) private readonly traffic: TrafficService) {}
+   constructor(
+      @Inject(TrafficService) private readonly traffic: TrafficService,
+      @Optional() @Inject(MetricsPusherService) private readonly metricsPusher?: MetricsPusherService,
+   ) {}
 
    use(req: Request, res: Response, next: NextFunction) {
       // Estimate incoming bytes: request line + headers + body
@@ -29,6 +33,7 @@ export class TrafficMiddleware implements NestMiddleware {
       res.end = (...args: any[]) => {
          if (args[0] && typeof args[0] !== "function") resBytes += Buffer.byteLength(args[0]);
          this.traffic.record(pattern, reqBytes, resBytes);
+         if (this.metricsPusher) this.metricsPusher.requestCount++;
          return origEnd.apply(res, args);
       };
 

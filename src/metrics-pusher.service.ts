@@ -1,50 +1,44 @@
-import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnApplicationBootstrap } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
 import { ConfigService } from "@nestjs/config";
 import { DataSource } from "typeorm";
 import { firstValueFrom } from "rxjs";
 import { EnvVariables } from "./config/config.validator";
-import { TrafficService } from "./traffic.service";
 
 const METRICS_SERVICE = "METRICS_SERVICE";
 export { METRICS_SERVICE };
 
 /**
  * Periodically pushes metrics to shado-metrics via TCP.
- * Tracks: request_count, fs_bytes_read, fs_bytes_written, db_queries, db_avg_query_ms.
+ * All counters reset on each flush — no delta tracking needed.
  */
 @Injectable()
-export class MetricsPusherService implements OnModuleInit {
+export class MetricsPusherService implements OnApplicationBootstrap {
    private readonly logger = new Logger(MetricsPusherService.name);
    private readonly serviceKey: string;
-   private lastRequestCount = 0;
 
-   // FS byte counters — incremented by the instrumented file system
+   // Counters — reset on each flush
+   public requestCount = 0;
    public fsBytesRead = 0;
    public fsBytesWritten = 0;
-   private lastFsBytesRead = 0;
-   private lastFsBytesWritten = 0;
-
-   // DB counters
    private dbQueries = 0;
-   private lastDbQueries = 0;
    private cacheHits = 0;
-   private lastCacheHits = 0;
    private queryTimings: number[] = [];
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
       private readonly config: ConfigService<EnvVariables>,
-      private readonly traffic: TrafficService,
       private readonly dataSource: DataSource,
    ) {
       this.serviceKey = this.config.get("SERVICE_SECRET");
    }
 
-   onModuleInit() {
-      // Initialize from current stats to avoid a huge delta on first flush
-      this.lastRequestCount = this.traffic.getStats().totalRequests;
+   /** Called by TrafficMiddleware on every request */
+   recordRequest() {
+      this.requestCount++;
+   }
 
+   onApplicationBootstrap() {
       // Wrap DataSource.query to track count + timing
       const origQuery = this.dataSource.query.bind(this.dataSource);
       this.dataSource.query = async (...args: any[]) => {
@@ -71,30 +65,27 @@ export class MetricsPusherService implements OnModuleInit {
 
    private async flush() {
       const now = new Date().toISOString();
-      const stats = this.traffic.getStats();
 
-      const requestDelta = stats.totalRequests - this.lastRequestCount;
-      this.lastRequestCount = stats.totalRequests;
-
-      const readDelta = this.fsBytesRead - this.lastFsBytesRead;
-      const writeDelta = this.fsBytesWritten - this.lastFsBytesWritten;
-      this.lastFsBytesRead = this.fsBytesRead;
-      this.lastFsBytesWritten = this.fsBytesWritten;
-
-      const dbDelta = this.dbQueries - this.lastDbQueries;
-      this.lastDbQueries = this.dbQueries;
-
+      // Drain all counters
+      const requests = this.requestCount;
+      const readBytes = this.fsBytesRead;
+      const writeBytes = this.fsBytesWritten;
+      const queries = this.dbQueries;
+      const cacheHits = this.cacheHits;
       const timings = this.queryTimings.splice(0);
 
-      const cacheDelta = this.cacheHits - this.lastCacheHits;
-      this.lastCacheHits = this.cacheHits;
+      this.requestCount = 0;
+      this.fsBytesRead = 0;
+      this.fsBytesWritten = 0;
+      this.dbQueries = 0;
+      this.cacheHits = 0;
 
       const datapoints: any[] = [
-         { namespace: "shado-cloud", metric: "request_count", value: requestDelta, unit: "Count", timestamp: now },
-         { namespace: "shado-cloud", metric: "fs_bytes_read", value: readDelta, unit: "Bytes", timestamp: now },
-         { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeDelta, unit: "Bytes", timestamp: now },
-         { namespace: "shado-cloud", metric: "db_queries", value: dbDelta, unit: "Count", timestamp: now },
-         { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheDelta, unit: "Count", timestamp: now },
+         { namespace: "shado-cloud", metric: "request_count", value: requests, unit: "Count", timestamp: now },
+         { namespace: "shado-cloud", metric: "fs_bytes_read", value: readBytes, unit: "Bytes", timestamp: now },
+         { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeBytes, unit: "Bytes", timestamp: now },
+         { namespace: "shado-cloud", metric: "db_queries", value: queries, unit: "Count", timestamp: now },
+         { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheHits, unit: "Count", timestamp: now },
          ...timings.map(ms => ({ namespace: "shado-cloud", metric: "db_query_ms", value: ms, unit: "Milliseconds", timestamp: now })),
       ];
 
