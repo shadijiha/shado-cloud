@@ -8,6 +8,14 @@ import { EnvVariables } from "./config/config.validator";
 const METRICS_SERVICE = "METRICS_SERVICE";
 export { METRICS_SERVICE };
 
+export enum MetricUnit {
+   Count = "Count",
+   Bytes = "Bytes",
+   Percent = "Percent",
+   Milliseconds = "Milliseconds",
+   None = "None",
+}
+
 /**
  * Periodically pushes metrics to shado-metrics via TCP.
  * All counters reset on each flush — no delta tracking needed.
@@ -87,12 +95,12 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       this.cacheHits = 0;
 
       const datapoints: any[] = [
-         { namespace: "shado-cloud", metric: "request_count", value: requests, unit: "Count", timestamp: now },
-         { namespace: "shado-cloud", metric: "fs_bytes_read", value: readBytes, unit: "Bytes", timestamp: now },
-         { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeBytes, unit: "Bytes", timestamp: now },
-         { namespace: "shado-cloud", metric: "db_queries", value: queries, unit: "Count", timestamp: now },
-         { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheHits, unit: "Count", timestamp: now },
-         ...timings.map(ms => ({ namespace: "shado-cloud", metric: "db_query_ms", value: ms, unit: "Milliseconds", timestamp: now })),
+         { namespace: "shado-cloud", metric: "request_count", value: requests, unit: MetricUnit.Count, timestamp: now },
+         { namespace: "shado-cloud", metric: "fs_bytes_read", value: readBytes, unit: MetricUnit.Bytes, timestamp: now },
+         { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeBytes, unit: MetricUnit.Bytes, timestamp: now },
+         { namespace: "shado-cloud", metric: "db_queries", value: queries, unit: MetricUnit.Count, timestamp: now },
+         { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheHits, unit: MetricUnit.Count, timestamp: now },
+         ...timings.map(ms => ({ namespace: "shado-cloud", metric: "db_query_ms", value: ms, unit: MetricUnit.Milliseconds, timestamp: now })),
       ];
 
       try {
