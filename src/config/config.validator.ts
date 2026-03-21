@@ -164,6 +164,11 @@ export class EnvVariables {
    @Max(90000)
    METRICS_TCP_PORT: number | undefined;
 
+   @IsString()
+   @IsOptional()
+   @Validate(DoesNotEndWithConstraint, ["/"])
+   METRICS_HOST: string;
+
    /**
     * Github webhooks env
     */

@@ -21,6 +21,8 @@ import { AbstractFileSystem } from "./file-system/abstract-file-system.interface
 import { NodeFileSystemService } from "./file-system/file-system.service";
 import { InstrumentedFileSystemService } from "./file-system/instrumented-file-system.service";
 import { MetricsPusherService, METRICS_SERVICE } from "./metrics-pusher.service";
+import { HeartbeatService } from "./heartbeat.service";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ClientsModule, Transport } from "@nestjs/microservices";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { EnvVariables, ReplicationRole, validate } from "./config/config.validator";
@@ -74,6 +76,7 @@ import { ReplicationModule } from "./replication/replication.module";
       },
       NodeFileSystemService,
       MetricsPusherService,
+      HeartbeatService,
       {
          provide: REDIS_CACHE,
          useFactory: (config: ConfigService<EnvVariables>) => {
@@ -142,6 +145,7 @@ export class GlobalUtilityModule {}
       AdminModule,
       UserProfileModule,
       ReplicationModule,
+      ScheduleModule.forRoot(),
    ],
    controllers: [AppController],
    providers: [

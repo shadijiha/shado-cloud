@@ -4,7 +4,6 @@ import { AdminService } from "./admin.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Log } from "./../models/log";
 import { User } from "./../models/user";
-import { AppMetricsService } from "./app-metrics.service";
 import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlag } from "src/models/admin/featureFlag";
 import { ServiceFunctionsController } from "./service-functions/service-functions.controller";
@@ -19,7 +18,7 @@ import { DeploymentProject } from "../models/admin/deploymentProject";
 @Module({
    controllers: [AdminController, ServiceFunctionsController],
    imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]), FilesModule, DirectoriesModule],
-   providers: [AdminService, AppMetricsService, FeatureFlagService, EmailService, RemoteDesktopGateway, DeploymentService],
+   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, DeploymentService],
    exports: [AdminService],
 })
 export class AdminModule { }

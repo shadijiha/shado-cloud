@@ -5,7 +5,6 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { AdminController } from "src/admin/admin.controller";
 import { AdminService } from "src/admin/admin.service";
 import { AdminGuard } from "src/admin/admin.strategy";
-import { AppMetricsService } from "src/admin/app-metrics.service";
 import { LoggerToDb } from "src/logging";
 import { type Log } from "src/models/log";
 import { User } from "src/models/user";
@@ -75,10 +74,6 @@ describe("AdminController", () => {
                useValue: {
                   findOne: jest.fn(),
                },
-            },
-            {
-               provide: AppMetricsService,
-               useValue: {},
             },
             {
                provide: ConfigService,

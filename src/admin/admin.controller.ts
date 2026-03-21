@@ -33,7 +33,6 @@ import { LoggerToDb } from "src/logging";
 import { Log } from "src/models/log";
 import { AdminService } from "./admin.service";
 import { AdminGuard } from "./admin.strategy";
-import { AppMetricsService, type MicroserviceEntry } from "./app-metrics.service";
 import crypto from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
@@ -56,7 +55,6 @@ import { isDev } from "src/util";
 export class AdminController {
    constructor(
       private readonly adminService: AdminService,
-      private readonly metrics: AppMetricsService,
       private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
@@ -163,68 +161,6 @@ export class AdminController {
          this.logger.error("Deployment failed " + e.message, e.stack);
          return { message: e.message };
       }
-   }
-
-   @Get("metrics/microservices")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   public getMicroserviceStatuses() {
-      return this.metrics.getMicroserviceStatuses();
-   }
-
-   @Get("metrics/microservices/:name/logs")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   public async getMicroserviceLogs(@Param("name") name: string, @Query("lines") lines?: string) {
-      const logLines = lines ? parseInt(lines) : 100;
-      return await this.metrics.getPm2Logs(name, logLines);
-   }
-
-   @Post("microservices/heartbeat")
-   @HttpCode(HttpStatus.OK)
-   @ApiBody({
-      schema: {
-         type: "object",
-         required: ["name", "port"],
-         properties: {
-            name: { type: "string", example: "shado-music-api" },
-            port: { type: "number", example: 9001 },
-         },
-      },
-   })
-   public microserviceHeartbeat(@Body() body: { name: string; port: number; tcpPort?: number; traffic?: MicroserviceEntry["traffic"] }, @Headers("x-service-key") key: string) {
-      if (key !== this.config.get("SERVICE_SECRET")) {
-         throw new UnauthorizedException();
-      }
-      this.metrics.heartbeat(body.name, body.port, body.tcpPort, body.traffic);
-      return { ok: true };
-   }
-
-   @Post("redis/exec")
-   @ApiBody({
-      schema: {
-         type: "object",
-         properties: { command: { type: "string", example: "GET mykey" } },
-      },
-   })
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   public async redisExec(@Body("command") command: string) {
-      if (!command?.trim()) {
-         throw new HttpException("Command is required", HttpStatus.BAD_REQUEST);
-      }
-      this.logger.log(`Redis CLI: ${command}`);
-      try {
-         const result = await this.metrics.execRedisCommand(command);
-         return { result };
-      } catch (e) {
-         return { error: (e as Error).message };
-      }
-   }
-
-   @Get("redis/logs")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   public async redisLogs(@Query("lines") lines?: string) {
-      const n = parseInt(lines) || 100;
-      const logs = await this.metrics.getRedisLogs(n);
-      return { logs };
    }
 
    /**
