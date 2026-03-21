@@ -27,6 +27,8 @@ export class MetricsPusherService implements OnApplicationBootstrap {
 
    // Counters — reset on each flush
    public requestCount = 0;
+   public requestBytesIn = 0;
+   public requestBytesOut = 0;
    public fsBytesRead = 0;
    public fsBytesWritten = 0;
    private dbQueries = 0;
@@ -82,6 +84,8 @@ export class MetricsPusherService implements OnApplicationBootstrap {
 
       // Drain all counters
       const requests = this.requestCount;
+      const bytesIn = this.requestBytesIn;
+      const bytesOut = this.requestBytesOut;
       const readBytes = this.fsBytesRead;
       const writeBytes = this.fsBytesWritten;
       const queries = this.dbQueries;
@@ -89,6 +93,8 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       const timings = this.queryTimings.splice(0);
 
       this.requestCount = 0;
+      this.requestBytesIn = 0;
+      this.requestBytesOut = 0;
       this.fsBytesRead = 0;
       this.fsBytesWritten = 0;
       this.dbQueries = 0;
@@ -96,6 +102,8 @@ export class MetricsPusherService implements OnApplicationBootstrap {
 
       const datapoints: any[] = [
          { namespace: "shado-cloud", metric: "request_count", value: requests, unit: MetricUnit.Count, timestamp: now },
+         { namespace: "shado-cloud", metric: "request_bytes_in", value: bytesIn, unit: MetricUnit.Bytes, timestamp: now },
+         { namespace: "shado-cloud", metric: "request_bytes_out", value: bytesOut, unit: MetricUnit.Bytes, timestamp: now },
          { namespace: "shado-cloud", metric: "fs_bytes_read", value: readBytes, unit: MetricUnit.Bytes, timestamp: now },
          { namespace: "shado-cloud", metric: "fs_bytes_written", value: writeBytes, unit: MetricUnit.Bytes, timestamp: now },
          { namespace: "shado-cloud", metric: "db_queries", value: queries, unit: MetricUnit.Count, timestamp: now },

@@ -33,7 +33,11 @@ export class TrafficMiddleware implements NestMiddleware {
       res.end = (...args: any[]) => {
          if (args[0] && typeof args[0] !== "function") resBytes += Buffer.byteLength(args[0]);
          this.traffic.record(pattern, reqBytes, resBytes);
-         if (this.metricsPusher) this.metricsPusher.requestCount++;
+         if (this.metricsPusher) {
+            this.metricsPusher.requestCount++;
+            this.metricsPusher.requestBytesIn += reqBytes;
+            this.metricsPusher.requestBytesOut += resBytes;
+         }
          return origEnd.apply(res, args);
       };
 
