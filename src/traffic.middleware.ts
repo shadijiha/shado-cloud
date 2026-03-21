@@ -34,9 +34,8 @@ export class TrafficMiddleware implements NestMiddleware {
          if (args[0] && typeof args[0] !== "function") resBytes += Buffer.byteLength(args[0]);
          this.traffic.record(pattern, reqBytes, resBytes);
          if (this.metricsPusher) {
-            this.metricsPusher.requestCount++;
-            this.metricsPusher.requestBytesIn += reqBytes;
-            this.metricsPusher.requestBytesOut += resBytes;
+            const ip = (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.ip || "unknown") as string;
+            this.metricsPusher.recordRequestDetails(pattern, req.method, ip.split(",")[0].trim(), reqBytes, resBytes);
          }
          return origEnd.apply(res, args);
       };
