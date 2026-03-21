@@ -34,7 +34,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
    private dbQueries = 0;
    private cacheHits = 0;
    private queryTimings: number[] = [];
-   private requestRecords: { route: string; method: string; ip: string; bytesIn: number; bytesOut: number }[] = [];
+   private requestRecords: { route: string; method: string; ip: string; bytesIn: number; bytesOut: number; userAgent: string; origin: string }[] = [];
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
@@ -44,16 +44,11 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       this.serviceKey = this.config.get("SERVICE_SECRET");
    }
 
-   /** Called by TrafficMiddleware on every request */
-   recordRequest() {
-      this.requestCount++;
-   }
-
-   recordRequestDetails(route: string, method: string, ip: string, bytesIn: number, bytesOut: number) {
+   recordRequestDetails(route: string, method: string, ip: string, bytesIn: number, bytesOut: number, userAgent: string, origin: string) {
       this.requestCount++;
       this.requestBytesIn += bytesIn;
       this.requestBytesOut += bytesOut;
-      this.requestRecords.push({ route, method, ip, bytesIn, bytesOut });
+      this.requestRecords.push({ route, method, ip, bytesIn, bytesOut, userAgent, origin });
    }
 
    onApplicationBootstrap() {
@@ -118,7 +113,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
          { namespace: "shado-cloud", metric: "db_queries", value: queries, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheHits, unit: MetricUnit.Count, timestamp: now },
          ...timings.map(ms => ({ namespace: "shado-cloud", metric: "db_query_ms", value: ms, unit: MetricUnit.Milliseconds, timestamp: now })),
-         ...reqRecords.map(r => ({ namespace: "shado-cloud", metric: "request", value: 1, unit: MetricUnit.Count, dimensions: { route: r.route, method: r.method, ip: r.ip }, timestamp: now })),
+         ...reqRecords.map(r => ({ namespace: "shado-cloud", metric: "request", value: 1, unit: MetricUnit.Count, dimensions: { route: r.route, method: r.method, ip: r.ip, user_agent: r.userAgent, origin: r.origin }, timestamp: now })),
       ];
 
       try {
