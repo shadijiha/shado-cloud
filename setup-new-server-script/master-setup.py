@@ -11,7 +11,7 @@ from pathlib import Path
 import requests
 
 # ── Config ────────────────────────────────────────────────────────────────────
-API_BASE = "https://cloud.shadijiha.com/apinest"
+API_BASE = "https://cloudapi.shadijiha.com"
 ADMIN_EMAIL = "admin@shado.com"
 INSTALL_DIR = Path.home() / "Desktop"
 CLOUD_DIR = INSTALL_DIR / "shado-cloud-data"
@@ -20,6 +20,7 @@ MTX_VERSION = "v1.9.3"
 REPOS = {
     "shado-cloud": "git@github.com:shadijiha/shado-cloud.git",
     "shado-cloud-frontend": "git@github.com:shadijiha/shado-cloud-frontend.git",
+    "shado-auth-api": "git@github.com:shadijiha/shado-auth-api.git",
     "shado-gym-app": "git@github.com:shadijiha/shado-gym-app.git",
 }
 
@@ -150,8 +151,8 @@ def main():
         "sudo apt install -y "
         "curl wget git build-essential software-properties-common "
         "xorg xdotool scrot ffmpeg xserver-xorg-video-dummy "
-        "apache2 graphicsmagick ghostscript "
-        "unzip jq bc certbot python3-certbot-apache "
+        "graphicsmagick ghostscript "
+        "unzip jq bc "
         # Puppeteer / Chromium deps (for pdf2pic / thumbnails)
         "ca-certificates fonts-liberation libasound2t64 libatk-bridge2.0-0 "
         "libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 "
@@ -328,7 +329,7 @@ WaylandEnable=false
     ok("Authenticated successfully")
 
     # ── 6. Server backup (DB + .env + Apache) via SSE ─────────────────────────
-    step("6/10", "Downloading server backup (DB dump + .env + Apache config)")
+    step("6/10", "Downloading server backup (DB dump + .env + cloudflared config)")
     server_zip = Path("/tmp/server-backup.zip")
     dl_path = follow_sse("/admin/server-setup/stream")
     if dl_path:
@@ -367,7 +368,7 @@ WaylandEnable=false
             content = env_src.read_text()
             # Patch values for this machine
             content = re.sub(r"^CLOUD_DIR=.*$", f"CLOUD_DIR={CLOUD_DIR}", content, flags=re.M)
-            content = re.sub(r"^FRONTEND_DEPLOY_PATH=.*$", "FRONTEND_DEPLOY_PATH=/var/www/html/shado-cloud-frontend/build", content, flags=re.M)
+            content = re.sub(r"^FRONTEND_DEPLOY_PATH=.*\n?", "", content, flags=re.M)
             content = re.sub(r"^ENV=.*$", "ENV=prod", content, flags=re.M)
             content = re.sub(r"^DB_HOST=.*$", "DB_HOST=localhost", content, flags=re.M)
             content = re.sub(r"^REDIS_HOST=.*$", "REDIS_HOST=localhost", content, flags=re.M)
@@ -376,20 +377,6 @@ WaylandEnable=false
                 content += "\nPUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser\n"
             env_dest.write_text(content)
             ok(".env copied and patched")
-
-    # Apache config — restore all sites-available configs from backup
-        apache_backup_dir = extract_dir / "apache"
-        if apache_backup_dir.is_dir():
-            for conf in apache_backup_dir.glob("*.conf"):
-                run(f"sudo cp {conf} /etc/apache2/sites-available/{conf.name}")
-            ok(f"Apache configs restored ({len(list(apache_backup_dir.glob('*.conf')))} files)")
-        else:
-            # Fallback: legacy single-file backup
-            apache_src = extract_dir / "apache-config.conf"
-            run(f"sudo cp {cloud_app / 'deploy/shado-cloud.conf'} /etc/apache2/sites-available/shado-cloud.conf")
-            if apache_src.exists():
-                run(f"sudo cp {apache_src} /etc/apache2/sites-available/shado-cloud-production-backup.conf")
-            ok("Apache config installed (legacy single-file backup)")
 
         # Start MySQL & Redis (native installs)
         print("  Installing MySQL and Redis...")
@@ -490,7 +477,7 @@ FLUSH PRIVILEGES;
     step("9/10", "Building applications")
 
     # shado-cloud backend
-    print("  [1/3] shado-cloud backend...")
+    print("  [1/4] shado-cloud backend...")
     run(f"cd {cloud_app} && npm install && npm run build 2>/dev/null || cd {cloud_app} && npx nest build")
     ok("shado-cloud built")
 
@@ -498,21 +485,25 @@ FLUSH PRIVILEGES;
     print("  Running TypeORM migrations...")
     run("npx typeorm migration:run -d dist/ormconfig.js", check=False)
 
+    # shado-auth-api
+    print("  [2/4] shado-auth-api...")
+    auth_api = INSTALL_DIR / "shado-auth-api"
+    run(f"cd {auth_api} && npm install && npm run build")
+    ok("shado-auth-api built")
+
     # shado-cloud frontend
-    print("  [2/3] shado-cloud frontend...")
+    print("  [3/4] shado-cloud frontend...")
     frontend = INSTALL_DIR / "shado-cloud-frontend"
     run(f"cd {frontend} && npm install && npm run build")
-    run("sudo mkdir -p /var/www/html/shado-cloud-frontend")
-    run(f"sudo cp -r {frontend}/build/* /var/www/html/shado-cloud-frontend/ 2>/dev/null || true")
-    ok("shado-cloud frontend built & deployed")
+    ok("shado-cloud frontend built")
 
     # shado-gym-app
-    print("  [3/3] shado-gym-app...")
+    print("  [4/4] shado-gym-app...")
     gym = INSTALL_DIR / "shado-gym-app"
     run(f"cd {gym} && npm install && npm run build")
     ok("shado-gym-app built")
 
-    # ── 10. Services (MediaMTX, Apache, PM2) ──────────────────────────────────
+    # ── 10. Services (MediaMTX, Cloudflare Tunnel, PM2) ──────────────────────
     step("10/10", "Configuring services")
 
     # MediaMTX — a lightweight media server that re-publishes the screen capture
@@ -584,54 +575,6 @@ EOF""")
     run("sudo systemctl daemon-reload && sudo systemctl enable mediamtx", check=False)
     ok("MediaMTX service configured (auto-waits for X display)")
 
-    # Apache + HTTPS (Let's Encrypt)
-    print("  Configuring Apache...")
-    run("sudo a2enmod proxy proxy_http proxy_wstunnel rewrite headers ssl")
-    run("sudo a2dissite 000-default.conf 2>/dev/null || true")
-    run("sudo a2ensite shado-cloud.conf")
-    run("sudo systemctl enable apache2 && sudo systemctl restart apache2", check=False)
-    ok("Apache configured (HTTP)")
-
-    # SSL — Let's Encrypt via Certbot
-    print(f"\n  {Y}Setting up HTTPS with Let's Encrypt...{N}")
-    # Extract domain names from the Apache config
-    domains = []
-    try:
-        conf = Path("/etc/apache2/sites-available/shado-cloud.conf").read_text()
-        for m in re.finditer(r"Server(?:Name|Alias)\s+(\S+)", conf):
-            d = m.group(1)
-            if d not in domains:
-                domains.append(d)
-    except Exception:
-        pass
-
-    if not domains:
-        print("  Could not auto-detect domains from Apache config.")
-        domain_input = input("  Enter your domain(s) comma-separated (e.g. shadijiha.com,cloud.shadijiha.com,music.shadijiha.com): ").strip()
-        domains = [d.strip() for d in domain_input.split(",") if d.strip()]
-
-    if domains:
-        certbot_email = input(f"  Enter email for Let's Encrypt notifications (or press Enter for {ADMIN_EMAIL}): ").strip()
-        if not certbot_email:
-            certbot_email = ADMIN_EMAIL
-
-        domain_flags = " ".join(f"-d {d}" for d in domains)
-        print(f"  Requesting certificate for: {', '.join(domains)}")
-        result = run(
-            f"sudo certbot --apache --non-interactive --agree-tos "
-            f"--email {certbot_email} {domain_flags} --redirect",
-            check=False,
-        )
-        if result.returncode == 0:
-            ok(f"HTTPS enabled for: {', '.join(domains)}")
-            # Certbot auto-creates a cron/systemd timer, but verify
-            run("sudo systemctl enable certbot.timer 2>/dev/null || true", check=False)
-            ok("Auto-renewal enabled (certbot timer)")
-        else:
-            warn("Certbot failed — you can retry manually: sudo certbot --apache")
-    else:
-        warn("No domains provided — skipping HTTPS. Run 'sudo certbot --apache' later.")
-
     # Cloudflare Tunnel (cloudflared)
     print("  Installing cloudflared...")
     if shutil.which("cloudflared") is None:
@@ -642,17 +585,57 @@ EOF""")
         ok("cloudflared already installed")
 
     if Path("/etc/cloudflared/config.yml").exists():
-        # Config was restored from backup — install as systemd service
-        run("sudo cloudflared service install 2>/dev/null || true", check=False)
-        run("sudo systemctl enable cloudflared", check=False)
-        run("sudo systemctl restart cloudflared", check=False)
-        ok("Cloudflare tunnel service configured from backup")
+        ok("Cloudflare tunnel config restored from backup")
     else:
-        warn("No cloudflared config found — run 'cloudflared tunnel create <name>' and configure manually")
+        # Write default config — user must update tunnel ID and credentials-file
+        run("sudo mkdir -p /etc/cloudflared")
+        cf_config = """\
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # ── Shado Cloud ────────────────────────────
+  - hostname: cloud.shadijiha.com
+    service: http://localhost:3000
+  - hostname: cloudapi.shadijiha.com
+    service: http://localhost:9000
+  - hostname: whep.shadijiha.com
+    service: http://localhost:8889
+
+  # ── Shado Gym ──────────────────────────────
+  - hostname: gym.shadijiha.com
+    service: http://localhost:4000
+  - hostname: gymapi.shadijiha.com
+    service: http://localhost:15001
+
+  # ── Auth & Shared Services ─────────────────
+  - hostname: auth.shadijiha.com
+    service: http://localhost:11001
+  - hostname: metrics.shadijiha.com
+    service: http://localhost:14001
+
+  # ── Media ──────────────────────────────────
+  - hostname: plex.shadijiha.com
+    service: http://localhost:32400
+
+  # ── Fallback ───────────────────────────────
+  - service: http_status:404
+"""
+        run(f"echo '{cf_config}' | sudo tee /etc/cloudflared/config.yml > /dev/null")
+        warn("Default cloudflared config written — update tunnel ID and credentials-file, then run:")
+        warn("  cloudflared tunnel create <name>")
+        warn("  sudo cloudflared service install")
+
+    run("sudo cloudflared service install 2>/dev/null || true", check=False)
+    run("sudo systemctl enable cloudflared", check=False)
+    run("sudo systemctl restart cloudflared", check=False)
+    ok("Cloudflare tunnel service configured")
 
     # PM2
     print("  Setting up PM2 processes...")
     run(f'cd {cloud_app} && pm2 start "npm run start:prod" --name "shado-cloud-backend"')
+    run(f'cd {auth_api} && pm2 start "npm run start:prod" --name "shado-auth-api"')
+    run(f'cd {frontend} && pm2 start "npm run start" --name "shado-cloud-frontend"')
     run(f'cd {gym} && pm2 start "npm run start" --name "shado-gym-app"')
     run("pm2 save")
     # pm2 startup prints a sudo command — capture and run it
@@ -693,32 +676,22 @@ EOF""")
     Path("/tmp/mediamtx.tar.gz").unlink(missing_ok=True)
 
     # ── Done ──────────────────────────────────────────────────────────────────
-    domain_str = domains[0] if domains else "localhost"
-    local_ip = run_quiet("hostname -I").stdout.strip().split()[0] if run_quiet("hostname -I").returncode == 0 else "unknown"
-    gateway = run_quiet("ip route | grep default | awk '{print $3}'").stdout.strip() or "unknown"
     print(f"""
 {G}╔══════════════════════════════════════════════╗
 ║   Setup Complete!                            ║
 ╚══════════════════════════════════════════════╝{N}
 
   Cloud files dir:  {C}{CLOUD_DIR}{N}
-  Backend:          {C}https://{domain_str}/apinest{N}
-  Frontend:         {C}https://{domain_str}{N}
-  Gym App:          {C}http://localhost:3000/gym{N}
-  phpMyAdmin:       {C}http://localhost:8080{N}
-  MediaMTX WebRTC:  {C}http://localhost:8889{N}
+  Backend:          {C}https://cloudapi.shadijiha.com{N}
+  Frontend:         {C}https://cloud.shadijiha.com{N}
+  Gym App:          {C}https://gym.shadijiha.com{N}
+  MediaMTX WebRTC:  {C}https://whep.shadijiha.com{N}
 
   {Y}pm2 status{N}   — check running processes
   {Y}docker ps{N}    — check containers
-  {Y}sudo certbot certificates{N} — check SSL certs
-  {Y}sudo certbot renew --dry-run{N} — test auto-renewal
+  {Y}sudo systemctl status cloudflared{N} — check tunnel
 
   {R}NOTE: Log out and back in for Docker group permissions.{N}
-
-  {Y}⚠ Don't forget to verify your Cloudflare tunnel is running!{N}
-    {Y}sudo systemctl status cloudflared{N}
-    This device IP: {C}{local_ip}{N}
-    Router admin:   {C}http://{gateway}{N}
 """)
 
 
