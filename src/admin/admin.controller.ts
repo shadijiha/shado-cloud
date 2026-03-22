@@ -585,7 +585,15 @@ export class AdminController {
          headers: { "Content-Type": req.headers["content-type"] || "application/sdp" },
          body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
       });
-      resp.headers.forEach((v, k) => res.setHeader(k, v));
+      resp.headers.forEach((v, k) => {
+         if (k.toLowerCase() === "access-control-allow-origin") return;
+         res.setHeader(k, v);
+      });
+      const origin = req.headers.origin;
+      if (origin) {
+         res.setHeader("Access-Control-Allow-Origin", origin);
+         res.setHeader("Access-Control-Allow-Credentials", "true");
+      }
       res.status(resp.status).send(Buffer.from(await resp.arrayBuffer()));
    }
 }
