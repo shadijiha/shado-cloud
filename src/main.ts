@@ -54,7 +54,6 @@ async function bootstrap() {
             ? envConfig.get<string>("BACKEND_HOST")
             : `http://${envConfig.get<string>("BACKEND_HOST")}/`,
       )
-      .addServer("https://cloud.shadijiha.com/apinest")
       .build();
    const document = SwaggerModule.createDocument(app, config);
    SwaggerModule.setup("api", app, document);
