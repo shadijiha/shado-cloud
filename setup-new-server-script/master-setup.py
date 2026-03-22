@@ -599,8 +599,6 @@ ingress:
     service: http://localhost:3000
   - hostname: cloudapi.shadijiha.com
     service: http://localhost:9000
-  - hostname: whep.shadijiha.com
-    service: http://localhost:8889
 
   # ── Shado Gym ──────────────────────────────
   - hostname: gym.shadijiha.com

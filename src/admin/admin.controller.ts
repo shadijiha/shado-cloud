@@ -23,9 +23,11 @@ import {
    Query,
    UseInterceptors,
    UploadedFile,
+   All,
+   Req,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { Observable } from "rxjs";
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -565,5 +567,25 @@ export class AdminController {
    async getVersion() {
       const { version } = await import("../../package.json");
       return { version, env: isDev(this.config) ? "dev" : "prod" };
+   }
+
+   @All("whep/*")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   async whepProxy(@Req() req: Request, @Res() res: Response) {
+      const subPath = req.url.replace(/^\/admin\/whep/, "");
+      const url = `http://127.0.0.1:8889${subPath}`;
+
+      // Read raw body since SDP is not JSON
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const body = Buffer.concat(chunks);
+
+      const resp = await fetch(url, {
+         method: req.method,
+         headers: { "Content-Type": req.headers["content-type"] || "application/sdp" },
+         body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
+      });
+      resp.headers.forEach((v, k) => res.setHeader(k, v));
+      res.status(resp.status).send(Buffer.from(await resp.arrayBuffer()));
    }
 }
