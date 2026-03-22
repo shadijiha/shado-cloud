@@ -179,11 +179,6 @@ export class EnvVariables {
    @IsEmail()
    EMAIL_USER: string;
 
-   @IsOptional()
-   @Validate(DoesNotEndWithConstraint, ["/"])
-   @Validate(ValidFilePath)
-   FRONTEND_DEPLOY_PATH: string;
-
    /**
     * Database env
     */

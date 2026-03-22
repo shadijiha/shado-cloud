@@ -530,7 +530,6 @@ export class AdminController {
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
       
       const workDir = project.workDir === "__CWD__" ? process.cwd() 
-         : project.workDir === "__FRONTEND_DEPLOY_PATH__" ? (this.config.get("FRONTEND_DEPLOY_PATH") || "")
          : project.workDir;
       const envPath = path.join(workDir, ".env");
       
@@ -550,7 +549,6 @@ export class AdminController {
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
       
       const workDir = project.workDir === "__CWD__" ? process.cwd() 
-         : project.workDir === "__FRONTEND_DEPLOY_PATH__" ? (this.config.get("FRONTEND_DEPLOY_PATH") || "")
          : project.workDir;
       
       if (!workDir) {

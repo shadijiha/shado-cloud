@@ -73,7 +73,7 @@ const DEFAULT_PROJECTS: Partial<DeploymentProject>[] = [
    {
       slug: "frontend",
       name: "Frontend",
-      workDir: "__FRONTEND_DEPLOY_PATH__",
+      workDir: "",
       pm2ProcessName: null,
       branch: "master",
       steps: JSON.stringify([
@@ -138,7 +138,6 @@ export class DeploymentService implements OnModuleInit {
 
    private resolveWorkDir(project: DeploymentProject): string {
       if (project.workDir === "__CWD__") return process.cwd();
-      if (project.workDir === "__FRONTEND_DEPLOY_PATH__") return this.config.get("FRONTEND_DEPLOY_PATH") || "";
       return project.workDir;
    }
 
