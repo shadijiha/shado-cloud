@@ -54,7 +54,7 @@ export class X11DisplayStrategy implements DisplayStrategy {
    }
 
    getStreamUrl(): string {
-      return "/whep";
+      return "https://whep.shadijiha.com/screen/whep";
    }
 
    getScreenshotMimeType(): string {
