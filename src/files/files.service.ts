@@ -106,13 +106,14 @@ export class FilesService {
          // in this case, we'll invalidate old thumbnails
          if (fileDB) {
             await this.invalidateThumbnailsFor(userId, fileDB);
+            fileDB.updated_at = new Date();
          } else {
             fileDB = new UploadedFile();
             fileDB.absolute_path = relative;
             fileDB.user = await this.userService.getById(userId);
             fileDB.mime = file.mimetype;
-            this.uploadedFileRepo.save(fileDB);
          }
+         await this.uploadedFileRepo.save(fileDB);
 
          return [true, ""];
       } catch (e) {
