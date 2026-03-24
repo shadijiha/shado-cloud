@@ -230,6 +230,21 @@ export class FilesService {
             this.fs.appendFileSync(dir, content);
          }
 
+         // Update the DB record if it exists
+         const relative = path.normalize(fileRelativePath);
+         let file = await this.uploadedFileRepo.findOne({
+            where: { absolute_path: relative, user: { id: userId } },
+         });
+         if (file) {
+            file.updated_at = new Date();
+         } else {
+            file = new UploadedFile();
+            file.absolute_path = relative;
+            file.user = await this.userService.getById(userId);
+            file.mime = mime.lookup(path.basename(dir)) || "application/octet-stream";
+         }
+         await this.uploadedFileRepo.save(file);
+
          return [true, ""];
       } catch (e) {
          return [false, (e as Error).message];

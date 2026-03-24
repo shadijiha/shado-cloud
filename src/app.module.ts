@@ -122,7 +122,7 @@ export class GlobalUtilityModule {}
                extra: { timezone: "+00:00" },
                // Only define cache if REDIS_HOST is defined in env
                cache: {
-                  type: "redis",
+                  type: "ioredis",
                   duration: 1000, // 1 second
                   options: {
                      host: config.get("REDIS_HOST"),
