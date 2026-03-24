@@ -236,8 +236,11 @@ export class FilesService {
             where: { absolute_path: relative, user: { id: userId } },
          });
          if (file) {
+            this.logger.debug(`[::${this.rename.name}] found file ${file.id} in DB. Updated updated_at field`);
             file.updated_at = new Date();
          } else {
+            this.logger.debug(`[::${this.rename.name}] no match for ${fileRelativePath} in DB (searched ${relative} in DB for ${userId})`);
+            
             file = new UploadedFile();
             file.absolute_path = relative;
             file.user = await this.userService.getById(userId);
