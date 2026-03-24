@@ -237,10 +237,10 @@ export class FilesService {
             where: { absolute_path: relative, user: { id: userId } },
          });
          if (file) {
-            this.logger.debug(`[::${this.rename.name}] found file ${file.id} in DB. Updated updated_at field`);
+            this.logger.debug(`[::${this.save.name}] found file ${file.id} (${fileRelativePath}) in DB. Updated updated_at field`);
             file.updated_at = new Date();
          } else {
-            this.logger.debug(`[::${this.rename.name}] no match for ${fileRelativePath} in DB (searched ${relative} in DB for ${userId})`);
+            this.logger.debug(`[::${this.save.name}] no match for ${fileRelativePath} in DB (searched ${relative} in DB for ${userId})`);
             
             file = new UploadedFile();
             file.absolute_path = relative;
