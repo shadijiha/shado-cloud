@@ -16,13 +16,14 @@ import { FeatureFlagService } from "../feature-flag.service";
 import { FeatureFlagNamespace } from "../../models/admin/featureFlag";
 import { DirectoriesService } from "../../directories/directories.service";
 import { basename, dirname } from "path";
+import { LoggerToDb } from "src/logging";
 
 puppeteer.use(StealthPlugin());
 
 @Controller("admin/service_functions")
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class ServiceFunctionsController {
-    private readonly logger = new Logger(ServiceFunctionsController.name);
+    private canExecuteMutex: boolean = true;
 
     constructor(
         @InjectRepository(ServiceFunction) private readonly serviceFuncRepo: Repository<ServiceFunction>,
@@ -30,6 +31,7 @@ export class ServiceFunctionsController {
         @Inject() private readonly emailService: EmailService,
         @Inject() private readonly featureFlag: FeatureFlagService,
         @Inject() private readonly directoriesService: DirectoriesService,
+        @Inject() private readonly logger: LoggerToDb,
     ) { }
 
     @Get("all")
@@ -116,7 +118,21 @@ export class ServiceFunctionsController {
             throw new HttpException("Invalid service function id", HttpStatus.BAD_REQUEST);
         }
 
-        await this.executeFunction(func);
+        // Check lock first, 
+        if (!this.canExecuteMutex) {
+            throw new HttpException("Could not aquire service function lock", HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            this.canExecuteMutex = false;
+            await this.executeFunction(func);
+        } catch(e) {
+            this.logger.error("Exception occured while executing service functions cron job");
+            this.logger.logException(e);
+        } finally {
+            // Release lock
+            this.canExecuteMutex = true;
+        }        
     }
 
     @Delete(":id/delete")
@@ -140,23 +156,39 @@ export class ServiceFunctionsController {
 
     @Cron(CronExpression.EVERY_HOUR)
     public async executeFunctions() {
-        const funcs = await this.serviceFuncRepo.find({
-            where: {
-                enabled: true,
-            },
-            order: {
-                avg_execution_time_ms: 'ASC',
-            },
-        });
-
-        if (funcs.length <= 0) {
+        if (!this.canExecuteMutex) {
+            this.logger.error("Attempting to execute service functions cron job while another one is already executing!");
             return;
         }
 
-        for (const func of funcs) {
-            // The use await here is deliberate. Some service functions use puppeteer which on rasberry pie CPU spike to 100%.
-            // Tis makes the device unresponsive. By making functions run sequentially, this risk is lowered
-            await this.executeFunction(func);
+        // Aquire lock
+        this.canExecuteMutex = false;
+
+        try {
+            const funcs = await this.serviceFuncRepo.find({
+                where: {
+                    enabled: true,
+                },
+                order: {
+                    avg_execution_time_ms: 'ASC',
+                },
+            });
+
+            if (funcs.length <= 0) {
+                return;
+            }
+
+            for (const func of funcs) {
+                // The use await here is deliberate. Some service functions use puppeteer which on rasberry pie CPU spike to 100%.
+                // Tis makes the device unresponsive. By making functions run sequentially, this risk is lowered
+                await this.executeFunction(func);
+            }
+        } catch(e) {
+            this.logger.error("Exception occured while executing service functions cron job");
+            this.logger.logException(e);
+        } finally {
+            // Release lock
+            this.canExecuteMutex = true;
         }
     }
 
