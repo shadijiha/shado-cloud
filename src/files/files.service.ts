@@ -377,6 +377,7 @@ export class FilesService {
          is_audio: fileMime.includes("audio"),
          is_pdf: fileMime.includes("pdf"),
          size: stats.size,
+         lastModified: stats.mtime.toISOString(),
          temp_url: tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid()) : null,
          db_record: file,
          related_keys_in_redis: file && fetch_related_keys_in_redis ? await this.getCacheKeysForFile(userId, file) : [],

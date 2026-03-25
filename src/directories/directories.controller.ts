@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Paginate, type Paginated, PaginateQuery } from "nestjs-paginate";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
 import { LoggerToDb } from "./../logging";
 import { UploadedFile } from "./../models/uploadedFile";
@@ -47,20 +48,45 @@ export class DirectoriesController {
    @ApiParam({ name: "path", type: String, required: false, allowEmptyValue: true })
    @ApiQuery({ name: "fetch_related_keys_in_redis", required: false, type: Boolean, example: false })
    @ApiParam({ name: "fetch_db_records", type: Boolean, required: false, example: false })
+   @ApiQuery({ name: "page", required: false, type: Number, example: 1 })
+   @ApiQuery({ name: "limit", required: false, type: Number, example: 50 })
+   @ApiQuery({ name: "search", required: false, type: String })
+   @ApiQuery({ name: "sortBy", required: false, type: String, example: "name:ASC" })
    @ApiResponse({ type: DirListResponse })
    public async list(
       @AuthUser() userId: number,
       @Param("path") path: string | undefined,
       @Query("fetch_related_keys_in_redis") fetch_related_keys_in_redis: boolean,
       @Query("fetch_db_records") fetch_db_records: boolean,
+      @Paginate() query: PaginateQuery,
    ): Promise<DirListResponse> {
       try {
-         const list = await this.directoriesService.list(userId, path ?? "", fetch_related_keys_in_redis, fetch_db_records);
+         const allItems = await this.directoriesService.list(userId, path ?? "", fetch_related_keys_in_redis, fetch_db_records, query.sortBy as [string, string][]);
+
+         const page = Math.max(1, query.page || 1);
+         const limit = Math.min(200, Math.max(1, query.limit || 50));
+         const total = allItems.length;
+         const totalPages = Math.ceil(total / limit);
+         const start = (page - 1) * limit;
+         const data = allItems.slice(start, start + limit);
 
          return {
             status: OperationStatus[OperationStatus.SUCCESS],
             parent: this.directoriesService.parent(path),
-            data: list,
+            data,
+            meta: {
+               itemsPerPage: limit,
+               totalItems: total,
+               currentPage: page,
+               totalPages,
+               sortBy: query.sortBy || [],
+               searchBy: [],
+               search: query.search || "",
+               select: [],
+            },
+            links: {
+               current: query.path || "",
+            },
             errors: [],
          };
       } catch (e) {
@@ -69,6 +95,8 @@ export class DirectoriesController {
             status: OperationStatus[OperationStatus.FAILED],
             data: null,
             parent: null,
+            meta: { itemsPerPage: 50, totalItems: 0, currentPage: 1, totalPages: 0, sortBy: [], searchBy: [], search: "", select: [] },
+            links: { current: "" },
             errors: [{ field: "", message: (e as Error).message }],
          };
       }

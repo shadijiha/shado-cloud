@@ -32,7 +32,7 @@ export class DirectoriesService {
       return await this.fileService.getUserRootPath(userId);
    }
 
-   public async list(userId: number, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false) {
+   public async list(userId: number, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false, sortBy?: [string, string][]) {
       const dir = await this.fileService.absolutePath(userId, relativePath);
 
       if (!(await this.fileService.isOwner(userId, dir))) {
@@ -45,23 +45,33 @@ export class DirectoriesService {
       for (const file of files) {
          if (file.isDirectory()) {
             const userRoot = await this.fileService.getUserRootPath(userId);
+            const fullPath = path.join(dir, file.name);
+            const stats = this.fs.statSync(fullPath);
             result.push({
                name: file.name,
                path: path.relative(userRoot, dir),
                is_dir: true,
+               lastModified: stats.mtime.toISOString(),
             });
          } else {
             result.push(await this.fileService.info(userId, path.join(relativePath, file.name), fetch_related_keys_in_redis ?? false, fetch_db_records ?? false));
          }
       }
 
-      return result.sort((a: DirectoryInfo, b: DirectoryInfo) => {
-         if (a.is_dir != b.is_dir) {
-            return a.is_dir ? -1 : 1;
-         }
+      const sortCol = sortBy?.[0]?.[0] || "name";
+      const sortDir = (sortBy?.[0]?.[1] || "ASC").toUpperCase();
 
-         if (a.name.toLowerCase() > b.name.toLowerCase()) return 1;
-         else return -1;
+      return result.sort((a: any, b: any) => {
+         // Directories always first
+         if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+
+         if (sortCol === "lastModified") {
+            const diff = new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
+            return sortDir === "DESC" ? -diff : diff;
+         }
+         // Default: name
+         const cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+         return sortDir === "DESC" ? -cmp : cmp;
       });
    }
 

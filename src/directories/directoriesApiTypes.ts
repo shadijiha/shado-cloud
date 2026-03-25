@@ -15,6 +15,9 @@ export class DirectoryInfo {
    name: string;
 
    @ApiProperty()
+   lastModified: string;
+
+   @ApiProperty()
    is_dir = true;
 }
 
@@ -29,6 +32,31 @@ export class DirListResponse extends ErrorProne {
 
    @ApiProperty({ type: [Object] })
    data: Array<DirectoryInfo | FileInfo>;
+
+   @ApiProperty({
+      example: { itemsPerPage: 50, totalItems: 100, currentPage: 1, totalPages: 2, sortBy: [], searchBy: [], search: "", select: [] },
+   })
+   meta: {
+      itemsPerPage: number;
+      totalItems: number;
+      currentPage: number;
+      totalPages: number;
+      sortBy: any[];
+      searchBy: any[];
+      search: string;
+      select: string[];
+   };
+
+   @ApiProperty({
+      example: { current: "" },
+   })
+   links: {
+      first?: string;
+      previous?: string;
+      current: string;
+      next?: string;
+      last?: string;
+   };
 }
 
 export class NewDirRequest {

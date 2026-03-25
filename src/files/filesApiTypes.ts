@@ -54,6 +54,9 @@ export class FileInfo {
    size: number;
 
    @ApiProperty()
+   lastModified: string;
+
+   @ApiProperty()
    is_image: boolean;
 
    @ApiProperty()
