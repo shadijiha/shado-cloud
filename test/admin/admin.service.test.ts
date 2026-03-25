@@ -132,7 +132,7 @@ describe("AdminService", () => {
             }, 
             {
                provide: FilesService,
-               useVlue: {},
+               useValue: {},
             }
          ],
       }).compile();

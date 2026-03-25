@@ -10,7 +10,7 @@ import { SearchStat } from "src/models/stats/searchStat";
 import { FileAccessStat } from "src/models/stats/fileAccessStat";
 import { TempUrl } from "src/models/tempUrl";
 import { LoggerToDb } from "src/logging";
-import { type User } from "src/models/user";
+import { User } from "src/models/user";
 import type Redis from "ioredis";
 import { ThumbnailCacheInterceptor } from "src/files/thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
@@ -122,6 +122,7 @@ describe("FilesService", () => {
                   existsSync: jest.fn(),
                   mkdirSync: jest.fn(),
                   unlinkSync: jest.fn(),
+                  readdirSync: jest.fn().mockReturnValue([]),
                },
             },
             {
@@ -138,6 +139,10 @@ describe("FilesService", () => {
                   isFeatureFlagDisabled: jest.fn().mockResolvedValue(true),
                   isFeatureFlagEnabled: jest.fn().mockResolvedValue(false),
                },
+            },
+            {
+               provide: getRepositoryToken(User),
+               useValue: {},
             },
          ],
       }).compile();
