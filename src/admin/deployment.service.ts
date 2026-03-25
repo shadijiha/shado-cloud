@@ -476,36 +476,36 @@ export class DeploymentService implements OnModuleInit {
       await this.runSteps(steps, workDir, projectSlug, deployment);
    }
 
-   private runStep(cmd: string, args: string[], cwd: string, step: string, deployment: DeploymentState): Promise<void> {
+   private async runStep(cmd: string, args: string[], cwd: string, step: string, deployment: DeploymentState): Promise<void> {
+      const env = {
+         PATH: process.env.PATH,
+         HOME: process.env.HOME,
+         SHELL: process.env.SHELL,
+         FORCE_COLOR: "0",
+         NO_COLOR: "1",
+         PM2_NO_INTERACTION: "1",
+         CI: "true",
+      };
+      const stepState = deployment.currentStep;
+      const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+
+      const cwdLine = `[cwd: ${cwd}] $ ${cmd} ${args.join(" ")}\n`;
+      stepState.output += cwdLine;
+      this.emit({ type: "step_output", step, output: cwdLine });
+
+      const actualCwd = await new Promise<string>((res) => {
+         const p = spawn("pwd", [], { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+         let out = "";
+         p.stdout.on("data", (d) => out += d.toString());
+         p.on("close", () => res(out.trim()));
+      });
+      const pwdLine = `[pwd: ${actualCwd}]\n`;
+      stepState.output += pwdLine;
+      this.emit({ type: "step_output", step, output: pwdLine });
+
       return new Promise((resolve, reject) => {
-         const env = {
-            PATH: process.env.PATH,
-            HOME: process.env.HOME,
-            SHELL: process.env.SHELL,
-            FORCE_COLOR: "0",
-            NO_COLOR: "1",
-            PM2_NO_INTERACTION: "1",
-            CI: "true",
-         };
          const proc = spawn(cmd, args, { cwd, shell: true, env, stdio: ["ignore", "pipe", "pipe"] });
          this.currentProcess = proc;
-         const stepState = deployment.currentStep;
-
-         const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
-
-         const cwdLine = `[cwd: ${cwd}] $ ${cmd} ${args.join(" ")}\n`;
-         stepState.output += cwdLine;
-         this.emit({ type: "step_output", step, output: cwdLine });
-
-         const actualCwd = await new Promise<string>((res) => {
-            const p = spawn("pwd", [], { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
-            let out = "";
-            p.stdout.on("data", (d) => out += d.toString());
-            p.on("close", () => res(out.trim()));
-         });
-         const pwdLine = `[pwd: ${actualCwd}]\n`;
-         stepState.output += pwdLine;
-         this.emit({ type: "step_output", step, output: pwdLine });
 
          proc.stdout.on("data", (data) => {
             const output = stripAnsi(data.toString());

@@ -12,6 +12,27 @@ import { EventEmitter } from "events";
 
 jest.mock("child_process");
 
+function createMockProc() {
+   const proc = new EventEmitter() as any;
+   proc.stdout = new EventEmitter();
+   proc.stderr = new EventEmitter();
+   return proc;
+}
+
+function mockSpawnWithPwd(mainProc: any) {
+   (childProcess.spawn as jest.Mock).mockImplementation((cmd: string) => {
+      if (cmd === "pwd") {
+         const pwdProc = createMockProc();
+         process.nextTick(() => {
+            pwdProc.stdout.emit("data", Buffer.from("/mocked/cwd"));
+            pwdProc.emit("close", 0);
+         });
+         return pwdProc;
+      }
+      return mainProc;
+   });
+}
+
 const backendSteps = [
    { step: "git_pull", name: "Git Pull", cmd: "git", args: ["pull"] },
    { step: "npm_install", name: "NPM Install", cmd: "npm", args: ["install"] },
@@ -135,7 +156,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          await service.startDeployment("backend", "test");
 
@@ -150,7 +171,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          const subject = await service.startDeployment("backend", "admin");
 
@@ -162,7 +183,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          await service.startDeployment("backend", "github-webhook");
 
@@ -183,7 +204,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          const subject = await service.startDeployment("backend", "test");
          const events: any[] = [];
@@ -199,7 +220,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          await service.startDeployment("backend", "admin");
 
@@ -216,7 +237,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          const subject = await service.startDeployment("backend", "test");
          const events: any[] = [];
@@ -239,7 +260,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          const subject = await service.startDeployment("backend", "test");
          const events: any[] = [];
@@ -252,7 +273,7 @@ describe("DeploymentService", () => {
 
          const outputEvents = events.filter((e) => e.type === "step_output");
          expect(outputEvents.length).toBeGreaterThan(0);
-         expect(outputEvents[0].output).toBe("test output");
+         expect(outputEvents.some((e) => e.output === "test output")).toBe(true);
       });
    });
 
@@ -265,7 +286,7 @@ describe("DeploymentService", () => {
          const mockProc = new EventEmitter() as any;
          mockProc.stdout = new EventEmitter();
          mockProc.stderr = new EventEmitter();
-         (childProcess.spawn as jest.Mock).mockReturnValue(mockProc);
+         mockSpawnWithPwd(mockProc);
 
          await service.startDeployment("backend", "test");
 
