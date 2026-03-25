@@ -33,7 +33,7 @@ export class NodeFileSystemService extends AbstractFileSystem {
    }
 
    public rmdirSync(path: string, options: { recursive: boolean }): void {
-      fs.rmSync(path, { recursive: options.recursive, force: true });
+      fs.rmSync(path, { recursive: options?.recursive || false, force: true });
    }
 
    public appendFileSync(path: string, content: string): void {
