@@ -767,7 +767,7 @@ export class FilesService {
             FilesService.THUMBNAILS_FOLDER_NAME,
          );
          this.logger.debug(`[::${this.invalidateAllThumbnails.name}] Deleting ${thumbnailFolder}`);
-         this.fs.unlinkSync(thumbnailFolder);
+         this.fs.rmdirSync(thumbnailFolder);
       }
 
       this.logger.debug(`[::${this.invalidateAllThumbnails.name}] Deleting cache keys for all thumbnails`);
