@@ -26,6 +26,7 @@ import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
  */
 @Injectable()
 export class ThumbnailCacheInterceptor implements NestInterceptor {
+   public static readonly CachedFilesRedisNamespace = "thumbnail";   // This is prefixed to all cached files in this class
    private static readonly CachedFileTTLSeconds = 60 * 60 * 24 * 30; // 30 days TTL for cached thumbnails
 
    constructor(
@@ -114,8 +115,8 @@ export class ThumbnailCacheInterceptor implements NestInterceptor {
       height?: any,
       includeDimensions = true,
    ): string {
-      if (includeDimensions) return `${userId}:${path}:${width}:${height}`;
-      else return `${userId}:${path}`;
+      if (includeDimensions) return `${ThumbnailCacheInterceptor.CachedFilesRedisNamespace}::${userId}:${path}:${width}:${height}`;
+      else return `${ThumbnailCacheInterceptor.CachedFilesRedisNamespace}::${userId}:${path}`;
    }
 
    // This method reads the StreamableFile stream and returns the file as a Buffer

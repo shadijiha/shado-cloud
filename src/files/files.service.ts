@@ -24,6 +24,7 @@ import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { fromBuffer as pdfToImage } from "pdf2pic";
 import { Readable } from "stream";
+import { User } from "src/models/user";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -39,6 +40,7 @@ export class FilesService {
       @InjectRepository(SearchStat) searchStateRepo: Repository<SearchStat>,
       @InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
       @InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
+      @InjectRepository(User) private readonly userRepo: Repository<User>,
       @Inject() private readonly logger: LoggerToDb,
       @Inject(REDIS_CACHE) private readonly cache: Redis,
       @Inject() private readonly fs: AbstractFileSystem,
@@ -105,7 +107,6 @@ export class FilesService {
          // if a file already exists with that name, then most likely we are replacing a file
          // in this case, we'll invalidate old thumbnails
          if (fileDB) {
-            await this.invalidateThumbnailsFor(userId, fileDB);
             fileDB.updated_at = new Date();
          } else {
             fileDB = new UploadedFile();
@@ -113,6 +114,7 @@ export class FilesService {
             fileDB.user = await this.userService.getById(userId);
             fileDB.mime = file.mimetype;
          }
+         await this.invalidateThumbnailsFor(userId, fileDB);
          await this.uploadedFileRepo.save(fileDB);
 
          return [true, ""];
@@ -757,6 +759,28 @@ export class FilesService {
       return cond;
    }
 
+   public async invalidateAllThumbnails(): Promise<void> { 
+      const users = await this.userRepo.find({ select: { id: true }});
+      for (const user of users) {
+         const thumbnailFolder = path.join(
+            await this.createMetaFolderIfNotExists(user.id),
+            FilesService.THUMBNAILS_FOLDER_NAME,
+         );
+         this.logger.debug(`[::${this.invalidateAllThumbnails.name}] Deleting ${thumbnailFolder}`);
+         this.fs.unlinkSync(thumbnailFolder);
+      }
+
+      this.logger.debug(`[::${this.invalidateAllThumbnails.name}] Deleting cache keys for all thumbnails`);
+
+      const cachedFileKeys = await this.getCacheKeysFromPattern(`${ThumbnailCacheInterceptor.CachedFilesRedisNamespace}*`);
+      if (cachedFileKeys.length > 0) {
+         await this.cache.del(...cachedFileKeys);
+         this.logger.debug(`[::${this.invalidateAllThumbnails.name}] Deleted keys: ${cachedFileKeys.join(", ")}`);
+      } else {
+         this.logger.debug(`[::${this.invalidateAllThumbnails.name}] No thumbnail keys found in redis cache`);
+      }
+   }
+
    private async invalidateThumbnailsFor(userId: number, uploadedFile: UploadedFile): Promise<void> {
       const thumbnailFolder = path.join(
          await this.createMetaFolderIfNotExists(userId),
@@ -766,6 +790,7 @@ export class FilesService {
       files.forEach((fileEntry) => {
          if (fileEntry.name.startsWith(`${uploadedFile.id}_`)) {
             this.fs.unlinkSync(path.join(thumbnailFolder, fileEntry.name));
+            this.logger.debug(`[::${this.invalidateThumbnailsFor.name}] Deleted thumbnail file ${path.join(thumbnailFolder, fileEntry.name)}`);
          }
       });
 
@@ -773,15 +798,19 @@ export class FilesService {
       const cachedFileKeys = await this.getCacheKeysForFile(userId, uploadedFile);
       if (cachedFileKeys.length > 0) {
          await this.cache.del(...cachedFileKeys);
-         this.logger.debug(`Deleted keys: ${cachedFileKeys.join(", ")}`);
+         this.logger.debug(`[::${this.invalidateThumbnailsFor.name}] Deleted keys: ${cachedFileKeys.join(", ")}`);
       } else {
-         this.logger.debug(`No keys found in redis cache for file ${uploadedFile.absolute_path}`);
+         this.logger.debug(`[::${this.invalidateThumbnailsFor.name}] No keys found in redis cache for file ${uploadedFile.absolute_path}`);
       }
    }
 
    private async getCacheKeysForFile(userId: number, uploadedFile: UploadedFile): Promise<string[]> {
       const cacheKey = ThumbnailCacheInterceptor.getCacheKey(userId, uploadedFile.absolute_path, 0, 0, false);
       const pattern = `${cacheKey}*`;
+      return this.getCacheKeysFromPattern(pattern);
+   }
+
+   private async getCacheKeysFromPattern(pattern: string): Promise<string[]> {
       let cursor = "0";
       const keys: string[] = [];
 
@@ -792,6 +821,6 @@ export class FilesService {
          keys.push(...result[1]); // Push the found keys to the keys array
       } while (cursor !== "0"); // If cursor is '0', the scan is complete
 
-      return keys;
+      return keys;      
    }
 }

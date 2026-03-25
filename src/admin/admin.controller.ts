@@ -416,7 +416,17 @@ export class AdminController {
       return this.adminService.deleteBackgroundImage(filename);
    }
 
-   // Deployment Pipeline
+   // Invalidate all thumbnails
+   @Post("invalidate_thumbnails")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public invalidateThumbnails() {
+      return this.adminService.invalidateThumbnails();
+   }
+
+   /**
+    * Deployment Pipeline
+    */
+   // 
    @Get("deployment/projects")
    @UseGuards(JwtAuthGuard, AdminGuard)
    public getDeploymentProjects() {

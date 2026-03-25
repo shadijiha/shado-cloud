@@ -17,7 +17,10 @@ import { DeploymentProject } from "../models/admin/deploymentProject";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController],
-   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]), FilesModule, DirectoriesModule],
+   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]),
+      FilesModule,
+      DirectoriesModule
+   ],
    providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, DeploymentService],
    exports: [AdminService],
 })

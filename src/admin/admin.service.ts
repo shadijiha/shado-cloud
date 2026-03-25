@@ -16,6 +16,7 @@ import archiver from "archiver";
 import { Observable, Subject } from "rxjs";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { Readable } from "stream";
+import { FilesService } from "src/files/files.service";
 
 @Injectable()
 export class AdminService {
@@ -29,6 +30,7 @@ export class AdminService {
       @InjectDataSource() private readonly dataSource: DataSource,
       @InjectEntityManager() private readonly entityManager: EntityManager,
       @Inject() private readonly fs: AbstractFileSystem,
+      @Inject() private readonly fileService: FilesService,
    ) {}
 
    /**
@@ -592,5 +594,9 @@ export class AdminService {
          throw new HttpException("Image not found", HttpStatus.NOT_FOUND);
       }
       return this.fs.createReadStream(filePath);
+   }
+
+   public invalidateThumbnails() {
+      this.fileService.invalidateAllThumbnails();
    }
 }
