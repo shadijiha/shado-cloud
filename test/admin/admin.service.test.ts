@@ -10,6 +10,7 @@ import nodemailer from "nodemailer";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { EmailService } from "../../src/admin/email.service";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { FilesService } from "src/files/files.service";
 
 jest.mock("child_process", () => ({
    exec: jest.fn(),
@@ -128,6 +129,10 @@ describe("AdminService", () => {
                   existsSync: jest.fn().mockReturnValue(true),
                   readdirSync: jest.fn().mockReturnValue([]),
                }
+            }, 
+            {
+               provide: FilesService,
+               useVlue: {},
             }
          ],
       }).compile();
