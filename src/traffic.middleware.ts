@@ -11,6 +11,8 @@ export class TrafficMiddleware implements NestMiddleware {
    ) {}
 
    use(req: Request, res: Response, next: NextFunction) {
+      const start = performance.now();
+
       // Estimate incoming bytes: request line + headers + body
       let reqBytes = 0;
       for (const [key, val] of Object.entries(req.headers)) {
@@ -32,12 +34,14 @@ export class TrafficMiddleware implements NestMiddleware {
 
       res.end = (...args: any[]) => {
          if (args[0] && typeof args[0] !== "function") resBytes += Buffer.byteLength(args[0]);
+         const durationMs = Math.round((performance.now() - start) * 100) / 100;
          this.traffic.record(pattern, reqBytes, resBytes);
          if (this.metricsPusher) {
             const ip = (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.ip || "unknown") as string;
             const ua = (req.headers["user-agent"] || "unknown").substring(0, 100);
             const origin = (req.headers["origin"] || req.headers["referer"] || "direct") as string;
             this.metricsPusher.recordRequestDetails(pattern, req.method, ip.split(",")[0].trim(), reqBytes, resBytes, ua, origin);
+            this.metricsPusher.recordRequestDuration(durationMs);
          }
          return origEnd.apply(res, args);
       };
