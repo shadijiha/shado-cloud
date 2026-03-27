@@ -19,5 +19,9 @@
 		"noFallthroughCasesInSwitch": false,
 		"esModuleInterop": true,
 		"resolveJsonModule": true
+	},
+	"watchOptions": {
+		"watchFile": "fixedPollingInterval",
+		"watchDirectory": "fixedPollingInterval"
 	}
 }
