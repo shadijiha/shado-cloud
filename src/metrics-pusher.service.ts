@@ -35,7 +35,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
    private cacheHits = 0;
    private queryTimings: number[] = [];
    private requestRecords: { route: string; method: string; ip: string; bytesIn: number; bytesOut: number; userAgent: string; origin: string }[] = [];
-   private requestDurations: number[] = [];
+   private requestDurations: { ms: number; route: string }[] = [];
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
@@ -52,8 +52,8 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       this.requestRecords.push({ route, method, ip, bytesIn, bytesOut, userAgent, origin });
    }
 
-   recordRequestDuration(ms: number) {
-      this.requestDurations.push(ms);
+   recordRequestDuration(ms: number, route: string) {
+      this.requestDurations.push({ ms, route });
    }
 
    onApplicationBootstrap() {
@@ -120,7 +120,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
          { namespace: "shado-cloud", metric: "db_cache_hits", value: cacheHits, unit: MetricUnit.Count, timestamp: now },
          ...timings.map(ms => ({ namespace: "shado-cloud", metric: "db_query_ms", value: ms, unit: MetricUnit.Milliseconds, timestamp: now })),
          ...reqRecords.map(r => ({ namespace: "shado-cloud", metric: "request", value: 1, unit: MetricUnit.Count, dimensions: { route: r.route, method: r.method, ip: r.ip, user_agent: r.userAgent, origin: r.origin }, timestamp: now })),
-         ...reqDurations.map(ms => ({ namespace: "shado-cloud", metric: "request_duration_ms", value: ms, unit: MetricUnit.Milliseconds, timestamp: now })),
+         ...reqDurations.map(d => ({ namespace: "shado-cloud", metric: "request_duration_ms", value: d.ms, unit: MetricUnit.Milliseconds, dimensions: { route: d.route }, timestamp: now })),
       ];
 
       try {
