@@ -41,7 +41,7 @@ export class TrafficMiddleware implements NestMiddleware {
             const ua = (req.headers["user-agent"] || "unknown").substring(0, 100);
             const origin = (req.headers["origin"] || req.headers["referer"] || "direct") as string;
             this.metricsPusher.recordRequestDetails(pattern, req.method, ip.split(",")[0].trim(), reqBytes, resBytes, ua, origin);
-            this.metricsPusher.recordRequestDuration(durationMs, pattern);
+            this.metricsPusher.recordRequestDuration(durationMs, req.route?.path ? `${req.method} ${req.baseUrl || ""}${req.route.path}` : pattern);
          }
          return origEnd.apply(res, args);
       };
