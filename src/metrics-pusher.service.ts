@@ -36,6 +36,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
    private queryTimings: number[] = [];
    private requestRecords: { route: string; method: string; ip: string; bytesIn: number; bytesOut: number; userAgent: string; origin: string }[] = [];
    private requestDurations: { ms: number; route: string }[] = [];
+   private unauthorizedRecords: { ip: string; route: string }[] = [];
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
@@ -54,6 +55,10 @@ export class MetricsPusherService implements OnApplicationBootstrap {
 
    recordRequestDuration(ms: number, route: string) {
       this.requestDurations.push({ ms, route });
+   }
+
+   recordUnauthorized(ip: string, route: string) {
+      this.unauthorizedRecords.push({ ip, route });
    }
 
    onApplicationBootstrap() {
@@ -101,6 +106,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       const timings = this.queryTimings.splice(0);
       const reqRecords = this.requestRecords.splice(0);
       const reqDurations = this.requestDurations.splice(0);
+      const unauthorizedRecs = this.unauthorizedRecords.splice(0);
 
       this.requestCount = 0;
       this.requestBytesIn = 0;
@@ -121,6 +127,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
          ...timings.map(ms => ({ namespace: "shado-cloud", metric: "db_query_ms", value: ms, unit: MetricUnit.Milliseconds, timestamp: now })),
          ...reqRecords.map(r => ({ namespace: "shado-cloud", metric: "request", value: 1, unit: MetricUnit.Count, dimensions: { route: r.route, method: r.method, ip: r.ip, user_agent: r.userAgent, origin: r.origin }, timestamp: now })),
          ...reqDurations.map(d => ({ namespace: "shado-cloud", metric: "request_duration_ms", value: d.ms, unit: MetricUnit.Milliseconds, dimensions: { route: d.route }, timestamp: now })),
+         ...unauthorizedRecs.map(r => ({ namespace: "shado-cloud", metric: "unauthorized_errors", value: 1, unit: MetricUnit.Count, dimensions: { ip: r.ip, route: r.route }, timestamp: now })),
       ];
 
       try {

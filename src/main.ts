@@ -13,6 +13,7 @@ import { EnvVariables, ReplicationRole } from "./config/config.validator";
 import { isDev } from "./util";
 import { ReplicationModule } from "./replication/replication.module";
 import { IoAdapter } from "@nestjs/platform-socket.io";
+import { MetricsPusherService } from "./metrics-pusher.service";
 
 async function bootstrap() {
    await ConfigModule.envVariablesLoaded;
@@ -64,7 +65,7 @@ async function bootstrap() {
    app.use(urlencoded({ extended: true, limit: "100mb" }));
    app.useGlobalInterceptors(new ConfigServiceInterceptor(envConfig));
    if (replicationRole != ReplicationRole.Replica) {
-      app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb)));
+      app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb), app.get(MetricsPusherService)));
    }
 
    await app.listen(envConfig.get("APP_PORT") ?? 9000, "0.0.0.0");

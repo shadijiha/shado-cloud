@@ -9,10 +9,14 @@ import {
 import { type Request, type Response } from "express";
 import { LoggerToDb } from "./logging";
 import { SoftException } from "./util";
+import { MetricsPusherService } from "./metrics-pusher.service";
 
 @Catch(Error)
 export class GlobalExceptionFilter implements ExceptionFilter {
-   public constructor(@Inject() private readonly logger: LoggerToDb) {}
+   public constructor(
+      @Inject() private readonly logger: LoggerToDb,
+      private readonly metricsPusher?: MetricsPusherService,
+   ) {}
 
    catch(exception: Error, host: ArgumentsHost) {
       const ctx = host.switchToHttp();
@@ -20,6 +24,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const request = ctx.getRequest<Request>();
       let status = exception instanceof HttpException ? exception.getStatus() : 400;
       if (exception instanceof UnauthorizedException) status = 401;
+
+      // Track unauthorized errors
+      if (status === 401) {
+         const ip = (request.headers["cf-connecting-ip"] || request.headers["x-forwarded-for"] || request.ip || "unknown") as string;
+         const route = `${request.method} ${request.baseUrl || ""}${request.path}`.replace(/\/[0-9a-f-]{20,}/gi, "/:id");
+         this.metricsPusher?.recordUnauthorized(ip.split(",")[0].trim(), route);
+      }
 
       // Log it
       if (
