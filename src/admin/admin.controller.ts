@@ -46,7 +46,7 @@ import { DeploymentService } from "./deployment.service";
 import * as fs from "fs";
 import * as path from "path";
 import { isDev } from "src/util";
-import { InstrumentedFileSystemService } from "src/file-system/instrumented-file-system.service";
+import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 
 /**
  * Each function of this controller needs to be decorated with
@@ -62,7 +62,7 @@ export class AdminController {
       private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
       private readonly deploymentService: DeploymentService,
-      @Inject() private readonly fs: InstrumentedFileSystemService
+      @Inject() private readonly fs: AbstractFileSystem
    ) { }
 
    @Get("logs")

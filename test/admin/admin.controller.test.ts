@@ -13,6 +13,7 @@ import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { DeploymentService } from "src/admin/deployment.service";
 import { AuthService } from "src/auth/auth.service";
 import { JwtAuthGuard } from "src/auth/auth.guard";
+import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 
 describe("AdminController", () => {
    let adminController: AdminController;
@@ -33,7 +34,7 @@ describe("AdminController", () => {
                provide: AdminService,
                useValue: {
                   all: jest.fn(),
-                  deleteByIds: jest.fn(async () => {}),
+                  deleteByIds: jest.fn(async () => { }),
                   redeploy: jest.fn(),
                   getTableCount: jest.fn().mockResolvedValue({ count: 10 }),
                   deleteRow: jest.fn().mockResolvedValue({ success: true }),
@@ -94,6 +95,17 @@ describe("AdminController", () => {
                   getProject: jest.fn().mockResolvedValue({ slug: "backend", branch: "master", enabled: true }),
                },
             },
+            {
+               provide: AbstractFileSystem,
+               useValue: {
+                  unlinkSync: jest.fn(),
+                  mkdirSync: jest.fn(),
+                  readFileSync: jest.fn().mockReturnValue("mock-content"),
+                  writeFileSync: jest.fn(),
+                  existsSync: jest.fn().mockReturnValue(true),
+                  readdirSync: jest.fn().mockReturnValue([]),
+               }
+            }
          ],
       }).compile();
 
