@@ -50,6 +50,7 @@ lerna-debug.log*
 docker-compose.override.yml
 Homestead.json
 Homestead.yaml
+config.yml
 
 shado_cloud_sqlite
 
