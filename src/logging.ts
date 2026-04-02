@@ -41,7 +41,7 @@ export class LoggerToDb extends ConsoleLogger {
             }
          );
       } catch (e) {
-         this.logException(e);
+         this.logException(e as Error);
          return {
             status: OperationStatus[OperationStatus.FAILED],
             errors: [{ field: "", message: (e as Error).message }],
@@ -134,6 +134,6 @@ export class LoggerToDb extends ConsoleLogger {
    }
 
    private alterMessage(message: string): string {
-      return `${this.configService.get("REPLICATION_ROLE") == ReplicationRole.Replica ? "[REPLICA]" : ""} ${message}`;
+      return `${this.configService.get("this-service.replication.role", { infer: true }) == ReplicationRole.Replica ? "[REPLICA]" : ""} ${message}`;
    }
 }

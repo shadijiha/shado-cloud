@@ -29,12 +29,12 @@ export class ReplicationService implements OnModuleInit {
          if (this.isReplica()) {
             this.logger.log("Replicating data from master...");
 
-            if (!this.config.get("MASTER_OR_REPLICA_LOCAL_IP")) {
+            if (!this.config.get("this-service.replication.master-or-replica-ip", { infer: true })) {
                this.logger.error("Master IP is not set");
                return;
             }
 
-            const masterIp = "http://" + this.config.get("MASTER_OR_REPLICA_LOCAL_IP");
+            const masterIp = "http://" + this.config.get("this-service.replication.master-or-replica-ip", { infer: true });
             const replicaFiles = this.listCloudDir();
             const masterFiles: typeof replicaFiles = await (await fetch(`${masterIp}/replication/listall`)).json();
 
@@ -91,11 +91,11 @@ export class ReplicationService implements OnModuleInit {
          } else if (this.isMaster()) {
             // No op
          } else {
-            this.logger.error(`Replication role is unknown ${this.config.get("REPLICATION_ROLE")}`);
+            this.logger.error(`Replication role is unknown ${this.config.get("this-service.replication.role", { infer: true })}`);
          }
       } catch (error) {
          const e = error as Error;
-         const fullMessage = `${this.config.get("REPLICATION_ROLE")} encountered an exception: ${e.message}`;
+         const fullMessage = `${this.config.get("this-service.replication.role", { infer: true })} encountered an exception: ${e.message}`;
          this.logger.error(fullMessage, e.stack);
       } finally {
          this.isReplicating = false;
@@ -116,7 +116,7 @@ export class ReplicationService implements OnModuleInit {
       // Get files within the current directory and add a path key to the file objects
       const files = entries
          .filter((file) => !file.isDirectory())
-         .map((file) => ({ ...file, path: path.relative(this.config.get("CLOUD_DIR"), path_ + "/" + file.name) }));
+         .map((file) => ({ ...file, path: path.relative(this.config.get("this-service.cloud-dir", { infer: true }), path_ + "/" + file.name) }));
 
       // Get folders within the current directory
       const folders = entries.filter((folder) => folder.isDirectory());
@@ -132,11 +132,12 @@ export class ReplicationService implements OnModuleInit {
    }
 
    private isMaster() {
-      return this.config.get("REPLICATION_ROLE") == ReplicationRole.Master;
+      return this.config.get("this-service.replication.role", { infer: true }) == ReplicationRole.Master ||
+         this.config.get("this-service.replication.role", { infer: true }) == ReplicationRole.Primary;
    }
 
    private isReplica() {
-      return this.config.get("REPLICATION_ROLE") == ReplicationRole.Replica;
+      return this.config.get("this-service.replication.role", { infer: true }) == ReplicationRole.Replica;
    }
 
    private pathEquals(path1: string, path2: string) {
@@ -146,6 +147,6 @@ export class ReplicationService implements OnModuleInit {
    }
 
    private get cloudDir() {
-      return this.config.get("CLOUD_DIR");
+      return this.config.get("this-service.cloud-dir", { infer: true });
    }
 }

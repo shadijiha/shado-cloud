@@ -3,6 +3,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "./config/config.validator";
 import { TrafficService } from "./traffic.service";
+import { isDev } from "./util";
 
 @Injectable()
 export class HeartbeatService {
@@ -15,24 +16,28 @@ export class HeartbeatService {
 
    @Cron(CronExpression.EVERY_30_SECONDS)
    async beat() {
-      const host = this.config.get("METRICS_HOST");
+      const host = this.config.get("cross-service.metrics-api.host", { infer: true });
       if (!host) return;
 
+      const port = this.config.get("cross-service.metrics-api.port.http", { infer: true });
+      const protocol = isDev(this.config) ? "http" : "https";
+      const fullUrl = `${protocol}://${host}${port ? ":" + port : ""}`
+
       try {
-         await fetch(`${host}/microservices/heartbeat`, {
+         await fetch(`${fullUrl}/microservices/heartbeat`, {
             method: "POST",
             headers: {
                "Content-Type": "application/json",
-               "x-service-key": this.config.get("SERVICE_SECRET"),
+               "x-service-key": this.config.get("cross-service.secret", { infer: true }),
             },
             body: JSON.stringify({
                name: "shado-cloud-backend",
-               port: Number(this.config.get("APP_PORT") ?? 9000),
+               port: this.config.get("this-service.port.http", { infer: true }) ?? 9000,
                traffic: this.traffic.getStats(),
             }),
          });
-      } catch {
-         this.logger.warn("Heartbeat to shado-metrics failed");
+      } catch(e) {
+         this.logger.warn(`Heartbeat to shado-metrics (${fullUrl}) failed: ${(e as Error).message}`);
       }
    }
 }

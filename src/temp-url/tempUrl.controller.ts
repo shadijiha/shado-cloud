@@ -32,16 +32,14 @@ export class TempUrlConstoller {
    @UseGuards(JwtAuthGuard)
    @ApiResponse({ type: TempURLGenerateResponse })
    public async generate(
-      @Headers() headers: IncomingHttpHeaders,
       @Req() request: Request,
       @AuthUser() userId: number,
       @Body() options: TempURLGenerateOptions,
    ): Promise<TempURLGenerateResponse> {
       try {
-         request.headers;
          return {
             url: await this.tempUrlService.generate(
-               headers,
+               request,
                userId,
                options.filepath,
                options.max_requests,
@@ -50,7 +48,7 @@ export class TempUrlConstoller {
             ),
          };
       } catch (e) {
-         this.logger.logException(e);
+         this.logger.logException(e as Error);
          return {
             url: "",
          };

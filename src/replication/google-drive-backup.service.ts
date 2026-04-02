@@ -26,7 +26,7 @@ export class GoogleDriveBackupService {
             return;
         }
 
-        if (!this.config.get("GOOGLE_CLIENT_ID") || !this.config.get("GOOGLE_REFRESH_TOKEN")) {
+        if (!this.config.get("this-service.google.client-id", { infer: true }) || !this.config.get("this-service.google.refresh-token", { infer: true })) {
             this.logger.warn("Google Drive backup skipped: missing Google OAuth credentials");
             return;
         }
@@ -38,15 +38,15 @@ export class GoogleDriveBackupService {
 
             this.logger.log("Uploading to Google Drive...");
             const auth = new google.auth.OAuth2(
-                this.config.get("GOOGLE_CLIENT_ID"),
-                this.config.get("GOOGLE_CLIENT_SECRET"),
+                this.config.get("this-service.google.client-id", { infer: true }),
+                this.config.get("this-service.google.client-secret", { infer: true }),
             );
             auth.setCredentials({
-                refresh_token: this.config.get("GOOGLE_REFRESH_TOKEN"),
+                refresh_token: this.config.get("this-service.google.refresh-token", { infer: true }),
             });
             const drive = google.drive({ version: "v3", auth });
 
-            const env = this.config.get("ENV");
+            const env = this.config.get("this-service.stage", { infer: true });
             const fileName = `server-backup-${env}.zip`;
             const { Readable } = require("stream");
             const body = Readable.from(zipBuffer);

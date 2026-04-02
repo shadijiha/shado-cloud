@@ -1,16 +1,19 @@
 import { Logger } from "@nestjs/common";
-import { plainToInstance } from "class-transformer";
+import { plainToInstance, Type } from "class-transformer";
 import {
    IsEmail,
    IsEnum,
    IsInt,
    IsNumber,
    IsOptional,
+   isString,
    IsString,
    Max,
    Min,
    MinLength,
    Validate,
+   ValidateIf,
+   ValidateNested,
    validateSync,
    ValidationArguments,
    ValidatorConstraint,
@@ -84,147 +87,192 @@ class ValidFilePath implements ValidatorConstraintInterface {
 }
 
 /**
- * enums
+ * Enums and common configs
  */
-enum Environment {
+enum Stage {
    Development = "development",
    Production = "production",
    Dev = "dev",
    Prod = "prod",
 }
 
+class PortConfig {
+   @IsInt()
+   @Min(1200)
+   @Max(90000)
+   http: number;
+
+   @IsInt()
+   @Min(1200)
+   @Max(90000)
+   tcp: number;
+}
+
 export enum ReplicationRole {
    Master = "master",
+   Primary = "primary",
    Replica = "replica",
 }
 
-export class EnvVariables {
-   /**
-    * Env and replication
-    */
-   @IsEnum(Environment)
-   ENV: Environment;
-
-   @IsInt()
-   @IsOptional()
-   @Min(1200)
-   @Max(90000)
-   APP_PORT: number | undefined;
-
+/* ---------------- THIS SERVICE ---------------- */
+class ReplicationConfig {
    @IsEnum(ReplicationRole)
-   REPLICATION_ROLE: ReplicationRole;
+   role: ReplicationRole
+
+   @IsString()
+   @ValidateIf((o) => o.role === ReplicationRole.Replica)
+   "master-or-replica-ip": string
+}
+
+class GoogleConfig {
+   @IsEmail()
+   @IsOptional()
+   email: string
 
    @IsString()
    @IsOptional()
-   MASTER_OR_REPLICA_LOCAL_IP: string | undefined;
+   "client-id": string
+
+   @IsString()
+   @IsOptional()
+   "client-secret": string;
+
+   @IsString()
+   @IsOptional()
+   "refresh-token": string;
+}
+
+class DeploymentConfig {
+   @IsString()
+   @IsOptional()
+   "github-webhook-secret": string;
+}
+
+class ThisServiceConfig {
+   @IsEnum(Stage)
+   stage: Stage;
+
+   @IsString()
+   host: string;
+
+   @ValidateNested()
+   @Type(() => PortConfig)
+   port: PortConfig;
 
    @Validate(ValidFilePath)
    @Validate(DoesNotEndWithConstraint, ["/"])
    @Validate(DoesNotEndWithConstraint, ["\\"])
-   CLOUD_DIR: string;
+   "cloud-dir": string;
 
-   /**
-    * Cookies and auth
-    */
    @MinLength(3)
-   PASSWORD_VAULT_SALT: string;
-
-   @MinLength(16)
-   SERVICE_SECRET: string;
-
-   @Validate(DoesNotContainSubstringConstraint, ["/"])
-   BACKEND_HOST_NAME: string;
-
-   @Validate(DoesNotEndWithConstraint, ["/"])
-   FRONTEND_URL: string;
-
-   @Validate(ContainsReferenceValueConstraint, ["BACKEND_HOST_NAME"])
-   @Validate(DoesNotEndWithConstraint, ["/"])
-   BACKEND_HOST: string;
-
-   /**
-    * Auth microservice
-    */
-   @IsInt()
-   @IsOptional()
-   @Min(1200)
-   @Max(90000)
-   AUTH_TCP_PORT: number | undefined;
-
-   /**
-    * Metrics microservice
-    */
    @IsString()
-   @IsOptional()
-   METRICS_TCP_HOST: string;
+   "password-vault-salt": string;
 
-   @IsInt()
-   @IsOptional()
-   @Min(1200)
-   @Max(90000)
-   METRICS_TCP_PORT: number | undefined;
+   @ValidateNested()
+   @Type(() => ReplicationConfig)
+   replication: ReplicationConfig;
 
    @IsString()
-   @IsOptional()
    @Validate(DoesNotEndWithConstraint, ["/"])
-   METRICS_HOST: string;
+   frontend_url: string;
 
-   /**
-    * Github webhooks env
-    */
+   @ValidateNested()
+   @Type(() => GoogleConfig)
    @IsOptional()
-   GITHUB_WEBHOOK_SECRET: string;
+   google: GoogleConfig;
 
+   @ValidateNested()
+   @Type(() => DeploymentConfig)
    @IsOptional()
-   @IsEmail()
-   EMAIL_USER: string;
+   deployment: DeploymentConfig;
+}
 
-   /**
-    * Database env
-    */
-   DB_TYPE: "mysql" | "sqlite";
+/* ---------------- CROSS SERVICE ---------------- */
 
+class MicroServiceApiConfig {
+   @IsString()
    @Validate(DoesNotEndWithConstraint, ["/"])
-   DB_HOST: string;
+   host: string;
 
-   @IsNumber()
+   @ValidateNested()
+   @Type(() => PortConfig)
+   port: PortConfig;
+}
+
+class CrossServiceConfig {
+   @MinLength(8)
+   @IsString()
+   secret: string;
+
+   @ValidateNested()
+   @Type(() => MicroServiceApiConfig)
+   "auth-api": MicroServiceApiConfig;
+
+   @ValidateNested()
+   @Type(() => MicroServiceApiConfig)
+   "metrics-api": MicroServiceApiConfig;
+}
+
+/* ---------------- DATABASE ---------------- */
+
+class DbConfig {
+   @IsString()
+   type: string;
+
+   @IsString()
+   @Validate(DoesNotEndWithConstraint, ["/"])
+   host: string;
+
+   @IsInt()
    @Min(0)
    @Max(65535)
-   DB_PORT: number;
+   port: number;
 
-   DB_USERNAME: string;
+   @IsString()
+   username: string;
 
-   DB_PASSWORD: string;
+   @IsString()
+   @IsOptional()
+   password: string;
 
-   DB_NAME: string;
+   @IsString()
+   name: string;
+}
 
-   /**
-    * Redis env
-    */
+/* ---------------- REDIS ---------------- */
+
+class RedisConfig {
+   @IsString()
    @Validate(DoesNotEndWithConstraint, ["/"])
-   REDIS_HOST: string;
+   host: string;
 
-   @IsNumber()
+   @IsInt()
    @Min(0)
    @Max(65535)
-   REDIS_PORT: number;
+   port: number;
 
-   REDIS_PASSWORD: string;
-
-   /**
-    * Google Drive backup
-    */
-   @IsOptional()
    @IsString()
-   GOOGLE_CLIENT_ID: string;
-
    @IsOptional()
-   @IsString()
-   GOOGLE_CLIENT_SECRET: string;
+   password: string;
+}
 
-   @IsOptional()
-   @IsString()
-   GOOGLE_REFRESH_TOKEN: string;
+export class EnvVariables {
+   
+   @ValidateNested()
+   @Type(() => ThisServiceConfig)
+   "this-service": ThisServiceConfig;
+
+   @ValidateNested()
+   @Type(() => CrossServiceConfig)
+   "cross-service": CrossServiceConfig;
+
+   @ValidateNested()
+   @Type(() => DbConfig)
+   db: DbConfig;
+
+   @ValidateNested()
+   @Type(() => RedisConfig)
+   redis: RedisConfig;
 }
 
 export function validate(config: Record<string, unknown>) {
@@ -232,15 +280,26 @@ export function validate(config: Record<string, unknown>) {
    const errors = validateSync(validatedConfig, { skipMissingProperties: false });
 
    if (errors.length > 0) {
-      for (const error of errors) {
-         Object.entries(error.constraints).forEach(([key, value]) => {
-            Logger.error(`${key} => ${value}`);
-         });
-
-         Logger.error("----------------------");
-      }
-
+      logErrors(errors);
       throw new Error(errors.toString());
    }
    return validatedConfig;
+}
+
+function logErrors(errors: any[], parent = '') {
+  for (const error of errors) {
+    const propertyPath = parent
+      ? `${parent}.${error.property}`
+      : error.property;
+
+    if (error.constraints) {
+      Object.entries(error.constraints).forEach(([key, value]) => {
+        Logger.error(`${propertyPath} => ${value}`);
+      });
+    }
+
+    if (error.children && error.children.length > 0) {
+      logErrors(error.children, propertyPath);
+    }
+  }
 }

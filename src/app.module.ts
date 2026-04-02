@@ -31,7 +31,7 @@ import Redis from "ioredis";
 import { FeatureFlagService } from "./admin/feature-flag.service";
 import { FeatureFlag } from "./models/admin/featureFlag";
 import { ReplicationModule } from "./replication/replication.module";
-
+import yamlConfigLoader from "./config/config.loader";
 
 @Global()
 @Module({
@@ -43,8 +43,8 @@ import { ReplicationModule } from "./replication/replication.module";
             useFactory: (config: ConfigService<EnvVariables>) => ({
                transport: Transport.TCP,
                options: {
-                  host: config.get("METRICS_TCP_HOST") || "127.0.0.1",
-                  port: Number(config.get("METRICS_TCP_PORT") ?? 14002),
+                  host: config.get("cross-service.metrics-api.host", { infer: true }) || "127.0.0.1",
+                  port: config.get("cross-service.metrics-api.port.tcp", { infer: true }) ?? 14002,
                },
             }),
             inject: [ConfigService],
@@ -81,9 +81,9 @@ import { ReplicationModule } from "./replication/replication.module";
          provide: REDIS_CACHE,
          useFactory: (config: ConfigService<EnvVariables>) => {
             return new Redis({
-               host: config.get("REDIS_HOST"),
-               port: Number(config.get("REDIS_PORT")),
-               password: config.get("REDIS_PASSWORD"),
+               host: config.get("redis.host", { infer: true }),
+               port: config.get("redis.port", { infer: true }),
+               password: config.get("redis.password", { infer: true }),
             });
          },
          scope: Scope.DEFAULT,
@@ -94,28 +94,27 @@ import { ReplicationModule } from "./replication/replication.module";
    ],
    exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, ClientsModule],
 })
-export class GlobalUtilityModule {}
+export class GlobalUtilityModule { }
 
 @Module({
    imports: [
       GlobalUtilityModule,
       ConfigModule.forRoot({
-         envFilePath: [".env"],
-         expandVariables: true,
+         ignoreEnvFile: true,
+         load: [yamlConfigLoader],
          isGlobal: true,
-         validate: validate,
       }),
       RequestContextModule,
       AuthModule,
       TypeOrmModule.forRootAsync({
          useFactory: (config: ConfigService<EnvVariables>) => {
             return {
-               type: config.get("DB_TYPE") as any,
-               host: config.get("DB_HOST"),
-               port: Number(config.get("DB_PORT")),
-               username: config.get("DB_USERNAME"),
-               password: config.get("DB_PASSWORD"),
-               database: config.get<string>("DB_NAME"),
+               type: config.get("db.type", { infer: true }) as any,
+               host: config.get("db.host", { infer: true }),
+               port: config.get("db.port", { infer: true }),
+               username: config.get("db.username", { infer: true }),
+               password: config.get("db.password", { infer: true }),
+               database: config.get<string>("db.name", { infer: true }),
                entities: ["dist/src/models/**/*{.ts,.js}"],
                synchronize: isDev(config),
                logging: false,
@@ -127,9 +126,9 @@ export class GlobalUtilityModule {}
                   type: "ioredis",
                   duration: 1000, // 1 second
                   options: {
-                     host: config.get("REDIS_HOST"),
-                     port: Number(config.get("REDIS_PORT")),
-                     password: config.get("REDIS_PASSWORD"),
+                     host: config.get("redis.host", { infer: true }),
+                     port: config.get("redis.port", { infer: true }),
+                     password: config.get("redis.password", { infer: true }),
                   },
                   alwaysEnabled: true,
                },

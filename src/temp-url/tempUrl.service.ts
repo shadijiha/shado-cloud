@@ -5,7 +5,7 @@ import { AuthService } from "src/auth/auth.service";
 import { FilesService } from "src/files/files.service";
 import { TempUrl } from "src/models/tempUrl";
 import { SoftException } from "src/util";
-import { type IncomingHttpHeaders } from "http";
+import { type Request } from "express";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
@@ -23,15 +23,13 @@ export class TempUrlService {
    ) { }
 
    public async generate(
-      requestHeaders: IncomingHttpHeaders,
+      request: Request,
       userId: number,
       filepath: string,
       max_requests: number,
       expires_at: Date,
       is_readonly: boolean,
    ): Promise<string> {
-      // const dir = await this.fileService.absolutePath(userId, filepath);
-
       const tempUrl = new TempUrl();
       tempUrl.user = await this.userService.getById(userId);
       tempUrl.url = this.makeUrl();
@@ -41,7 +39,7 @@ export class TempUrlService {
       tempUrl.is_readonly = is_readonly;
       this.tempUrlRepo.save(tempUrl);
 
-      return (this.config.get("BACKEND_HOST") ?? requestHeaders.origin) + "/temp/" + tempUrl.url + "/get";
+      return `${request.protocol}://${request.headers.host}/temp/${tempUrl.url}/get`;
    }
 
    public async asStream(tempUrl: string) {

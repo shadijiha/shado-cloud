@@ -1,0 +1,59 @@
+## ---- Copy this to config.yml
+
+this-service:
+  stage: dev  # dev or prod
+  cloud-dir: /data
+  password-vault-salt: queen
+  host:
+    name: localhost
+    full_url: http://localhost:9000
+  port:
+    http: 9000
+    tcp: 9002
+  replication:
+    role: master  # master or replica
+    master-or-replica-ip: 
+  
+  # For cors, Supports ,
+  frontend_url: http://localhost:3000
+
+  # Emails sending and drive DB backup use this account secrets
+  google:
+    email: shadosite@gmail.com
+    client-id:
+    client-secret:
+    refresh-token:
+
+  deployment:
+    github-webhook-secret: 
+
+# X service communication
+cross-service:
+  # Shared secret between microservices (must match shado-cloud's value)
+  secret: queenqueenqueenqueenqueenqueenqueenqueenqueenqueenqueenqueenqueenqueen
+
+  auth-api:
+    host: shado-auth-api
+    port:
+      http: 11001
+      tcp: 11002
+    
+  metrics-api:
+    host: shado-metrics
+    port:
+      http: 14001
+      tcp: 14002
+
+db:
+  type: mysql
+  host: mysql
+  port: 3306
+  username: root
+  password: rootpassword
+  name: shado_cloud
+
+redis:
+  host: redis
+  port: 6379
+  password: redispassword
+

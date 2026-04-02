@@ -63,5 +63,5 @@ export class SoftException extends Error {
 }
 
 export function isDev(config: ConfigService<EnvVariables>) {
-   return config.get("ENV") == "dev" || config.get("ENV") == "development";
+   return config.get("this-service.stage", { infer: true }).includes("dev");
 }

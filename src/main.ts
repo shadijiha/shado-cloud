@@ -14,21 +14,19 @@ import { isDev } from "./util";
 import { ReplicationModule } from "./replication/replication.module";
 import { IoAdapter } from "@nestjs/platform-socket.io";
 import { MetricsPusherService } from "./metrics-pusher.service";
+import yamlConfigLoader from "./config/config.loader";
 
 async function bootstrap() {
-   await ConfigModule.envVariablesLoaded;
-
-   const replicationRole = (process.env as unknown as EnvVariables).REPLICATION_ROLE;
+   const replicationRole =  yamlConfigLoader()["this-service"].replication.role;
    const app =
       replicationRole == ReplicationRole.Replica
          ? await NestFactory.create(ReplicationModule)
          : await NestFactory.create(AppModule);
-
    const envConfig = app.get<ConfigService<EnvVariables>>(ConfigService);
 
    app.enableCors({
       origin: [
-         envConfig.get<string>("FRONTEND_URL"),
+         envConfig.get("this-service.frontend_url", { infer: true }),
          /\.shadijiha\.com$/,
          "http://shadijiha.com",
          "https://shadijiha.com",
@@ -50,12 +48,8 @@ async function bootstrap() {
       )
       .setVersion("1.0")
       .addTag("")
-      .addServer(
-         envConfig.get<string>("BACKEND_HOST")?.startsWith("http")
-            ? envConfig.get<string>("BACKEND_HOST")
-            : `http://${envConfig.get<string>("BACKEND_HOST")}/`,
-      )
       .build();
+
    const document = SwaggerModule.createDocument(app, config);
    SwaggerModule.setup("api", app, document);
    // fs.writeFileSync("./swagger-spec.json", JSON.stringify(document));
@@ -67,7 +61,6 @@ async function bootstrap() {
    if (replicationRole != ReplicationRole.Replica) {
       app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb), app.get(MetricsPusherService)));
    }
-
-   await app.listen(envConfig.get("APP_PORT") ?? 9000, "0.0.0.0");
+   await app.listen(envConfig.get("this-service.port.http", { infer: true }) ?? 9000, "0.0.0.0");
 }
 bootstrap();

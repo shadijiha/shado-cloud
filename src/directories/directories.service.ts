@@ -127,7 +127,7 @@ export class DirectoriesService {
    public async createNewUserDir(user: User) {
       const email = await this.userService.getEmail(user.id);
       if (!email) return;
-      const dir = path.join(this.config.get("CLOUD_DIR"), email);
+      const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), email);
       if (!this.fs.existsSync(dir)) {
          this.fs.mkdirSync(dir);
       }
@@ -176,7 +176,7 @@ export class DirectoriesService {
       const output = this.fs.createWriteStream(dir + ".zip");
       const archive = archiver("zip");
 
-      archive.on("error", function (err) {
+      archive.on("error", (err) => {
          this.logger.logException(err);
       });
       archive.pipe(output);

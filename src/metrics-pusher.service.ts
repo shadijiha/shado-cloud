@@ -43,7 +43,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       private readonly config: ConfigService<EnvVariables>,
       private readonly dataSource: DataSource,
    ) {
-      this.serviceKey = this.config.get("SERVICE_SECRET");
+      this.serviceKey = this.config.get("cross-service.secret", { infer: true });
    }
 
    recordRequestDetails(route: string, method: string, ip: string, bytesIn: number, bytesOut: number, userAgent: string, origin: string) {

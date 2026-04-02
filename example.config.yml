@@ -1,0 +1,63 @@
+## ---- Copy this to config.yml ----
+
+this-service:
+  stage: dev  # dev or prod
+  host: localhost
+  port:
+    http: 9000
+    tcp: 9001
+
+  cloud-dir: 
+  password-vault-salt: 
+
+  replication:
+    role: primary
+    master-or-replica-ip: 
+  
+  # For cors, does NOT support ,
+  frontend_url: http://localhost:3000
+
+  # Emails sending and drive DB backup use this account secrets
+  google:
+    email: 
+    client-id:
+    client-secret:
+    refresh-token:
+
+  # Used for deployment pipelines
+  deployment:
+    github-webhook-secret: 
+
+
+# X service communication
+cross-service:
+  # Shared secret between microservices (must match shado-auth-api's value)
+  secret: rsfgrfsrfsr
+
+  # Auth microservice (for cookie validation)
+  auth-api:
+    host: shado-auth-api
+    port:
+      http: 11001
+      tcp: 11002
+  
+  # Metrics microservice (TCP for pushing metrics, HTTP for heartbeat)
+  metrics-api:
+    host: shado-metrics
+    port:
+      http: 14001
+      tcp: 14002
+
+db:
+  type: mysql
+  host: localhost
+  port: 3306
+  username: root
+  password: password
+  name: shado_cloud
+
+redis:
+  host: localhost
+  port: 6379
+  password: redispass
+

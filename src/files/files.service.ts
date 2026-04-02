@@ -598,7 +598,7 @@ export class FilesService {
          );
       }
 
-      const dir = path.join(this.config.get("CLOUD_DIR"), email);
+      const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), email);
       // Lazily create user directory on first access (e.g. after registering via auth API)
       if (!this.fs.existsSync(dir)) {
          this.fs.mkdirSync(dir, { recursive: true });

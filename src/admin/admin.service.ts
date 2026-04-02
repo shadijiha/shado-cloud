@@ -17,6 +17,7 @@ import { Observable, Subject } from "rxjs";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { Readable } from "stream";
 import { FilesService } from "src/files/files.service";
+import { CONFIG_FILE_NAME } from "src/config/config.loader";
 
 @Injectable()
 export class AdminService {
@@ -223,9 +224,9 @@ export class AdminService {
 
       // 1. MySQL dump
       try {
-         const dbHost = this.config.get("DB_HOST") || "localhost";
-         const dbUser = this.config.get("DB_USERNAME");
-         const dbPass = this.config.get("DB_PASSWORD");
+         const dbHost = this.config.get("db.host", { infer: true }) || "localhost";
+         const dbUser = this.config.get("db.username", { infer: true });
+         const dbPass = this.config.get("db.password", { infer: true });
          const dumpCmd = `mysqldump -h ${dbHost} -u ${dbUser} -p'${dbPass}' --protocol=tcp --all-databases > ${tmpDir}/mysql-dump.sql`;
          await this.execSync(dumpCmd);
       } catch (e) {
@@ -289,7 +290,7 @@ export class AdminService {
 
       // config.yml file (for this service)
       try {
-         const content = this.fs.readFileSync(path.join(process.cwd(), "config.yml"), "utf-8");
+         const content = this.fs.readFileSync(path.join(process.cwd(), CONFIG_FILE_NAME), "utf-8");
          this.fs.writeFileSync(`${tmpDir}/config.yml.txt`, content);
       } catch (e) {
          errors.push(`config.yml file failed: ${(e as Error).message}`);
@@ -378,9 +379,9 @@ export class AdminService {
       // Step 1: MySQL dump with progress
       subject.next({ data: { type: "progress", step: "Dumping MySQL databases...", percent: 0, phase: "mysql" } });
       try {
-         const dbHost = this.config.get("DB_HOST") || "localhost";
-         const dbUser = this.config.get("DB_USERNAME");
-         const dbPass = this.config.get("DB_PASSWORD");
+         const dbHost = this.config.get("db.host", { infer: true }) || "localhost";
+         const dbUser = this.config.get("db.username", { infer: true });
+         const dbPass = this.config.get("db.password", { infer: true });
          await new Promise<void>((resolve, reject) => {
             const dumpPath = `${tmpDir}/mysql-dump.sql`;
             const output = this.fs.createWriteStream(dumpPath);
@@ -477,7 +478,7 @@ export class AdminService {
     * Returns the path of the created backup file
     */
    public async runCloudBackup(subject: Subject<MessageEvent> | null): Promise<string> {
-      const cloudDir = this.config.get("CLOUD_DIR");
+      const cloudDir = this.config.get("this-service.cloud-dir", { infer: true });
       const zipPath = `/tmp/cloud-backup-${Date.now()}.zip`;
 
       subject?.next({ data: { type: "progress", step: "Scanning files", percent: 0 } });
@@ -547,7 +548,7 @@ export class AdminService {
     * Background images management
     */
    private getBackgroundsDir(): string {
-      const dir = path.join(this.config.get("CLOUD_DIR"), "_system", "backgrounds");
+      const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), "_system", "backgrounds");
       if (!this.fs.existsSync(dir)) {
          this.fs.mkdirSync(dir, { recursive: true });
       }

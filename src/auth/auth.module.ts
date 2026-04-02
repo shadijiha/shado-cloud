@@ -22,8 +22,8 @@ import { AuthTrafficService } from "./auth-traffic.service";
             useFactory: (config: ConfigService<EnvVariables>) => ({
                transport: Transport.TCP,
                options: {
-                  host: "127.0.0.1",
-                  port: Number(config.get("AUTH_TCP_PORT") ?? 11002),
+                  host: config.get("cross-service.auth-api.host", { infer: true }),
+                  port: config.get("cross-service.auth-api.port.tcp", { infer: true }) ?? 11002,
                },
             }),
             inject: [ConfigService],

@@ -27,7 +27,7 @@ export class AuthService {
       private readonly config: ConfigService<EnvVariables>,
       private readonly trafficService: AuthTrafficService,
    ) {
-      this.serviceKey = this.config.get("SERVICE_SECRET");
+      this.serviceKey = this.config.get("cross-service.secret", { infer: true });
    }
 
    /** Send a TCP message and record traffic */

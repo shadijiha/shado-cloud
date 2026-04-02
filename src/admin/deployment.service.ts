@@ -313,7 +313,7 @@ export class DeploymentService implements OnModuleInit {
       projectSlug: string,
       deployment: DeploymentState,
    ) {
-      const frontendUrl = this.config.get("FRONTEND_URL") || "";
+      const frontendUrl = this.config.get("this-service.frontend_url", { infer: true }) || "";
       const deployPageUrl = `${frontendUrl}/admin/deploy`;
 
       for (const stepConfig of steps) {
@@ -447,7 +447,7 @@ export class DeploymentService implements OnModuleInit {
       projectSlug: string,
       deployment: DeploymentState,
    ) {
-      const frontendUrl = this.config.get("FRONTEND_URL") || "";
+      const frontendUrl = this.config.get("this-service.frontend_url", { infer: true }) || "";
       const deployPageUrl = `${frontendUrl}/admin/deploy`;
 
       if (await this.featureFlagService.isFeatureFlagDisabled(FeatureFlagNamespace.Admin, "enable_pipeline_deployment")) {

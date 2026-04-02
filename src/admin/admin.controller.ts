@@ -47,6 +47,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { isDev } from "src/util";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { CONFIG_FILE_NAME } from "src/config/config.loader";
 
 /**
  * Each function of this controller needs to be decorated with
@@ -145,9 +146,9 @@ export class AdminController {
             return { message: "Skipped: commit contains [skip deploy]" };
          }
 
-         const githubSecret = this.config.get<string>("GITHUB_WEBHOOK_SECRET");
+         const githubSecret = this.config.get("this-service.deployment.github-webhook-secret", { infer: true });
          if (!githubSecret) {
-            throw new Error("env var GITHUB_WEBHOOK_SECRET is undefined");
+            throw new Error("env var this-service.deployment.github-webhook-secret is undefined");
          }
 
          const hash = crypto.createHmac("sha256", githubSecret).update(JSON.stringify(payload)).digest("hex");
@@ -552,7 +553,7 @@ export class AdminController {
       }
 
       // Project has switched to use config.yml instead of old fashion .env
-      const configYmlPath = path.join(workDir, "config.yml")
+      const configYmlPath = path.join(workDir, CONFIG_FILE_NAME)
       if (this.fs.existsSync(configYmlPath)) {
          return this.fs.readFileSync(configYmlPath, "utf-8") as string;
       }
@@ -585,8 +586,8 @@ export class AdminController {
       }
 
       // Otherwise if is using config.yml
-      if (this.fs.existsSync(path.join(workDir, "config.yml"))) {
-         this.fs.writeFileSync(path.join(workDir, "config.yml"), content, "utf-8");
+      if (this.fs.existsSync(path.join(workDir, CONFIG_FILE_NAME))) {
+         this.fs.writeFileSync(path.join(workDir, CONFIG_FILE_NAME), content, "utf-8");
          this.logger.log(`config.yml file updated for ${projectSlug}`);
          return { success: true };
       }
