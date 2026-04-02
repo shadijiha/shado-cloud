@@ -204,7 +204,7 @@ export abstract class AbstractFileSystem {
     * @param content The data to write to the file.
     * @throws Will throw an error if the file cannot be written.
     */
-   public abstract writeFileSync(path: string, content: string | NodeJS.ArrayBufferView): void;
+   public abstract writeFileSync(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): void;
 
    /**
     * Synchronously reads the entire contents of a file.

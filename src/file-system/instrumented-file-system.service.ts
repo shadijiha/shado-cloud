@@ -25,8 +25,8 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
    private trackRead(bytes: number) { if (this.metrics) this.metrics.fsBytesRead += bytes; }
    private trackWrite(bytes: number) { if (this.metrics) this.metrics.fsBytesWritten += bytes; }
 
-   writeFileSync(path: string, content: string | NodeJS.ArrayBufferView): void {
-      this.inner.writeFileSync(path, content);
+   writeFileSync(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): void {
+      this.inner.writeFileSync(path, content, encoding);
       this.trackWrite(Buffer.byteLength(content as any));
    }
 

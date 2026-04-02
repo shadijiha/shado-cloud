@@ -31,7 +31,7 @@ export class AdminService {
       @InjectEntityManager() private readonly entityManager: EntityManager,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly fileService: FilesService,
-   ) {}
+   ) { }
 
    /**
     * @returns Returns all logs in the database
@@ -287,6 +287,14 @@ export class AdminService {
          errors.push(`.env file failed: ${(e as Error).message}`);
       }
 
+      // config.yml file (for this service)
+      try {
+         const content = this.fs.readFileSync(path.join(process.cwd(), "config.yml"), "utf-8");
+         this.fs.writeFileSync(`${tmpDir}/config.yml.txt`, content);
+      } catch (e) {
+         errors.push(`config.yml file failed: ${(e as Error).message}`);
+      }
+
       // Cloudflare tunnel config and credentials
       const cloudflaredDir = "/etc/cloudflared";
       try {
@@ -388,17 +396,17 @@ export class AdminService {
             child.stdout.on("data", (chunk: Buffer) => {
                bytesWritten += chunk.length;
                output.write(chunk);
-               subject.next({ 
-                  data: { 
-                     type: "progress", 
-                     step: "Dumping MySQL databases...", 
+               subject.next({
+                  data: {
+                     type: "progress",
+                     step: "Dumping MySQL databases...",
                      processedBytes: bytesWritten,
                      phase: "mysql"
-                  } 
+                  }
                });
             });
 
-            child.stderr.on("data", () => {}); // Ignore warnings
+            child.stderr.on("data", () => { }); // Ignore warnings
             child.on("close", (code: number) => {
                output.end();
                if (code === 0) resolve();
@@ -431,15 +439,15 @@ export class AdminService {
 
          archive.on("progress", (progress) => {
             const percent = totalSize > 0 ? Math.min(99, Math.round((progress.fs.processedBytes / totalSize) * 100)) : 0;
-            subject.next({ 
-               data: { 
-                  type: "progress", 
-                  step: "Compressing...", 
-                  percent, 
-                  processedBytes: progress.fs.processedBytes, 
+            subject.next({
+               data: {
+                  type: "progress",
+                  step: "Compressing...",
+                  percent,
+                  processedBytes: progress.fs.processedBytes,
                   totalBytes: totalSize,
                   phase: "zip"
-               } 
+               }
             });
          });
 

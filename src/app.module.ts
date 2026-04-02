@@ -120,7 +120,9 @@ export class GlobalUtilityModule {}
                synchronize: isDev(config),
                logging: false,
                extra: { timezone: "+00:00" },
-               // Only define cache if REDIS_HOST is defined in env
+               // TODO: use "node-redis"
+               // For node-redis v4+ (otherwise issues with docker)
+               // socket: { host: "redis-service-name", port: 6379 }
                cache: {
                   type: "ioredis",
                   duration: 1000, // 1 second

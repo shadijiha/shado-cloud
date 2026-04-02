@@ -46,6 +46,7 @@ import { DeploymentService } from "./deployment.service";
 import * as fs from "fs";
 import * as path from "path";
 import { isDev } from "src/util";
+import { InstrumentedFileSystemService } from "src/file-system/instrumented-file-system.service";
 
 /**
  * Each function of this controller needs to be decorated with
@@ -61,7 +62,8 @@ export class AdminController {
       private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
       private readonly deploymentService: DeploymentService,
-   ) {}
+      @Inject() private readonly fs: InstrumentedFileSystemService
+   ) { }
 
    @Get("logs")
    @ApiResponse({ type: [Log] })
@@ -70,7 +72,7 @@ export class AdminController {
       try {
          return await this.adminService.all();
       } catch (e) {
-         this.logger.logException(e);
+         this.logger.logException(e as Error);
          return [];
       }
    }
@@ -339,12 +341,12 @@ export class AdminController {
       @Res({ passthrough: true }) res: Response,
    ): Promise<StreamableFile> {
       const result = await this.adminService.generateServerSetupBackup(body.sudoPassword);
-      
+
       res.set({
          "Content-Type": "application/zip",
          "Content-Disposition": `attachment; filename="server-setup-${Date.now()}.zip"`,
       });
-      
+
       return new StreamableFile(result);
    }
 
@@ -369,12 +371,12 @@ export class AdminController {
       const filePath = file; // Already decoded by NestJS
       const stream = await this.adminService.getBackupFile(filePath);
       const filename = filePath.split("/").pop();
-      
+
       res.set({
          "Content-Type": "application/zip",
          "Content-Disposition": `attachment; filename="${filename}"`,
       });
-      
+
       stream.pipe(res);
       stream.on("close", () => {
          this.adminService.deleteBackupFile(filePath);
@@ -540,15 +542,22 @@ export class AdminController {
    public async getEnvFile(@Param("project") projectSlug: string): Promise<string> {
       const project = await this.deploymentService.getProject(projectSlug);
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
-      
-      const workDir = project.workDir === "__CWD__" ? process.cwd() 
+
+      const workDir = project.workDir === "__CWD__" ? process.cwd()
          : project.workDir;
       const envPath = path.join(workDir, ".env");
-      
-      if (!fs.existsSync(envPath)) {
-         throw new HttpException("Env file not found", HttpStatus.NOT_FOUND);
+
+      if (this.fs.existsSync(envPath)) {
+         return this.fs.readFileSync(envPath, "utf-8") as string;
       }
-      return fs.readFileSync(envPath, "utf-8");
+
+      // Project has switched to use config.yml instead of old fashion .env
+      const configYmlPath = path.join(workDir, "config.yml")
+      if (this.fs.existsSync(configYmlPath)) {
+         return this.fs.readFileSync(configYmlPath, "utf-8") as string;
+      }
+
+      throw new HttpException("Env file not found", HttpStatus.NOT_FOUND);
    }
 
    @Put("env/:project")
@@ -556,20 +565,34 @@ export class AdminController {
    public async saveEnvFile(
       @Param("project") projectSlug: string,
       @Body("content") content: string,
-   ): Promise<{ success: boolean }> {
+   ): Promise<{ success: boolean, message?: string }> {
       const project = await this.deploymentService.getProject(projectSlug);
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
-      
-      const workDir = project.workDir === "__CWD__" ? process.cwd() 
+
+      const workDir = project.workDir === "__CWD__" ? process.cwd()
          : project.workDir;
-      
+
       if (!workDir) {
          throw new HttpException("Working directory not configured", HttpStatus.BAD_REQUEST);
       }
-      
-      fs.writeFileSync(path.join(workDir, ".env"), content, "utf-8");
-      this.logger.log(`Env file updated for ${projectSlug}`);
-      return { success: true };
+
+      // If project has .env or .example.env or .env.example, it means it is still using old fashion .env
+      if (this.fs.existsSync(path.join(workDir, ".env")) ||
+         this.fs.existsSync(path.join(workDir, ".example.env")) || fs.existsSync(path.join(workDir, ".env.example"))) {
+         this.fs.writeFileSync(path.join(workDir, ".env"), content, "utf-8");
+         this.logger.log(`Env file updated for ${projectSlug}`);
+         return { success: true };
+      }
+
+      // Otherwise if is using config.yml
+      if (this.fs.existsSync(path.join(workDir, "config.yml"))) {
+         this.fs.writeFileSync(path.join(workDir, "config.yml"), content, "utf-8");
+         this.logger.log(`config.yml file updated for ${projectSlug}`);
+         return { success: true };
+      }
+
+      this.logger.error(`Project ${projectSlug} is using unkown env structure (not .env and not config.yml)`);
+      return { success: false, message: `Project ${projectSlug} is using unkown env structure (not .env and not config.yml)` };
    }
 
    @Get("version")

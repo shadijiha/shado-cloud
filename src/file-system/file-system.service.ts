@@ -56,8 +56,8 @@ export class NodeFileSystemService extends AbstractFileSystem {
       fs.renameSync(path, newPath);
    }
 
-   public writeFileSync(path: string, content: string | NodeJS.ArrayBufferView): void {
-      fs.writeFileSync(path, content);
+   public writeFileSync(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): void {
+      fs.writeFileSync(path, content, encoding);
    }
 
    public readFileSync(path: string, encoding: BufferEncoding): string | Buffer {
