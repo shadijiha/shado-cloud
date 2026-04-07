@@ -3,7 +3,7 @@ import { InjectDataSource, InjectEntityManager, InjectRepository } from "@nestjs
 import { exec } from "child_process";
 import { LoggerToDb } from "../logging";
 import { Log } from "../models/log";
-import { DataSource, EntityManager, Repository } from "typeorm";
+import { DataSource, EntityManager, In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { promisify } from "util";
@@ -37,10 +37,9 @@ export class AdminService {
    /**
     * @returns Returns all logs in the database
     */
-   public async all() {
-      return (await this.logRepo.find({ relations: ["user"] })).sort((a, b) => {
-         return b.created_at.getTime() - a.created_at.getTime();
-      });
+   public async all(types?: string[]) {
+      const where: any = types?.length ? { type: In(types) } : {};
+      return await this.logRepo.find({ where, relations: ["user"], order: { created_at: "DESC" } });
    }
 
    /**

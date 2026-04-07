@@ -69,9 +69,10 @@ export class AdminController {
    @Get("logs")
    @ApiResponse({ type: [Log] })
    @UseGuards(JwtAuthGuard, AdminGuard)
-   async logs() {
+   async logs(@Query("type") type?: string) {
       try {
-         return await this.adminService.all();
+         const types = type ? type.split(",") : undefined;
+         return await this.adminService.all(types);
       } catch (e) {
          this.logger.logException(e as Error);
          return [];
