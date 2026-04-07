@@ -7,11 +7,12 @@ import { type Request } from "express";
 import { getUserIdFromRequest, SoftException } from "./util";
 import { OperationStatus, type OperationStatusResponse } from "./files/filesApiTypes";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, LessThan } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables, ReplicationRole } from "./config/config.validator";
 import { FeatureFlagNamespace } from "./models/admin/featureFlag";
 import { FeatureFlagService } from "./admin/feature-flag.service";
+import { Cron, CronExpression } from "@nestjs/schedule";
 
 @Injectable()
 export class LoggerToDb extends ConsoleLogger {
@@ -22,6 +23,12 @@ export class LoggerToDb extends ConsoleLogger {
       private readonly configService: ConfigService<EnvVariables>,
    ) {
       super(context);
+   }
+
+   @Cron("0 4 * * *")
+   async cleanupDebugLogs() {
+      const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+      await this.logRepo.delete({ type: "debug", created_at: LessThan(cutoff) });
    }
 
    public logException(e: Error): void {
