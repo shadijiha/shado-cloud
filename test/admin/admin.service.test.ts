@@ -151,21 +151,19 @@ describe("AdminService", () => {
 
    describe("all", () => {
       it("should return logs sorted by created_at in descending order", async () => {
-         // Arrange: Mock data
+         // Arrange: Mock data (DB returns pre-sorted via order clause)
          const logs = [
-            { created_at: new Date("2023-01-01"), user: { id: 1 } } as Log,
             { created_at: new Date("2024-01-01"), user: { id: 2 } } as Log,
+            { created_at: new Date("2023-01-01"), user: { id: 1 } } as Log,
          ];
          jest.spyOn(logRepo, "find").mockResolvedValue(logs);
 
          // Act: Call the method
          const result = await service.all();
 
-         // Assert: Check that the result is sorted in descending order
-         expect(result).toEqual([
-            { created_at: new Date("2024-01-01"), user: { id: 2 } } as Log,
-            { created_at: new Date("2023-01-01"), user: { id: 1 } } as Log,
-         ]);
+         // Assert: Check that find was called with order and result is returned as-is
+         expect(logRepo.find).toHaveBeenCalledWith({ where: {}, relations: ["user"], order: { created_at: "DESC" } });
+         expect(result).toEqual(logs);
       });
    });
 

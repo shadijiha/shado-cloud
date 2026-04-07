@@ -12,11 +12,12 @@ import { FilesModule } from "../files/files.module";
 import { EmailService } from "./email.service";
 import { DirectoriesModule } from "../directories/directories.module";
 import { RemoteDesktopGateway } from "./remote-desktop.gateway";
+import { DeploymentController } from "./deployment.controller";
 import { DeploymentService } from "./deployment.service";
 import { DeploymentProject } from "../models/admin/deploymentProject";
 
 @Module({
-   controllers: [AdminController, ServiceFunctionsController],
+   controllers: [AdminController, ServiceFunctionsController, DeploymentController],
    imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]),
       FilesModule,
       DirectoriesModule

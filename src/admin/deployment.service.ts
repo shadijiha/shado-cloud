@@ -52,6 +52,7 @@ interface DeploymentEvent {
 
 const REDIS_KEY_CURRENT = "deployment:current";
 const REDIS_KEY_LAST = "deployment:last";
+const REDIS_KEY_QUEUE = "deployment:queue";
 
 const DEFAULT_PROJECTS: Partial<DeploymentProject>[] = [
    {
@@ -223,6 +224,28 @@ export class DeploymentService implements OnModuleInit {
       this.emit({ type: "deployment_complete", deployment: current });
       this.deploymentSubject?.complete();
       this.logger.log("Deployment cancelled by user");
+   }
+
+   public async enqueue(projectSlug: string, triggeredBy: string): Promise<void> {
+      await this.redis.rpush(REDIS_KEY_QUEUE, JSON.stringify({ projectSlug, triggeredBy }));
+      this.logger.log(`Queued deployment for ${projectSlug} (triggered by ${triggeredBy})`);
+   }
+
+   public async getQueue(): Promise<{ projectSlug: string; triggeredBy: string }[]> {
+      const items = await this.redis.lrange(REDIS_KEY_QUEUE, 0, -1);
+      return items.map(i => JSON.parse(i));
+   }
+
+   private async processQueue(): Promise<void> {
+      const next = await this.redis.lpop(REDIS_KEY_QUEUE);
+      if (!next) return;
+      const { projectSlug, triggeredBy } = JSON.parse(next);
+      this.logger.log(`Processing queued deployment for ${projectSlug}`);
+      try {
+         await this.startDeployment(projectSlug, triggeredBy);
+      } catch (e) {
+         this.logger.error(`Queued deployment failed to start: ${(e as Error).message}`);
+      }
    }
 
    public async retryStep(step: string): Promise<Subject<MessageEvent>> {
@@ -415,6 +438,7 @@ export class DeploymentService implements OnModuleInit {
                   deployPageUrl,
                }),
             });
+            this.processQueue();
             return;
          }
       }
@@ -439,6 +463,7 @@ export class DeploymentService implements OnModuleInit {
             deployPageUrl,
          }),
       });
+      this.processQueue();
    }
 
    private async runDeployment(
