@@ -58,12 +58,10 @@ export class FeatureFlagService {
    }
 
    public async createFeatureFlag(request: CreateFeatureFlagRequest): Promise<void | never> {
-      const flag = await this.featureFlagRepo.findOne({ where: { namespace: request.namespace, key: request.key } });
-      if (flag) {
-         throw new Error(`Feature flag ${request.namespace}::${request.key} already exists`);
-      }
-
-      await this.featureFlagRepo.save({ ...request, enabled: false });
+      await this.featureFlagRepo.upsert(
+         { namespace: request.namespace, key: request.key, payload: request.payload, description: request.description, enabled: false },
+         { conflictPaths: ["namespace", "key"], skipUpdateIfNoValuesChanged: true },
+      );
    }
 
    public async deleteFeatureFlag(namespace: FeatureFlagNamespace, key: string) {
