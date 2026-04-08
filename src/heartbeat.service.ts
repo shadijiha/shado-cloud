@@ -20,7 +20,7 @@ export class HeartbeatService {
       if (!host) return;
 
       const port = this.config.get("cross-service.metrics-api.port.http", { infer: true });
-      const protocol = host == "localhost" || host == "127.0.0.1" ? "http" : "https";
+      const protocol = isDev(this.config) || host == "localhost" || host == "127.0.0.1" ? "http" : "https";
       const fullUrl = `${protocol}://${host}${port ? ":" + port : ""}`
 
       try {
