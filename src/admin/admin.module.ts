@@ -12,6 +12,7 @@ import { FilesModule } from "../files/files.module";
 import { EmailService } from "./email.service";
 import { DirectoriesModule } from "../directories/directories.module";
 import { RemoteDesktopGateway } from "./remote-desktop.gateway";
+import { RemoteTerminalGateway } from "./remote-terminal.gateway";
 import { DeploymentController } from "./deployment.controller";
 import { DeploymentService } from "./deployment.service";
 import { DeploymentProject } from "../models/admin/deploymentProject";
@@ -22,7 +23,7 @@ import { DeploymentProject } from "../models/admin/deploymentProject";
       FilesModule,
       DirectoriesModule
    ],
-   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, DeploymentService],
+   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, RemoteTerminalGateway, DeploymentService],
    exports: [AdminService],
 })
 export class AdminModule { }
