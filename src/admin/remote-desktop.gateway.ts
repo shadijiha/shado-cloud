@@ -1,6 +1,7 @@
 import {
    Inject,
 } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import {
    WebSocketGateway,
    WebSocketServer,
@@ -16,6 +17,8 @@ import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { LoggerToDb } from "../logging";
 import { DisplayStrategy, DisplayStrategyFactory } from "./display-strategy";
+import { FeatureFlagService } from "./feature-flag.service";
+import { REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY } from "./remote.constants";
 
 const execAsync = promisify(exec);
 
@@ -45,15 +48,20 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    private connectedClients = 0;
    private readonly display: DisplayStrategy;
 
+   /** Maps connected socket → owning shadoUserId, for grant expiry sweeps. */
+   private readonly clientUsers = new Map<string, { userId: string; socket: Socket }>();
+
    constructor(
       private authService: AuthService,
       @Inject() private readonly logger: LoggerToDb,
+      private readonly featureFlags: FeatureFlagService,
    ) {
       this.display = DisplayStrategyFactory.create();
       this.logger.log(`RemoteDesktopGateway initialized with ${this.display.name} display strategy`);
    }
 
    async handleConnection(client: Socket) {
+      let userId: string | null = null;
       try {
          const rawCookies = client.handshake.headers.cookie || "";
          if (!rawCookies) {
@@ -61,7 +69,7 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
             client.disconnect();
             return;
          }
-         const userId = await this.authService.validateCookies(rawCookies);
+         userId = await this.authService.validateCookies(rawCookies);
          if (!userId) {
             this.logger.warn(`Unauthorized connection attempt: ${client.id} - invalid token`);
             client.disconnect();
@@ -79,6 +87,34 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
          return;
       }
 
+      // Gated behind the shared remote-access feature flag (disabled by default). Fail closed.
+      try {
+         if (await this.featureFlags.isFeatureFlagDisabled(REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY)) {
+            this.logger.warn(`Remote desktop connection rejected (feature flag disabled): ${client.id}`);
+            client.disconnect();
+            return;
+         }
+      } catch {
+         this.logger.warn(`Remote desktop flag check failed, rejecting: ${client.id}`);
+         client.disconnect();
+         return;
+      }
+
+      // Require a valid 2FA remote-access grant (60-minute window). Fail closed.
+      try {
+         if (!(await this.authService.hasStepUp(userId, "remote"))) {
+            this.logger.warn(`Remote desktop connection rejected (no 2FA grant): ${client.id}`);
+            client.emit("denied", "Remote access requires 2FA verification.");
+            client.disconnect();
+            return;
+         }
+      } catch {
+         this.logger.warn(`Remote desktop grant check failed, rejecting: ${client.id}`);
+         client.disconnect();
+         return;
+      }
+
+      this.clientUsers.set(client.id, { userId, socket: client });
       this.connectedClients++;
       this.logger.log(`Admin client connected: ${client.id}, total: ${this.connectedClients}`);
 
@@ -96,11 +132,27 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    }
 
    handleDisconnect(client: Socket) {
+      this.clientUsers.delete(client.id);
       this.connectedClients--;
       this.logger.log(`Client disconnected: ${client.id}, total: ${this.connectedClients}`);
 
       if (this.connectedClients === 0) {
          this.stopStreaming();
+      }
+   }
+
+   /** Disconnect any client whose remote-access grant has expired. */
+   @Cron(CronExpression.EVERY_30_SECONDS)
+   private async sweepExpiredGrants() {
+      for (const [clientId, entry] of this.clientUsers) {
+         try {
+            if (await this.authService.hasStepUp(entry.userId, "remote")) continue;
+            this.logger.warn(`Remote desktop session expired (grant lapsed): ${clientId}`);
+            entry.socket.emit("denied", "Remote access grant expired.");
+            entry.socket.disconnect();
+         } catch (err) {
+            this.logger.error(`Remote desktop grant sweep failed for ${clientId}: ${(err as Error)?.message}`);
+         }
       }
    }
 

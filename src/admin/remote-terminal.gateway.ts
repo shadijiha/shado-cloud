@@ -1,4 +1,5 @@
 import { Inject } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import {
    WebSocketGateway,
    WebSocketServer,
@@ -13,6 +14,8 @@ import * as os from "os";
 import * as fs from "fs";
 import { AuthService } from "../auth/auth.service";
 import { LoggerToDb } from "../logging";
+import { FeatureFlagService } from "./feature-flag.service";
+import { REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY } from "./remote.constants";
 
 /** Minimal shape of the bits of node-pty we use (avoids a compile-time dep). */
 interface IPty {
@@ -59,12 +62,13 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
    @WebSocketServer()
    server: Server;
 
-   /** One PTY shell per connected admin socket. */
-   private readonly sessions = new Map<string, IPty>();
+   /** One PTY shell per connected admin socket, tagged with the owning user. */
+   private readonly sessions = new Map<string, { term: IPty; userId: string; socket: Socket }>();
 
    constructor(
       private authService: AuthService,
       @Inject() private readonly logger: LoggerToDb,
+      private readonly featureFlags: FeatureFlagService,
    ) {
       if (!pty) {
          this.safeLog("warn", "node-pty not available — terminal sessions will be rejected");
@@ -73,15 +77,17 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
       }
    }
 
-   private async isAuthorized(client: Socket): Promise<boolean> {
+   /** Validate cookies + admin. Returns the shadoUserId, or null if not allowed. */
+   private async authenticate(client: Socket): Promise<string | null> {
       try {
          const rawCookies = client.handshake.headers.cookie || "";
-         if (!rawCookies) return false;
+         if (!rawCookies) return null;
          const userId = await this.authService.validateCookies(rawCookies);
-         if (!userId) return false;
-         return await this.authService.isAdmin(userId);
+         if (!userId) return null;
+         if (!(await this.authService.isAdmin(userId))) return null;
+         return userId;
       } catch {
-         return false;
+         return null;
       }
    }
 
@@ -103,8 +109,34 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
 
    async handleConnection(client: Socket) {
       try {
-         if (!(await this.isAuthorized(client))) {
+         const userId = await this.authenticate(client);
+         if (!userId) {
             this.safeLog("warn", `Unauthorized terminal connection attempt: ${client.id}`);
+            client.disconnect();
+            return;
+         }
+
+         // Gated behind a feature flag (disabled by default). Fail closed.
+         if (await this.featureFlags.isFeatureFlagDisabled(REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY)) {
+            this.safeLog("warn", `Terminal connection rejected (feature flag disabled): ${client.id}`);
+            this.emitSafe(
+               client,
+               "output",
+               "\r\n\x1b[33mThe remote terminal is currently disabled by a feature flag.\x1b[0m\r\n",
+            );
+            client.disconnect();
+            return;
+         }
+
+         // Require a valid 2FA remote-access grant (60-minute window). Fail closed.
+         if (!(await this.authService.hasStepUp(userId, "remote"))) {
+            this.safeLog("warn", `Terminal connection rejected (no 2FA grant): ${client.id}`);
+            this.emitSafe(client, "denied", "Remote access requires 2FA verification.");
+            this.emitSafe(
+               client,
+               "output",
+               "\r\n\x1b[33mRemote access requires 2FA verification. Enter your code on the Remote page.\x1b[0m\r\n",
+            );
             client.disconnect();
             return;
          }
@@ -142,7 +174,7 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
             return;
          }
 
-         this.sessions.set(client.id, term);
+         this.sessions.set(client.id, { term, userId, socket: client });
          this.safeLog("log", `Terminal session started: ${client.id} (${shell})`);
 
          term.onData((data) => this.emitSafe(client, "output", data));
@@ -180,9 +212,9 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
    @SubscribeMessage("input")
    handleInput(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
       try {
-         const term = this.sessions.get(client.id);
-         if (term && typeof data === "string") {
-            term.write(data);
+         const session = this.sessions.get(client.id);
+         if (session && typeof data === "string") {
+            session.term.write(data);
          }
       } catch (err) {
          this.safeLog("error", `input failed: ${(err as Error)?.message}`);
@@ -192,21 +224,45 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
    @SubscribeMessage("resize")
    handleResize(@ConnectedSocket() client: Socket, @MessageBody() size: ResizeEvent) {
       try {
-         const term = this.sessions.get(client.id);
-         if (!term || !size) return;
+         const session = this.sessions.get(client.id);
+         if (!session || !size) return;
          const cols = Math.max(1, Math.floor(size.cols) || 80);
          const rows = Math.max(1, Math.floor(size.rows) || 24);
-         term.resize(cols, rows);
+         session.term.resize(cols, rows);
       } catch (err) {
          this.safeLog("error", `resize failed: ${(err as Error)?.message}`);
       }
    }
 
-   private cleanup(clientId: string) {
-      const term = this.sessions.get(clientId);
-      if (term) {
+   /** Disconnect any session whose remote-access grant has expired. */
+   @Cron(CronExpression.EVERY_30_SECONDS)
+   private async sweepExpiredGrants() {
+      for (const [clientId, session] of this.sessions) {
          try {
-            term.kill();
+            if (await this.authService.hasStepUp(session.userId, "remote")) continue;
+            this.safeLog("log", `Terminal session expired (grant lapsed): ${clientId}`);
+            const socket = session.socket;
+            if (socket) {
+               this.emitSafe(
+                  socket,
+                  "output",
+                  "\r\n\x1b[33mRemote access grant expired. Please re-verify 2FA.\x1b[0m\r\n",
+               );
+               this.emitSafe(socket, "denied", "Remote access grant expired.");
+               socket.disconnect();
+            }
+            this.cleanup(clientId);
+         } catch (err) {
+            this.safeLog("error", `grant sweep failed for ${clientId}: ${(err as Error)?.message}`);
+         }
+      }
+   }
+
+   private cleanup(clientId: string) {
+      const session = this.sessions.get(clientId);
+      if (session) {
+         try {
+            session.term.kill();
          } catch {
             /* already gone */
          }

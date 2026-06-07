@@ -16,6 +16,7 @@ import { RemoteTerminalGateway } from "./remote-terminal.gateway";
 import { DeploymentController } from "./deployment.controller";
 import { DeploymentService } from "./deployment.service";
 import { DeploymentProject } from "../models/admin/deploymentProject";
+import { TwoFactorGuard } from "./two-factor.guard";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController, DeploymentController],
@@ -23,7 +24,7 @@ import { DeploymentProject } from "../models/admin/deploymentProject";
       FilesModule,
       DirectoriesModule
    ],
-   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, RemoteTerminalGateway, DeploymentService],
+   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, RemoteTerminalGateway, DeploymentService, TwoFactorGuard],
    exports: [AdminService],
 })
 export class AdminModule { }

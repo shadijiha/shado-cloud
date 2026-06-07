@@ -10,6 +10,7 @@ import { EnvVariables } from "src/config/config.validator";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AuthTrafficService } from "./auth-traffic.service";
+import { STEP_UP_TTL_SECONDS } from "src/admin/step-up.constants";
 
 /**
  * Communicates with shado-auth-api via TCP microservice.
@@ -112,5 +113,48 @@ export class AuthService {
       return this.send<boolean>(
          "change_name", { userId: shadoUserId, newName, serviceKey: this.serviceKey },
       );
+   }
+
+   // ── Two-factor (TOTP) + remote-access grants ──────────────────
+
+   /** Verify a user's current TOTP code via auth-api. */
+   async verifyTotp(shadoUserId: string, code: string): Promise<boolean> {
+      return this.send<boolean>(
+         "verify_totp", { userId: shadoUserId, code, serviceKey: this.serviceKey },
+      );
+   }
+
+   /** Whether the user has 2FA enabled (via auth-api). */
+   async isTotpEnabled(shadoUserId: string): Promise<boolean> {
+      return this.send<boolean>(
+         "is_totp_enabled", { userId: shadoUserId, serviceKey: this.serviceKey },
+      );
+   }
+
+   // ── Reusable step-up 2FA grants (per scope, e.g. "remote", "database") ──
+
+   private stepUpKey(scope: string, shadoUserId: string): string {
+      return `stepup_2fa:${scope}:${shadoUserId}`;
+   }
+
+   /** Grant the user a 60-minute step-up window for a scope (after a verified code). */
+   async grantStepUp(shadoUserId: string, scope: string): Promise<void> {
+      await this.cache.set(this.stepUpKey(scope, shadoUserId), "1", "EX", STEP_UP_TTL_SECONDS);
+   }
+
+   /** Whether the user currently holds a valid step-up grant for a scope. */
+   async hasStepUp(shadoUserId: string, scope: string): Promise<boolean> {
+      return (await this.cache.exists(this.stepUpKey(scope, shadoUserId))) === 1;
+   }
+
+   /** Remaining seconds on the step-up grant for a scope (<= 0 if none). */
+   async stepUpTtl(shadoUserId: string, scope: string): Promise<number> {
+      const ttl = await this.cache.ttl(this.stepUpKey(scope, shadoUserId));
+      return ttl > 0 ? ttl : 0;
+   }
+
+   /** Revoke a step-up grant for a scope. */
+   async revokeStepUp(shadoUserId: string, scope: string): Promise<void> {
+      await this.cache.del(this.stepUpKey(scope, shadoUserId));
    }
 }
