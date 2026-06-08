@@ -46,10 +46,16 @@ export class User extends BaseEntity {
    @UpdateDateColumn()
    updated_at: Date;
 
+   /** Maximum storage the user is allowed, in gigabytes. */
+   @ApiProperty({ example: 5 })
+   @Column({ type: "int", default: 5 })
+   max_data_gb: number;
+
    /**
     * @returns Returns the maximum allowed data a user can store on Shado Cloud in bytes
     */
    public getMaxData(): number {
-      return 5 * 1024 * 1024 * 1024; // 5 GB
+      const gb = this.max_data_gb ?? 5;
+      return gb * 1024 * 1024 * 1024;
    }
 }
