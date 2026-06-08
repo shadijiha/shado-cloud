@@ -67,7 +67,9 @@ export class FilesService {
       const dir = await this.absolutePath(userId, relativePath);
       if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
-      this.updateStats(userId, dir, user_agent);
+      this.updateStats(userId, dir, user_agent).catch((e) =>
+         this.logger.error("updateStats failed: " + (e as Error).message),
+      );
       const owns = await this.isOwner(userId, dir);
 
       if (!owns) {
@@ -710,6 +712,9 @@ export class FilesService {
    }
 
    private async updateStats(userId: number, absolute_path: string, user_agent: string) {
+      // Never insert undefined/empty — the DB column may not have a default, and a
+      // failed stat write must not be possible here.
+      user_agent = user_agent || "unknown";
       const root = await this.getUserRootPath(userId);
       const sanitizedRelative = path.relative(root, absolute_path); // Need this to avoid weird slashes
       const user = await this.userService.getById(userId);
