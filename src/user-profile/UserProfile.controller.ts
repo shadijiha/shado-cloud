@@ -26,6 +26,8 @@ import { Observable, Subject } from "rxjs";
 @UseGuards(JwtAuthGuard)
 @ApiTags("User profile settings")
 export class UserProfileController {
+   /** Maximum accepted profile picture size (bytes). */
+   static readonly MAX_PROFILE_PIC_BYTES = 5 * 1024 * 1024; // 5 MB
    constructor(private readonly profileService: UserProfileService, @Inject() private readonly logger: LoggerToDb) {}
 
    @Patch("change/password")
@@ -45,7 +47,7 @@ export class UserProfileController {
    }
 
    @Patch("change/picture")
-   @UseInterceptors(FileInterceptor("file"))
+   @UseInterceptors(FileInterceptor("file", { limits: { fileSize: UserProfileController.MAX_PROFILE_PIC_BYTES } }))
    @ApiResponse({ type: OperationStatusResponse })
    public async changePicture(
       @AuthUser() userId: number,
@@ -53,6 +55,11 @@ export class UserProfileController {
       @Body() body: ChangePictureRequest,
    ) {
       return await this.logger.errorWrapper(async () => {
+         if (!file) throw new Error("No image provided");
+         if (!file.mimetype?.startsWith("image/")) throw new Error("Only image files are allowed");
+         if (file.size > UserProfileController.MAX_PROFILE_PIC_BYTES) {
+            throw new Error(`Image too large (max ${UserProfileController.MAX_PROFILE_PIC_BYTES / (1024 * 1024)}MB)`);
+         }
          await this.profileService.changePicture(
             userId,
             body.password,

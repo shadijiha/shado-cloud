@@ -27,6 +27,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { Observable } from "rxjs";
 import { JwtAuthGuard } from "src/auth/auth.guard";
+import { ServiceKeyGuard } from "src/auth/service-key.guard";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { LoggerToDb } from "src/logging";
 import { Log } from "src/models/log";
@@ -148,6 +149,16 @@ export class AdminController {
       @Param("key") key: string,
    ) {
       return this.featureFlagService.getFeatureFlag(namespace, key);
+   }
+
+   // Service-to-service read (e.g. shado-auth-api), authenticated via x-service-key.
+   @Get("featureFlag/:namespace/:key/enabled")
+   @UseGuards(ServiceKeyGuard)
+   public async isFeatureFlagEnabledForService(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+      @Param("key") key: string,
+   ): Promise<{ enabled: boolean }> {
+      return { enabled: await this.featureFlagService.isFeatureFlagEnabled(namespace, key) };
    }
 
    @Patch("featureFlag/:namespace/:key/enable")
