@@ -6,7 +6,6 @@ import { type Repository } from "typeorm";
 import { LoggerToDb } from "src/logging";
 import { ConfigService } from "@nestjs/config";
 import { exec } from "child_process";
-import nodemailer from "nodemailer";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { EmailService } from "../../src/admin/email.service";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
@@ -15,7 +14,6 @@ import { FilesService } from "src/files/files.service";
 jest.mock("child_process", () => ({
    exec: jest.fn(),
 }));
-jest.mock("nodemailer");
 
 describe("AdminService", () => {
    let service: AdminService;
@@ -141,8 +139,6 @@ describe("AdminService", () => {
       logRepo = module.get<Repository<Log>>(getRepositoryToken(Log));
       logger = module.get<LoggerToDb>(LoggerToDb);
       abstractFs = module.get<AbstractFileSystem>(AbstractFileSystem);
-
-      nodemailer.createTransport.mockReturnValue({ sendMail: sendMailMock });
    });
 
    afterEach(() => {
