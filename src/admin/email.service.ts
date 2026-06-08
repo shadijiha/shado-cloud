@@ -1,56 +1,54 @@
 import { Inject, Injectable } from "@nestjs/common";
-import nodemailer from "nodemailer";
+import { ClientProxy } from "@nestjs/microservices";
 import { ConfigService } from "@nestjs/config";
+import { firstValueFrom, timeout } from "rxjs";
 import { EnvVariables } from "../config/config.validator";
 import { LoggerToDb } from "../logging";
+import { AUTH_SERVICE } from "../auth/auth.constants";
 
+/**
+ * Email is sent centrally by shado-auth-api (which owns the SMTP transport).
+ * This is a thin proxy that forwards send requests over the TCP microservice.
+ * The public interface is unchanged so existing callers keep working.
+ */
 @Injectable()
 export class EmailService {
-    private transporter: nodemailer.Transporter | undefined;
+   private readonly serviceKey: string;
 
-    public constructor(
-        @Inject() private readonly logger: LoggerToDb,
-        @Inject() private readonly config: ConfigService<EnvVariables>,
-    ) {
-        const email = this.config.get("this-service.google.email", { infer: true });
-        const clientId = this.config.get("this-service.google.client-id", { infer: true });
-        const refreshToken = this.config.get("this-service.google.refresh-token", { infer: true });
+   public constructor(
+      @Inject(AUTH_SERVICE) private readonly authClient: ClientProxy,
+      @Inject() private readonly config: ConfigService<EnvVariables>,
+      @Inject() private readonly logger: LoggerToDb,
+   ) {
+      this.serviceKey = this.config.get("cross-service.secret", { infer: true });
+   }
 
-        if (email && clientId && refreshToken) {
-            this.transporter = nodemailer.createTransport({
-                host: "smtp.gmail.com",
-                port: 465,
-                secure: true,
-                auth: {
-                    type: "OAuth2",
-                    user: config.get("this-service.google.email", { infer: true }),
-                    clientId: config.get("this-service.google.client-id", { infer: true }),
-                    clientSecret: config.get("this-service.google.client-secret", { infer: true }),
-                    refreshToken: config.get("this-service.google.refresh-token", { infer: true }),
-                },
-            });
-        } else {
-            this.logger.warn(
-                "Emails won't be sent because .env email or password are either undefined or not escaped properly",
-            );
-        }
-    }
+   public async sendEmail(options: { to?: string; subject: string; text?: string; html?: string; attachments?: any[] }) {
+      try {
+         const payload = {
+            ...options,
+            attachments: this.normalizeAttachments(options.attachments),
+            serviceKey: this.serviceKey,
+         };
+         await firstValueFrom(this.authClient.send("send_email", payload).pipe(timeout(10_000)));
+      } catch (e) {
+         this.logger.warn("Unable to send email via auth-api: " + (e as Error).message);
+      }
+   }
 
-    public async sendEmail(options: { to?: string, subject: string; text?: string; html?: string, attachments?: any[] }) {
-        if (this.transporter) {
-            try {
-                await this.transporter.sendMail({
-                    from: this.config.get("this-service.google.email", { infer: true }), // Sender address
-                    to: options.to ?? this.config.get("this-service.google.email", { infer: true }), // Receiver's address
-                    subject: options.subject, // Subject line
-                    text: options.text, // Plain text body
-                    html: options.html,
-                    attachments: options.attachments,
-                });
-            } catch (e) {
-                this.logger.warn("Unable to send email " + (e as Error).message);
-            }
-        }
-    }
-
+   /**
+    * TCP payloads are JSON-serialized, so a Buffer would arrive as
+    * {type:"Buffer",data:[...]} and break the attachment. Convert any Buffer
+    * `content` to a base64 string + `encoding:"base64"`, which survives JSON and
+    * is decoded natively by nodemailer on the auth-api side.
+    */
+   private normalizeAttachments(attachments?: any[]): any[] | undefined {
+      if (!attachments?.length) return attachments;
+      return attachments.map((att) => {
+         if (att && Buffer.isBuffer(att.content)) {
+            return { ...att, content: att.content.toString("base64"), encoding: "base64" };
+         }
+         return att;
+      });
+   }
 }

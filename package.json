@@ -54,7 +54,6 @@
         "nestjs-paginate": "^12.8.3",
         "nestjs-request-context": "^4.0.0",
         "node-pty": "1.1.0",
-        "nodemailer": "^7.0.6",
         "passport": "^0.7.0",
         "passport-jwt": "^4.0.1",
         "pdf2pic": "^3.2.0",
