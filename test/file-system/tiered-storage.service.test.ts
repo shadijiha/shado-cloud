@@ -9,7 +9,7 @@ describe("TieredStorageService", () => {
    let featureFlag: { isFeatureFlagEnabled: jest.Mock; getPayload: jest.Mock };
    let redis: {
       getBuffer: jest.Mock; incr: jest.Mock; expire: jest.Mock; exists: jest.Mock;
-      set: jest.Mock; del: jest.Mock; strlen: jest.Mock; scan: jest.Mock;
+      set: jest.Mock; del: jest.Mock; strlen: jest.Mock; scan: jest.Mock; info: jest.Mock;
    };
    let metrics: {
       coldStorageDemotions: number;
@@ -52,6 +52,7 @@ describe("TieredStorageService", () => {
          del: jest.fn().mockResolvedValue(1),
          strlen: jest.fn().mockResolvedValue(0),
          scan: jest.fn().mockResolvedValue(["0", []]),
+         info: jest.fn().mockResolvedValue("used_memory:1048576\r\nmaxmemory:104857600\r\n"),
       };
       metrics = {
          coldStorageDemotions: 0, coldStorageBytesMoved: 0, coldStorageDemotionErrors: 0,
@@ -344,6 +345,16 @@ describe("TieredStorageService", () => {
          redis.scan.mockResolvedValueOnce(["0", ["hot:blob:/cloud/a.png", "hot:blob:/cloud/b.png"]]);
          redis.strlen.mockResolvedValueOnce(100).mockResolvedValueOnce(50);
          expect(await service.hotStats()).toEqual({ fileCount: 2, bytes: 150 });
+      });
+
+      it("redisMemory parses used_memory and maxmemory from INFO", async () => {
+         redis.info.mockResolvedValue("# Memory\r\nused_memory:2097152\r\nused_memory_human:2.00M\r\nmaxmemory:104857600\r\n");
+         expect(await service.redisMemory()).toEqual({ usedMemory: 2097152, maxMemory: 104857600 });
+      });
+
+      it("redisMemory reports maxMemory 0 when no limit is set", async () => {
+         redis.info.mockResolvedValue("used_memory:500\r\nmaxmemory:0\r\n");
+         expect(await service.redisMemory()).toEqual({ usedMemory: 500, maxMemory: 0 });
       });
    });
 });

@@ -107,6 +107,27 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
       return "/bin/sh";
    }
 
+   /**
+    * Builds a clean, SSH-like environment for the terminal. Only a small whitelist of
+    * generic vars is carried over from the host; the API process's application config and
+    * secrets (DB_*, FRONTEND_URL, cross-service secrets, etc.) are intentionally excluded
+    * so they never leak into the shell or any process spawned from it. The login shell
+    * then populates the rest from the user's own profile.
+    */
+   private buildShellEnv(shell: string): { [key: string]: string } {
+      const allow = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TZ"];
+      const env: { [key: string]: string } = {};
+      for (const key of allow) {
+         const value = process.env[key];
+         if (value) env[key] = value;
+      }
+      if (!env.PATH) env.PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+      env.SHELL = shell;
+      env.TERM = "xterm-256color";
+      env.COLORTERM = "truecolor";
+      return env;
+   }
+
    async handleConnection(client: Socket) {
       try {
          const userId = await this.authenticate(client);
@@ -152,16 +173,21 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
          }
 
          const shell = this.resolveShell();
+         const isPosix = process.platform !== "win32";
          let term: IPty;
          try {
-            term = pty.spawn(shell, [], {
+            term = pty.spawn(shell, isPosix ? ["-l"] : [], {
                name: "xterm-256color",
                cols: 80,
                rows: 24,
                cwd: process.env.HOME || process.cwd(),
-               env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" } as {
-                  [key: string]: string;
-               },
+               // A fresh, SSH-like environment. We deliberately do NOT inherit this API
+               // process's env: that would leak shado-cloud's secrets/config (DB_PASSWORD,
+               // DB_NAME, FRONTEND_URL, ...) into the terminal and into anything started
+               // from it (pm2, mysql, deploy scripts) — which silently pointed other
+               // services at shado-cloud's database. The login shell (`-l`) sources the
+               // user's own profile, just like SSH.
+               env: this.buildShellEnv(shell),
             });
          } catch (err) {
             this.safeLog("error", `PTY spawn failed: ${(err as Error)?.message}`);

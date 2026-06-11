@@ -308,6 +308,7 @@ export class TieredStorageService {
    public async getOverview(): Promise<{
       flags: { demotion: boolean; promotion: boolean; hot: boolean };
       hot: { fileCount: number; bytes: number; config: HotStorageConfig };
+      redis: { usedMemory: number; maxMemory: number };
       drives: { name: string; mountPoint: string; coldFileCount: number; coldBytes: number; total: number; free: number; used: number }[];
    }> {
       const flags = {
@@ -317,6 +318,7 @@ export class TieredStorageService {
       };
 
       const hot = { ...(await this.hotStats()), config: await this.hotConfig() };
+      const redis = await this.redisMemory();
 
       const drives: { name: string; mountPoint: string; coldFileCount: number; coldBytes: number; total: number; free: number; used: number }[] = [];
       for (const name of this.configuredDrives()) {
@@ -347,7 +349,7 @@ export class TieredStorageService {
          drives.push({ name, mountPoint: this.mountFor(name), coldFileCount, coldBytes, total, free, used: total - free });
       }
 
-      return { flags, hot, drives };
+      return { flags, hot, redis, drives };
    }
 
 
@@ -615,6 +617,18 @@ export class TieredStorageService {
          // redis unavailable — report zero
       }
       return { fileCount, bytes };
+   }
+
+   /** Overall Redis memory usage (bytes used + configured maxmemory; maxMemory 0 = no limit set). */
+   public async redisMemory(): Promise<{ usedMemory: number; maxMemory: number }> {
+      try {
+         const info = await this.redis.info("memory");
+         const usedMemory = Number(/used_memory:(\d+)/.exec(info)?.[1] ?? 0);
+         const maxMemory = Number(/(?:^|\n)maxmemory:(\d+)/.exec(info)?.[1] ?? 0);
+         return { usedMemory, maxMemory };
+      } catch {
+         return { usedMemory: 0, maxMemory: 0 };
+      }
    }
 
    private async scanHotKeys(match: string): Promise<string[]> {
