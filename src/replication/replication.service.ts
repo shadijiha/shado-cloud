@@ -17,7 +17,7 @@ export class ReplicationService implements OnModuleInit {
       void this.replicate();
    }
 
-   @Cron(CronExpression.EVERY_MINUTE)
+   @Cron(CronExpression.EVERY_MINUTE, { name: "replication:replicate" })
    public async replicate() {
       if (this.isReplicating) {
          this.logger.warn("A replication job is currently running. Skipping this Cron iteration");
@@ -46,8 +46,8 @@ export class ReplicationService implements OnModuleInit {
 
             let filesReplicated = 0;
             for (const file of replicaDoesNotHave) {
-               if (!await this.fs.exists(path.join(this.cloudDir, file.path))) {
-                  await this.fs.mkdir(path.join(this.cloudDir, path.dirname(file.path)), { recursive: true });
+               if (!this.fs.existsSync(path.join(this.cloudDir, file.path))) {
+                  this.fs.mkdirSync(path.join(this.cloudDir, path.dirname(file.path)), { recursive: true });
                }
                const response = await fetch(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`);
                if (!response.ok || !response.body) {
@@ -55,7 +55,7 @@ export class ReplicationService implements OnModuleInit {
                }
                const filePath = path.join(this.cloudDir, file.path);
 
-               const dest = await this.fs.createWriteStream(filePath);
+               const dest = this.fs.createWriteStream(filePath);
                await new Promise<void>((resolve, reject) => {
                   dest.on("finish", resolve);
                   dest.on("error", reject);
@@ -84,7 +84,7 @@ export class ReplicationService implements OnModuleInit {
             this.logger.log(`${masterDoesNotHave.length} Files to delete`);
             let filesDeleted = 0;
             for (const file of masterDoesNotHave) {
-               await this.fs.unlink(path.join(this.cloudDir, file.path));
+               this.fs.unlinkSync(path.join(this.cloudDir, file.path));
                filesDeleted++;
 
                this.logger.log(`Deleted ${filesDeleted} of ${masterDoesNotHave.length} (file: ${file.path})`);
@@ -108,11 +108,11 @@ export class ReplicationService implements OnModuleInit {
    }
 
    public async getFile(path_: string) {
-      return new StreamableFile(await this.fs.createReadStream(path.join(this.cloudDir, path_)));
+      return new StreamableFile(this.fs.createReadStream(path.join(this.cloudDir, path_)));
    }
 
    private async listRecusively(path_: string) {
-      const entries = await this.fs.readdir(path_);
+      const entries = this.fs.readdirSync(path_);
 
       // Get files within the current directory and add a path key to the file objects
       const files = entries

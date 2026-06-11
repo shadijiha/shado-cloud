@@ -97,9 +97,9 @@ export class TempUrlService {
       }
 
       if (append) {
-         await this.fs.appendFile(dir, content);
+         this.fs.appendFileSync(dir, content);
       } else {
-         await this.fs.writeFile(dir, content);
+         this.fs.writeFileSync(dir, content);
       }
    }
 

@@ -19,7 +19,7 @@ export class GoogleDriveBackupService {
         @Inject() private readonly featureFlagService: FeatureFlagService,
     ) {}
 
-    @Cron(CronExpression.EVERY_DAY_AT_3AM)
+    @Cron(CronExpression.EVERY_DAY_AT_3AM, { name: "backup:google-drive" })
     public async backup() {
         if (await this.featureFlagService.isFeatureFlagEnabled(FeatureFlagNamespace.Replication, "disable_google_drive_db_backup")) {
             this.logger.log("Google Drive backup skipped: feature flag disabled");

@@ -1,119 +1,72 @@
-import { Injectable, Inject, Optional, OnModuleInit, Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
+import { Injectable, Inject, Optional } from "@nestjs/common";
 import {
    AbstractFileSystem,
+   type Dirent,
    type MakeDirectoryOptions,
    type PathLike,
+   type State,
 } from "./abstract-file-system.interface";
-import { PassThrough } from "stream";
+import { type Readable, type Writable, PassThrough } from "stream";
 import { MetricsPusherService } from "../metrics-pusher.service";
 import { NodeFileSystemService } from "./file-system.service";
-import { DynamicFileSystemService } from "./dynamic-file-system.service";
-import { FeatureFlagService } from "src/admin/feature-flag.service";
-import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
+import { TieredStorageService } from "./tiered-storage.service";
 
 /**
- * Wraps NodeFileSystemService and tracks bytes read/written for metrics.
+ * Wraps NodeFileSystemService and records filesystem metrics: bytes read/written,
+ * per-operation latency, and read/write/meta operation counts. Also signals file access
+ * to the tiered-storage service so cold files can be promoted back to the main drive.
  */
 @Injectable()
-export class InstrumentedFileSystemService extends AbstractFileSystem implements OnModuleInit {
-   private inner: AbstractFileSystem;
-   private readonly logger = new Logger(InstrumentedFileSystemService.name);
-   private syncing = false;
-   
+export class InstrumentedFileSystemService extends AbstractFileSystem {
    constructor(
-      @Inject() private readonly fs: NodeFileSystemService,
-      @Inject() private readonly dynFs: DynamicFileSystemService,
-      @Inject() private readonly featureFlag: FeatureFlagService,
+      private readonly inner: NodeFileSystemService,
       @Optional() @Inject(MetricsPusherService) private readonly metrics?: MetricsPusherService,
+      @Optional() @Inject(TieredStorageService) private readonly tiered?: TieredStorageService,
    ) {
       super();
-      this.inner = this.fs;
-   }
-
-   async onModuleInit() {
-      // Boot: align the backend with the flag and always repair physical state
-      // (reconcile if enabled, repatriate leftovers if disabled).
-      await this.syncBackend(true);
-
-      // Fast path: react immediately when the flag is toggled via the service.
-      this.featureFlag.addEventListener(FeatureFlagNamespace.Files, "dynamic_file_system", "swap_fs_type", async () => {
-         await this.syncBackend();
-      });
-   }
-
-   /**
-    * Reconciles the active filesystem backend with the *current* value of the
-    * dynamic_file_system flag. Runs on boot, on the flag-change event, and on a timer —
-    * so the backend converges even when the flag is edited directly in the DB (which
-    * fires no event listener). Transitions trigger the matching repair:
-    *   off -> on : reconcileIndex() (heal DB/disk drift) before serving from the cold-aware FS
-    *   on  -> off: drainColdStorage() (repatriate cold files) before serving from the plain FS
-    */
-   @Cron(CronExpression.EVERY_MINUTE)
-   async syncBackend(isBoot = false): Promise<void> {
-      if (this.syncing) return; // a sync is already in flight; skip this tick
-      this.syncing = true;
-      try {
-         const enabled = await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, "dynamic_file_system");
-         const currentlyDynamic = this.inner === this.dynFs;
-
-         if (enabled) {
-            if (currentlyDynamic && !isBoot) return; // already on the cold-aware backend
-            this.logger.log("dynamic_file_system active — reconciling index and using the cold-aware filesystem");
-            await this.dynFs.reconcileIndex();
-            this.inner = this.dynFs;
-         } else {
-            if (!currentlyDynamic && !isBoot) return; // already on the plain backend (no leftovers at runtime)
-            this.logger.log("dynamic_file_system inactive — draining cold storage and using the plain filesystem");
-            await this.dynFs.drainColdStorage();
-            this.inner = this.fs;
-         }
-      } catch (e) {
-         this.logger.error(`Failed to sync filesystem backend with feature flag: ${(e as Error).message}`);
-      } finally {
-         this.syncing = false;
-      }
    }
 
    private trackRead(bytes: number) { if (this.metrics) this.metrics.fsBytesRead += bytes; }
    private trackWrite(bytes: number) { if (this.metrics) this.metrics.fsBytesWritten += bytes; }
 
-   /** Times a single filesystem operation and records its latency + op count. */
-   private async measure<T>(op: string, kind: "read" | "write" | "meta", fn: () => Promise<T>): Promise<T> {
+   /** Times a single (synchronous) filesystem operation and records its latency + op count. */
+   private measure<T>(op: string, kind: "read" | "write" | "meta", fn: () => T): T {
       if (!this.metrics) return fn();
       const start = performance.now();
       try {
-         return await fn();
+         return fn();
       } finally {
          this.metrics.recordFsOp(op, Math.round((performance.now() - start) * 100) / 100, kind);
       }
    }
 
-   async writeFile(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): Promise<void> {
-      await this.measure("writeFile", "write", () => this.inner.writeFile(path, content, encoding));
+   writeFileSync(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): void {
+      this.measure("writeFile", "write", () => this.inner.writeFileSync(path, content, encoding));
       this.trackWrite(Buffer.byteLength(content as any));
+      this.tiered?.onAccess(path);
    }
 
-   async readFile(path: string, encoding: BufferEncoding): Promise<string | Buffer> {
-      const result = await this.measure("readFile", "read", () => this.inner.readFile(path, encoding));
+   readFileSync(path: string, encoding: BufferEncoding): string | Buffer {
+      const result = this.measure("readFile", "read", () => this.inner.readFileSync(path, encoding));
       this.trackRead(Buffer.byteLength(result as any));
+      this.tiered?.onAccess(path);
       return result;
    }
 
-   async exists(path: string) { return this.measure("exists", "meta", () => this.inner.exists(path)); }
-   async rename(path: string, newPath: string) { return this.measure("rename", "write", () => this.inner.rename(path, newPath)); }
-   async unlink(path: string) { return this.measure("unlink", "write", () => this.inner.unlink(path)); }
+   existsSync(path: string): boolean { return this.measure("exists", "meta", () => this.inner.existsSync(path)); }
+   renameSync(path: string, newPath: string): void { this.measure("rename", "write", () => this.inner.renameSync(path, newPath)); }
+   unlinkSync(path: string): void { this.measure("unlink", "write", () => this.inner.unlinkSync(path)); }
 
-   async createReadStream(path: PathLike, options?: BufferEncoding) {
-      const stream = await this.measure("createReadStream", "read", () => this.inner.createReadStream(path, options));
+   createReadStream(path: PathLike, options?: BufferEncoding): Readable {
+      const stream = this.measure("createReadStream", "read", () => this.inner.createReadStream(path, options));
       const tracker = new PassThrough();
       tracker.on("data", (chunk: Buffer) => this.trackRead(chunk.length));
+      this.tiered?.onAccess(path.toString());
       return stream.pipe(tracker);
    }
 
-   async createWriteStream(path: PathLike, options?: BufferEncoding) {
-      const inner = await this.measure("createWriteStream", "write", () => this.inner.createWriteStream(path, options));
+   createWriteStream(path: PathLike, options?: BufferEncoding): Writable {
+      const inner = this.measure("createWriteStream", "write", () => this.inner.createWriteStream(path, options));
       const origWrite = inner.write.bind(inner);
       const self = this;
       inner.write = function (chunk: any, ...args: any[]) {
@@ -123,18 +76,19 @@ export class InstrumentedFileSystemService extends AbstractFileSystem implements
       return inner;
    }
 
-   async mkdir(path: string, options?: MakeDirectoryOptions) { return this.measure("mkdir", "meta", () => this.inner.mkdir(path, options)); }
-   async rmdir(path: string, options?: { recursive: boolean }) { await this.measure("rmdir", "write", () => this.inner.rmdir(path, options)); }
+   mkdirSync(path: string, options?: MakeDirectoryOptions): void { this.measure("mkdir", "meta", () => this.inner.mkdirSync(path, options)); }
+   rmdirSync(path: string, options?: { recursive: boolean }): void { this.measure("rmdir", "write", () => this.inner.rmdirSync(path, options)); }
 
-   async appendFile(path: string, content: string) {
-      await this.measure("appendFile", "write", () => this.inner.appendFile(path, content));
+   appendFileSync(path: string, content: string): void {
+      this.measure("appendFile", "write", () => this.inner.appendFileSync(path, content));
       this.trackWrite(Buffer.byteLength(content));
+      this.tiered?.onAccess(path);
    }
 
-   async readdir(path: PathLike, options?: { encoding?: BufferEncoding | null }) {
-      return this.measure("readdir", "read", () => this.inner.readdir(path, options));
+   readdirSync(path: PathLike, options?: { encoding?: BufferEncoding | null }): Dirent[] {
+      return this.measure("readdir", "read", () => this.inner.readdirSync(path, options));
    }
 
-   stat(path: string) { return this.measure("stat", "meta", () => this.inner.stat(path)); }
-   lstat(path: string) { return this.measure("lstat", "meta", () => this.inner.lstat(path)); }
+   statSync(path: string): State { return this.measure("stat", "meta", () => this.inner.statSync(path)); }
+   lstatSync(path: string): State { return this.measure("lstat", "meta", () => this.inner.lstatSync(path)); }
 }

@@ -1,23 +1,21 @@
 import { Test, type TestingModule } from "@nestjs/testing";
+import { Logger } from "@nestjs/common";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { type Repository } from "typeorm";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlag, FeatureFlagNamespace } from "src/models/admin/featureFlag";
-import { LoggerToDb } from "src/logging";
 import { REDIS_CACHE } from "src/util";
 
 describe("FeatureFlagService - event listeners", () => {
    let service: FeatureFlagService;
    let featureFlagRepo: Repository<FeatureFlag>;
    let redis: { del: jest.Mock };
-   let logger: { log: jest.Mock; error: jest.Mock };
 
    const NAMESPACE = FeatureFlagNamespace.Files;
-   const KEY = "dynamic_file_system";
+   const KEY = "tiered_storage";
 
    beforeEach(async () => {
       redis = { del: jest.fn().mockResolvedValue(1) };
-      logger = { log: jest.fn(), error: jest.fn() };
 
       const module: TestingModule = await Test.createTestingModule({
          providers: [
@@ -31,7 +29,6 @@ describe("FeatureFlagService - event listeners", () => {
                },
             },
             { provide: REDIS_CACHE, useValue: redis },
-            { provide: LoggerToDb, useValue: logger },
          ],
       }).compile();
 
@@ -122,6 +119,7 @@ describe("FeatureFlagService - event listeners", () => {
    });
 
    it("isolates listener failures: one throwing listener does not stop the others and does not reject", async () => {
+      const errorSpy = jest.spyOn(Logger.prototype, "error").mockImplementation(() => {});
       const failing = jest.fn().mockRejectedValue(new Error("boom"));
       const after = jest.fn().mockResolvedValue(undefined);
       service.addEventListener(NAMESPACE, KEY, "failing", failing);
@@ -131,7 +129,8 @@ describe("FeatureFlagService - event listeners", () => {
 
       expect(failing).toHaveBeenCalled();
       expect(after).toHaveBeenCalledWith(true);
-      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("failing"));
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("failing"));
+      errorSpy.mockRestore();
    });
 
    it("throws when enabling a flag that does not exist", async () => {

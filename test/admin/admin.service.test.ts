@@ -120,12 +120,12 @@ describe("AdminService", () => {
             {
                provide: AbstractFileSystem,
                useValue: {
-                  unlink: jest.fn(),
-                  mkdir: jest.fn(),
-                  readFile: jest.fn().mockReturnValue("mock-content"),
-                  writeFile: jest.fn(),
-                  exists: jest.fn().mockReturnValue(true),
-                  readdir: jest.fn().mockReturnValue([]),
+                  unlinkSync: jest.fn(),
+                  mkdirSync: jest.fn(),
+                  readFileSync: jest.fn().mockReturnValue("mock-content"),
+                  writeFileSync: jest.fn(),
+                  existsSync: jest.fn().mockReturnValue(true),
+                  readdirSync: jest.fn().mockReturnValue([]),
                }
             }, 
             {
@@ -217,18 +217,18 @@ describe("AdminService", () => {
    });
 
    describe("deleteBackupFile", () => {
-      it("should call abstractFs.unlink with file path", async () => {
-         await service.deleteBackupFile("/tmp/server-backup-123.zip");
+      it("should call abstractFs.unlinkSync with file path", () => {
+         service.deleteBackupFile("/tmp/server-backup-123.zip");
 
-         expect(abstractFs.unlink).toHaveBeenCalledWith("/tmp/server-backup-123.zip");
+         expect(abstractFs.unlinkSync).toHaveBeenCalledWith("/tmp/server-backup-123.zip");
       });
 
-      it("should log error when unlink fails", async () => {
-         (abstractFs.unlink as jest.Mock).mockImplementation(() => {
+      it("should log error when unlinkSync fails", () => {
+         (abstractFs.unlinkSync as jest.Mock).mockImplementation(() => {
             throw new Error("File not found");
          });
 
-         await service.deleteBackupFile("/tmp/server-backup-123.zip");
+         service.deleteBackupFile("/tmp/server-backup-123.zip");
 
          expect(logger.error).toHaveBeenCalledWith(
             expect.stringContaining("Failed to delete backup file")

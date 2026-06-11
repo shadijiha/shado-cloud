@@ -142,7 +142,7 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    }
 
    /** Disconnect any client whose remote-access grant has expired. */
-   @Cron(CronExpression.EVERY_30_SECONDS)
+   @Cron(CronExpression.EVERY_30_SECONDS, { name: "remote-desktop:sweep-grants" })
    private async sweepExpiredGrants() {
       for (const [clientId, entry] of this.clientUsers) {
          try {

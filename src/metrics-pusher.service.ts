@@ -36,15 +36,14 @@ export class MetricsPusherService implements OnApplicationBootstrap {
    public fsWriteOps = 0;
    private fsOpDurations: { ms: number; op: string }[] = [];
    // Cold-storage (dynamic filesystem) metrics
-   public coldStoragePromotions = 0; // files moved from a cold drive back to the main drive
-   public coldStorageAccesses = 0;   // file reads served from a cold drive
-   public hotStorageAccesses = 0;    // file reads served from the main drive
-   public coldStorageFileCount = 0;  // gauge: number of files currently parked on cold drives
    public coldStorageDemotions = 0;       // files moved main -> cold by the daily sweep
    public coldStorageBytesMoved = 0;      // bytes moved to cold by the daily sweep
    public coldStorageDemotionErrors = 0;  // files that failed to demote during the sweep
-   public coldStorageIndexPruned = 0;     // index rows pruned by reconciliation (DB/disk drift)
+   public coldStoragePromotions = 0;      // files promoted cold -> main on access
+   public coldStorageBytesPromoted = 0;   // bytes promoted cold -> main
+   public coldStoragePromotionErrors = 0; // files that failed to promote
    public coldStorageLastSweepMs = 0;     // gauge: wall-clock duration of the last demotion sweep
+   public coldStorageLastSweepAt = 0;     // gauge: epoch ms of the last completed demotion sweep
    private dbQueries = 0;
    private cacheHits = 0;
    private queryTimings: number[] = [];
@@ -131,14 +130,13 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       const fsReadOps = this.fsReadOps;
       const fsWriteOps = this.fsWriteOps;
       const fsOpDurs = this.fsOpDurations.splice(0);
-      const coldPromotions = this.coldStoragePromotions;
-      const coldAccesses = this.coldStorageAccesses;
-      const hotAccesses = this.hotStorageAccesses;
-      const coldFileCount = this.coldStorageFileCount; // gauge — reported as-is, not reset
       const coldDemotions = this.coldStorageDemotions;
       const coldBytesMoved = this.coldStorageBytesMoved;
       const coldDemotionErrors = this.coldStorageDemotionErrors;
-      const coldIndexPruned = this.coldStorageIndexPruned;
+      const coldPromotions = this.coldStoragePromotions;
+      const coldBytesPromoted = this.coldStorageBytesPromoted;
+      const coldPromotionErrors = this.coldStoragePromotionErrors;
+      const coldLastSweepAt = this.coldStorageLastSweepAt;     // gauge
       const coldSweepMs = this.coldStorageLastSweepMs; // gauge — reported as-is, not reset
 
       this.requestCount = 0;
@@ -150,13 +148,12 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       this.cacheHits = 0;
       this.fsReadOps = 0;
       this.fsWriteOps = 0;
-      this.coldStoragePromotions = 0;
-      this.coldStorageAccesses = 0;
-      this.hotStorageAccesses = 0;
       this.coldStorageDemotions = 0;
       this.coldStorageBytesMoved = 0;
       this.coldStorageDemotionErrors = 0;
-      this.coldStorageIndexPruned = 0;
+      this.coldStoragePromotions = 0;
+      this.coldStorageBytesPromoted = 0;
+      this.coldStoragePromotionErrors = 0;
 
       const datapoints: any[] = [
          { namespace: "shado-cloud", metric: "request_count", value: requests, unit: MetricUnit.Count, timestamp: now },
@@ -173,15 +170,14 @@ export class MetricsPusherService implements OnApplicationBootstrap {
          { namespace: "shado-cloud", metric: "fs_read_ops", value: fsReadOps, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "fs_write_ops", value: fsWriteOps, unit: MetricUnit.Count, timestamp: now },
          ...fsOpDurs.map(d => ({ namespace: "shado-cloud", metric: "fs_op_ms", value: d.ms, unit: MetricUnit.Milliseconds, dimensions: { op: d.op }, timestamp: now })),
-         { namespace: "shado-cloud", metric: "cold_storage_promotions", value: coldPromotions, unit: MetricUnit.Count, timestamp: now },
-         { namespace: "shado-cloud", metric: "cold_storage_accesses", value: coldAccesses, unit: MetricUnit.Count, timestamp: now },
-         { namespace: "shado-cloud", metric: "hot_storage_accesses", value: hotAccesses, unit: MetricUnit.Count, timestamp: now },
-         { namespace: "shado-cloud", metric: "cold_storage_file_count", value: coldFileCount, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_demotions", value: coldDemotions, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_bytes_moved", value: coldBytesMoved, unit: MetricUnit.Bytes, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_demotion_errors", value: coldDemotionErrors, unit: MetricUnit.Count, timestamp: now },
-         { namespace: "shado-cloud", metric: "cold_storage_index_pruned", value: coldIndexPruned, unit: MetricUnit.Count, timestamp: now },
+         { namespace: "shado-cloud", metric: "cold_storage_promotions", value: coldPromotions, unit: MetricUnit.Count, timestamp: now },
+         { namespace: "shado-cloud", metric: "cold_storage_bytes_promoted", value: coldBytesPromoted, unit: MetricUnit.Bytes, timestamp: now },
+         { namespace: "shado-cloud", metric: "cold_storage_promotion_errors", value: coldPromotionErrors, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_demotion_sweep_ms", value: coldSweepMs, unit: MetricUnit.Milliseconds, timestamp: now },
+         { namespace: "shado-cloud", metric: "cold_storage_last_sweep_timestamp", value: coldLastSweepAt, unit: MetricUnit.None, timestamp: now },
       ];
 
       try {

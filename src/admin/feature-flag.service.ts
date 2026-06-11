@@ -1,11 +1,10 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import type Redis from "ioredis";
 import { FeatureFlag, FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { REDIS_CACHE } from "src/util";
 import { Repository } from "typeorm";
 import { CreateFeatureFlagRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
-import { LoggerToDb } from "src/logging";
 
 type FeatureFlagEventListener = (value: boolean) => Promise<void>;
 
@@ -18,10 +17,13 @@ export class FeatureFlagService {
 
    private readonly eventListeners: Record<string, { listenerId: string, listener: FeatureFlagEventListener }[]> = {};
 
+   // Plain logger (not LoggerToDb) — LoggerToDb depends on FeatureFlagService, so injecting
+   // it here would create a circular dependency.
+   private readonly logger = new Logger(FeatureFlagService.name);
+
    constructor(
       @InjectRepository(FeatureFlag) private readonly featureFlagRepo: Repository<FeatureFlag>,
       @Inject(REDIS_CACHE) private readonly redis: Redis,
-      @Inject() private readonly logger: LoggerToDb,
    ) { }
 
    public getFeatureFlags(namespace?: FeatureFlagNamespace): Promise<FeatureFlag[]> {

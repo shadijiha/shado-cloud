@@ -154,7 +154,7 @@ export class ServiceFunctionsController {
         await this.serviceFuncRepo.remove(func);
     }
 
-    @Cron(CronExpression.EVERY_HOUR)
+    @Cron(CronExpression.EVERY_HOUR, { name: "service-functions:execute" })
     public async executeFunctions() {
         if (!this.canExecuteMutex) {
             this.logger.error("Attempting to execute service functions cron job while another one is already executing!");
@@ -163,6 +163,8 @@ export class ServiceFunctionsController {
 
         // Aquire lock
         this.canExecuteMutex = false;
+
+        this.logger.log("Running service functions cron job");
 
         try {
             const funcs = await this.serviceFuncRepo.find({

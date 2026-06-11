@@ -209,13 +209,13 @@ export class DeploymentController {
       const workDir = project.workDir === "__CWD__" ? process.cwd() : project.workDir;
       const envPath = path.join(workDir, ".env");
 
-      if (await this.abstractFs.exists(envPath)) {
-         return await this.abstractFs.readFile(envPath, "utf-8") as string;
+      if (this.abstractFs.existsSync(envPath)) {
+         return this.abstractFs.readFileSync(envPath, "utf-8") as string;
       }
 
       const configYmlPath = path.join(workDir, CONFIG_FILE_NAME);
-      if (await this.abstractFs.exists(configYmlPath)) {
-         return await this.abstractFs.readFile(configYmlPath, "utf-8") as string;
+      if (this.abstractFs.existsSync(configYmlPath)) {
+         return this.abstractFs.readFileSync(configYmlPath, "utf-8") as string;
       }
 
       throw new HttpException("Env file not found", HttpStatus.NOT_FOUND);
@@ -236,15 +236,15 @@ export class DeploymentController {
          throw new HttpException("Working directory not configured", HttpStatus.BAD_REQUEST);
       }
 
-      if (await this.abstractFs.exists(path.join(workDir, ".env")) ||
-         await this.abstractFs.exists(path.join(workDir, ".example.env")) || fs.existsSync(path.join(workDir, ".env.example"))) {
-         await this.abstractFs.writeFile(path.join(workDir, ".env"), content, "utf-8");
+      if (this.abstractFs.existsSync(path.join(workDir, ".env")) ||
+         this.abstractFs.existsSync(path.join(workDir, ".example.env")) || fs.existsSync(path.join(workDir, ".env.example"))) {
+         this.abstractFs.writeFileSync(path.join(workDir, ".env"), content, "utf-8");
          this.logger.log(`Env file updated for ${projectSlug}`);
          return { success: true };
       }
 
-      if (await this.abstractFs.exists(path.join(workDir, CONFIG_FILE_NAME))) {
-         await this.abstractFs.writeFile(path.join(workDir, CONFIG_FILE_NAME), content, "utf-8");
+      if (this.abstractFs.existsSync(path.join(workDir, CONFIG_FILE_NAME))) {
+         this.abstractFs.writeFileSync(path.join(workDir, CONFIG_FILE_NAME), content, "utf-8");
          this.logger.log(`config.yml file updated for ${projectSlug}`);
          return { success: true };
       }

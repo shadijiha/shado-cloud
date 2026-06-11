@@ -204,7 +204,7 @@ export abstract class AbstractFileSystem {
     * @param content The data to write to the file.
     * @throws Will throw an error if the file cannot be written.
     */
-   public abstract writeFile(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): Promise<void>;
+   public abstract writeFileSync(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): void;
 
    /**
     * Synchronously reads the entire contents of a file.
@@ -214,7 +214,7 @@ export abstract class AbstractFileSystem {
     * @returns The contents of the file as a string or Buffer.
     * @throws Will throw an error if the file cannot be read.
     */
-   public abstract readFile(path: string, encoding: BufferEncoding): Promise<string | Buffer>;
+   public abstract readFileSync(path: string, encoding: BufferEncoding): string | Buffer;
 
    /**
     * Synchronously checks if a file or directory exists at the specified path.
@@ -222,7 +222,7 @@ export abstract class AbstractFileSystem {
     * @param path The path to check.
     * @returns `true` if the path exists, `false` otherwise.
     */
-   public abstract exists(path: string): Promise<boolean>;
+   public abstract existsSync(path: string): boolean;
 
    /**
     * Synchronously renames a file or directory.
@@ -231,7 +231,7 @@ export abstract class AbstractFileSystem {
     * @param newPath The new path to the file or directory.
     * @throws Will throw an error if the rename operation fails.
     */
-   public abstract rename(path: string, newPath: string): Promise<void>;
+   public abstract renameSync(path: string, newPath: string): void;
 
    /**
     * Synchronously removes a file or symbolic link.
@@ -239,7 +239,7 @@ export abstract class AbstractFileSystem {
     * @param path The path to the file or symbolic link to remove.
     * @throws Will throw an error if the unlink operation fails.
     */
-   public abstract unlink(path: string): Promise<void>;
+   public abstract unlinkSync(path: string): void;
 
    /**
     * Creates a readable stream for the specified file.
@@ -249,7 +249,7 @@ export abstract class AbstractFileSystem {
     * @returns A readable stream for the file.
     * @throws Will throw an error if the file cannot be opened.
     */
-   public abstract createReadStream(path: PathLike, options?: BufferEncoding): Promise<Readable>;
+   public abstract createReadStream(path: PathLike, options?: BufferEncoding): Readable;
 
    /**
     * Creates a writable stream for the specified file.
@@ -259,7 +259,7 @@ export abstract class AbstractFileSystem {
     * @returns A writable stream for the file.
     * @throws Will throw an error if the file cannot be opened for writing.
     */
-   public abstract createWriteStream(path: PathLike, options?: BufferEncoding): Promise<Writable>;
+   public abstract createWriteStream(path: PathLike, options?: BufferEncoding): Writable;
 
    /**
     * Synchronously creates a directory.
@@ -268,7 +268,7 @@ export abstract class AbstractFileSystem {
     * @param options Optional settings for directory creation.
     * @throws Will throw an error if the directory cannot be created.
     */
-   public abstract mkdir(path: string, options?: MakeDirectoryOptions): Promise<string>;
+   public abstract mkdirSync(path: string, options?: MakeDirectoryOptions): void;
 
    /**
     * Synchronously removes a directory.
@@ -277,7 +277,7 @@ export abstract class AbstractFileSystem {
     * @param options Optional settings for recursive deletion.
     * @throws Will throw an error if the directory cannot be removed.
     */
-   public abstract rmdir(path: string, options?: { recursive: boolean }): Promise<void>;
+   public abstract rmdirSync(path: string, options?: { recursive: boolean }): void;
 
    /**
     * Synchronously appends data to a file.
@@ -286,7 +286,7 @@ export abstract class AbstractFileSystem {
     * @param content The data to append to the file.
     * @throws Will throw an error if the file cannot be appended.
     */
-   public abstract appendFile(path: string, content: string): Promise<void>;
+   public abstract appendFileSync(path: string, content: string): void;
 
    /**
     * Synchronously reads the contents of a directory.
@@ -296,12 +296,12 @@ export abstract class AbstractFileSystem {
     * @returns A list of directory entries (`fs.Dirent`) in the directory.
     * @throws Will throw an error if the directory cannot be read.
     */
-   public abstract readdir(
+   public abstract readdirSync(
       path: PathLike,
       options?: {
          encoding?: BufferEncoding | null | undefined;
       },
-   ): Promise<Dirent[]>;
+   ): Dirent[];
 
    /**
     * Synchronously retrieves information about a file or directory.
@@ -310,7 +310,7 @@ export abstract class AbstractFileSystem {
     * @returns A `State` object containing the file or directory's metadata.
     * @throws Will throw an error if the file or directory cannot be stat-ed.
     */
-   public abstract stat(path: string): Promise<State>;
+   public abstract statSync(path: string): State;
 
    /**
     * Synchronously retrieves information about a symbolic link or file.
@@ -319,5 +319,5 @@ export abstract class AbstractFileSystem {
     * @returns A `State` object containing the symbolic link's metadata.
     * @throws Will throw an error if the symbolic link or file cannot be stat-ed.
     */
-   public abstract lstat(path: string): Promise<State>;
+   public abstract lstatSync(path: string): State;
 }

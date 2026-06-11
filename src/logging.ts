@@ -25,7 +25,7 @@ export class LoggerToDb extends ConsoleLogger {
       super(context);
    }
 
-   @Cron("0 4 * * *")
+   @Cron("0 4 * * *", { name: "logs:cleanup-debug" })
    async cleanupDebugLogs() {
       const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
       await this.logRepo.delete({ type: "debug", created_at: LessThan(cutoff) });

@@ -42,6 +42,8 @@ import { REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY } from "./remote.constants";
 import { ValidationPipeline } from "src/auth/ValidationPipeline";
 import { isDev, AuthUser } from "src/util";
 import { AuthService } from "src/auth/auth.service";
+import { TieredStorageService } from "src/file-system/tiered-storage.service";
+import { CronAdminService } from "./cron.service";
 import { TwoFactorGuard, Require2fa } from "./two-factor.guard";
 import { isStepUpScope, STEP_UP_TTL_SECONDS } from "./step-up.constants";
 
@@ -59,7 +61,33 @@ export class AdminController {
       private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
       private readonly authService: AuthService,
+      private readonly tieredStorage: TieredStorageService,
+      private readonly cronService: CronAdminService,
    ) { }
+
+   @Get("cron")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public listCronJobs() {
+      return this.cronService.list();
+   }
+
+   @Post("cron/:name/run")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public runCronJob(@Param("name") name: string) {
+      return this.cronService.trigger(name);
+   }
+
+   @Get("tiered-storage")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public tieredStorageOverview() {
+      return this.tieredStorage.getOverview();
+   }
+
+   @Post("tiered-storage/drives/:name/evacuate")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public evacuateColdDrive(@Param("name") name: string) {
+      return this.tieredStorage.evacuateDrive(name);
+   }
 
    @Get("logs")
    @ApiResponse({ type: [Log] })

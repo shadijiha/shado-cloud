@@ -17,6 +17,7 @@ import { Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
 import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import type Redis from "ioredis";
@@ -46,6 +47,7 @@ export class FilesService {
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly featureFlagService: FeatureFlagService,
+      @Inject() private readonly tieredStorage: TieredStorageService,
    ) {
       this.dirService = new DirectoriesService(
          userService,
@@ -55,6 +57,7 @@ export class FilesService {
          logger,
          fs,
          config,
+         this.tieredStorage,
       );
 
       // Sharp cache
@@ -65,7 +68,7 @@ export class FilesService {
 
    public async asStream(userId: number, relativePath: string, user_agent: string, options?: any) {
       const dir = await this.absolutePath(userId, relativePath);
-      if (!await this.fs.exists(dir)) throw new Error(dir + " does not exist");
+      if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
       this.updateStats(userId, dir, user_agent).catch((e) =>
          this.logger.error("updateStats failed: " + (e as Error).message),
@@ -100,7 +103,7 @@ export class FilesService {
 
          const relative = path.relative(root, dir);
 
-         await this.fs.writeFile(dir, file.buffer);
+         this.fs.writeFileSync(dir, file.buffer);
 
          let fileDB = await this.uploadedFileRepo.findOne({
             where: { absolute_path: relative, user: { id: userId } },
@@ -142,7 +145,7 @@ export class FilesService {
 
       const uploadId = crypto.randomUUID();
       const tmpDir = dir + ".chunked_tmp";
-      await this.fs.mkdir(tmpDir, { recursive: true });
+      this.fs.mkdirSync(tmpDir, { recursive: true });
       this.chunkedUploads.set(uploadId, { userId, dest, filename, totalSize, dir, received: new Set() });
       return { uploadId };
    }
@@ -152,7 +155,7 @@ export class FilesService {
       if (!upload || upload.userId !== userId) throw new Error("Invalid upload session");
 
       const tmpDir = upload.dir + ".chunked_tmp";
-      await this.fs.writeFile(path.join(tmpDir, `part_${index}`), file.buffer);
+      this.fs.writeFileSync(path.join(tmpDir, `part_${index}`), file.buffer);
       upload.received.add(index);
    }
 
@@ -167,14 +170,14 @@ export class FilesService {
       const buffers: Buffer[] = [];
       for (const i of parts) {
          const partPath = path.join(tmpDir, `part_${i}`);
-         const content = await this.fs.readFile(partPath, "binary" as BufferEncoding);
+         const content = this.fs.readFileSync(partPath, "binary" as BufferEncoding);
          buffers.push(typeof content === "string" ? Buffer.from(content, "binary") : content);
-         await this.fs.unlink(partPath);
+         this.fs.unlinkSync(partPath);
       }
-      await this.fs.writeFile(upload.dir, Buffer.concat(buffers));
+      this.fs.writeFileSync(upload.dir, Buffer.concat(buffers));
 
       // Clean up temp dir
-      try { await this.fs.rmdir(tmpDir, { recursive: true }); } catch (e) { this.logger.logException(e); }
+      try { this.fs.rmdirSync(tmpDir, { recursive: true }); } catch (e) { this.logger.logException(e); }
 
       // Save to DB (same logic as regular upload)
       const root = await this.getUserRootPath(userId);
@@ -206,7 +209,7 @@ export class FilesService {
 
       this.verifyFileName(dir);
 
-      await this.fs.writeFile(dir, "");
+      this.fs.writeFileSync(dir, "");
 
       // Register file in DB
       const file = new UploadedFile();
@@ -230,9 +233,9 @@ export class FilesService {
          }
 
          if (!append || append == "false") {
-            await this.fs.writeFile(dir, content);
+            this.fs.writeFileSync(dir, content);
          } else {
-            await this.fs.appendFile(dir, content);
+            this.fs.appendFileSync(dir, content);
          }
 
          // Update the DB record if it exists
@@ -269,7 +272,10 @@ export class FilesService {
          }
 
          const relative = path.relative(root, dir);
-         await this.fs.unlink(dir);
+         // If this is a cold file, free its cold blob now (don't wait for GC) — otherwise a
+         // re-upload of the same name before GC would leave a stale blob at the mirror path.
+         await this.tieredStorage.removeColdData(dir);
+         this.fs.unlinkSync(dir);
 
          // See if file is in DB, if yes, then delete it
          const user = await this.userService.getById(userId);
@@ -306,7 +312,7 @@ export class FilesService {
 
       this.verifyFileName(newDir);
 
-      await this.fs.rename(dir, newDir);
+      this.fs.renameSync(dir, newDir);
 
       // Rename file in DB
       const file = await this.uploadedFileRepo.findOne({
@@ -343,7 +349,17 @@ export class FilesService {
          throw new Error("You don't have permission to access this file");
       }
 
-      const stats = await this.fs.stat(dir);
+      const stats = this.fs.statSync(dir);
+
+      // For directories, summarise how many files (recursively) are in cold storage.
+      let file_count: number | undefined;
+      let cold_file_count: number | undefined;
+      if (stats.isDirectory()) {
+         const s = this.tieredStorage.coldStats(dir);
+         file_count = s.total;
+         cold_file_count = s.cold;
+      }
+
       const file = await this.uploadedFileRepo.findOne({
          where: { absolute_path: relative },
       });
@@ -362,7 +378,7 @@ export class FilesService {
             await this.createMetaFolderIfNotExists(userId),
             FilesService.THUMBNAILS_FOLDER_NAME,
          );
-         const files = await this.fs.readdir(thumbnailFolder);
+         const files = this.fs.readdirSync(thumbnailFolder);
          files.forEach((fileEntry) => {
             if (fileEntry.name.startsWith(`${file.id}_`)) {
                thumbails.push(fileEntry.name);
@@ -382,6 +398,9 @@ export class FilesService {
          is_pdf: fileMime.includes("pdf"),
          size: stats.size,
          lastModified: stats.mtime.toISOString(),
+         is_cold_storage: this.tieredStorage.isColdFile(dir),
+         file_count,
+         cold_file_count,
          temp_url: tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid()) : null,
          db_record: file,
          related_keys_in_redis: file && fetch_related_keys_in_redis ? await this.getCacheKeysForFile(userId, file) : [],
@@ -396,7 +415,7 @@ export class FilesService {
          throw new Error("You don't have permission to access this file");
       }
 
-      return await this.fs.exists(dir);
+      return this.fs.existsSync(dir);
    }
 
    public async toThumbnail(
@@ -413,7 +432,7 @@ export class FilesService {
       }
 
       if (fileMime.includes("image")) {
-         if (!await this.fs.exists(dir)) throw new Error(dir + " does not exist");
+         if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
          // If raw thumbnails flag is enabled, skip resizing and return the original file
          if (await this.featureFlagService.isFeatureFlagEnabled(FeatureFlagNamespace.Files, "disable_thumbnail_resizing_with_sharp")) {
@@ -440,7 +459,7 @@ export class FilesService {
                `${uploadedFile.id}_${width}x${height}${path.extname(path_)}`,
             );
 
-            if (await this.fs.exists(thumbnailPath)) {
+            if (this.fs.existsSync(thumbnailPath)) {
                this.logger.debug(`[${this.toThumbnail.name}] Found cached thumbnail at ${thumbnailPath}`);
                return this.fs.createReadStream(thumbnailPath);
             }
@@ -449,7 +468,7 @@ export class FilesService {
          const resized = sharp()
             .resize(Number(width) || undefined, Number(height) || undefined)
             .withMetadata();
-         const readStream = (await this.fs.createReadStream(dir)).pipe(resized);
+         const readStream = (this.fs.createReadStream(dir)).pipe(resized);
 
          // cache thumbnail for next time and return it
          // Don't do it if we are inside the thumbnail folder (to avoid recursive thumbnail generation)
@@ -501,15 +520,17 @@ export class FilesService {
          // Delete that thumbnail after 1 second (request sent)
          // TODO make this a job instead
          setTimeout(() => {
-            this.fs.unlink(thumbnailPath).catch((e) =>
-               this.logger.error(`Failed to delete temp thumbnail ${thumbnailPath}: ${(e as Error).message}`),
-            );
+            try {
+               this.fs.unlinkSync(thumbnailPath);
+            } catch (e) {
+               this.logger.error(`Failed to delete temp thumbnail ${thumbnailPath}: ${(e as Error).message}`);
+            }
          }, 1000);
 
          return this.fs.createReadStream(thumbnailPath);
       } else if (fileMime.includes("pdf")) {
          // Generate thumbnail for PDF first page
-         if (!await this.fs.exists(dir)) throw new Error(dir + " does not exist");
+         if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
          const uploadedFile = await this.uploadedFileRepo.findOne({
             where: { absolute_path: path.normalize(path_), user: { id: userId } },
@@ -528,7 +549,7 @@ export class FilesService {
             uploadedFile
          ) {
             const thumbnailPath = path.join(thumbnailFolder, `${uploadedFile.id}_pdf_${width}x${height}.png`);
-            if (await this.fs.exists(thumbnailPath)) {
+            if (this.fs.existsSync(thumbnailPath)) {
                this.logger.debug(`[${this.toThumbnail.name}] Found cached PDF thumbnail at ${thumbnailPath}`);
                return this.fs.createReadStream(thumbnailPath);
             }
@@ -541,7 +562,7 @@ export class FilesService {
          const pageNumber = 1;
 
          // Read PDF file
-         const pdfBuffer = Buffer.from(await this.fs.readFile(dir, "binary") as string, "binary");
+         const pdfBuffer = Buffer.from(this.fs.readFileSync(dir, "binary") as string, "binary");
          const tempFilename = `pdf_thumb_${Date.now()}`;
          const options = {
             density: 150,
@@ -556,7 +577,7 @@ export class FilesService {
 
          // Clean up temp file created by pdf2pic
          const tempPath = path.join(thumbnailFolder, `${tempFilename}.${pageNumber}.png`);
-         if (await this.fs.exists(tempPath)) await this.fs.unlink(tempPath);
+         if (this.fs.existsSync(tempPath)) this.fs.unlinkSync(tempPath);
 
          if (result.buffer) {
             // Crop to top portion and resize in memory
@@ -577,7 +598,7 @@ export class FilesService {
                uploadedFile
             ) {
                const cachedPath = path.join(thumbnailFolder, `${uploadedFile.id}_pdf_${width}x${height}.png`);
-               await this.fs.writeFile(cachedPath, croppedBuffer);
+               this.fs.writeFileSync(cachedPath, croppedBuffer);
                this.logger.debug(`[${this.toThumbnail.name}] Cached PDF thumbnail at ${cachedPath}`);
                return this.fs.createReadStream(cachedPath);
             }
@@ -604,8 +625,8 @@ export class FilesService {
 
       const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), email);
       // Lazily create user directory on first access (e.g. after registering via auth API)
-      if (!await this.fs.exists(dir)) {
-         await this.fs.mkdir(dir, { recursive: true });
+      if (!this.fs.existsSync(dir)) {
+         this.fs.mkdirSync(dir, { recursive: true });
       }
       return dir;
    }
@@ -658,7 +679,7 @@ export class FilesService {
    public async profilePictureInfo(userId: number) {
       const dir = await this.absolutePath(userId, FilesService.METADATA_FOLDER_NAME + "/prof");
       return {
-         exists: await this.fs.exists(dir),
+         exists: this.fs.existsSync(dir),
          path: path.relative(await this.getUserRootPath(userId), dir),
       };
    }
@@ -675,7 +696,7 @@ export class FilesService {
          const filePath = path.join(root, relativePath);
          // Get the file extension
          const ext = path.extname(filePath).toLowerCase();
-         const size = (await this.fs.stat(filePath)).size;
+         const size = (this.fs.statSync(filePath)).size;
 
          if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif") used_data.images += size;
          else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".wmv") {
@@ -701,13 +722,19 @@ export class FilesService {
       return used_data;
    }
 
+   /** Counts how many of the user's files (recursively) are currently in cold/tiered storage. */
+   public async getColdStorageStats(userId: number): Promise<{ total: number; cold: number }> {
+      const root = await this.getUserRootPath(userId);
+      return this.tieredStorage.coldStats(root);
+   }
+
    public async createMetaFolderIfNotExists(userId: number): Promise<string> {
       const dir = await this.absolutePath(userId, FilesService.METADATA_FOLDER_NAME);
-      if (!await this.fs.exists(dir)) await this.fs.mkdir(dir, { recursive: true });
+      if (!this.fs.existsSync(dir)) this.fs.mkdirSync(dir, { recursive: true });
 
       // Create thumbails folder
-      if (!await this.fs.exists(path.join(dir, FilesService.THUMBNAILS_FOLDER_NAME))) {
-         await this.fs.mkdir(path.join(dir, FilesService.THUMBNAILS_FOLDER_NAME), { recursive: true });
+      if (!this.fs.existsSync(path.join(dir, FilesService.THUMBNAILS_FOLDER_NAME))) {
+         this.fs.mkdirSync(path.join(dir, FilesService.THUMBNAILS_FOLDER_NAME), { recursive: true });
       }
 
       return dir;
@@ -774,7 +801,7 @@ export class FilesService {
             FilesService.THUMBNAILS_FOLDER_NAME,
          );
          this.logger.debug(`[::${this.invalidateAllThumbnails.name}] Deleting ${thumbnailFolder}`);
-         await this.fs.rmdir(thumbnailFolder);
+         this.fs.rmdirSync(thumbnailFolder);
       }
 
       this.logger.debug(`[::${this.invalidateAllThumbnails.name}] Deleting cache keys for all thumbnails`);
@@ -793,10 +820,10 @@ export class FilesService {
          await this.createMetaFolderIfNotExists(userId),
          FilesService.THUMBNAILS_FOLDER_NAME,
       );
-      const files = await this.fs.readdir(thumbnailFolder);
+      const files = this.fs.readdirSync(thumbnailFolder);
       for (const fileEntry of files) {
          if (fileEntry.name.startsWith(`${uploadedFile.id}_`)) {
-            await this.fs.unlink(path.join(thumbnailFolder, fileEntry.name));
+            this.fs.unlinkSync(path.join(thumbnailFolder, fileEntry.name));
             this.logger.debug(`[::${this.invalidateThumbnailsFor.name}] Deleted thumbnail file ${path.join(thumbnailFolder, fileEntry.name)}`);
          }
       }

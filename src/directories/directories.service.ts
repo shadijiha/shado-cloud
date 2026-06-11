@@ -13,6 +13,7 @@ import { In, Like, Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
 import { InjectRepository } from "@nestjs/typeorm";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 
@@ -26,6 +27,7 @@ export class DirectoriesService {
       @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
+      @Inject() private readonly tieredStorage: TieredStorageService,
    ) {}
 
    public async root(userId: number) {
@@ -39,22 +41,28 @@ export class DirectoriesService {
          throw new Error("You do not have access to this directory");
       }
 
-      const files = await this.fs.readdir(dir);
+      const files = this.fs.readdirSync(dir);
       const result: Array<DirectoryInfo | FileInfo> = [];
 
       for (const file of files) {
-         if (file.isDirectory()) {
-            const userRoot = await this.fileService.getUserRootPath(userId);
-            const fullPath = path.join(dir, file.name);
-            const stats = await this.fs.stat(fullPath);
-            result.push({
-               name: file.name,
-               path: path.relative(userRoot, dir),
-               is_dir: true,
-               lastModified: stats.mtime.toISOString(),
-            });
-         } else {
-            result.push(await this.fileService.info(userId, path.join(relativePath, file.name), fetch_related_keys_in_redis ?? false, fetch_db_records ?? false));
+         try {
+            if (file.isDirectory()) {
+               const userRoot = await this.fileService.getUserRootPath(userId);
+               const fullPath = path.join(dir, file.name);
+               const stats = this.fs.statSync(fullPath);
+               result.push({
+                  name: file.name,
+                  path: path.relative(userRoot, dir),
+                  is_dir: true,
+                  lastModified: stats.mtime.toISOString(),
+               });
+            } else {
+               result.push(await this.fileService.info(userId, path.join(relativePath, file.name), fetch_related_keys_in_redis ?? false, fetch_db_records ?? false));
+            }
+         } catch (e) {
+            // Don't let one unreadable entry (e.g. a dangling symlink from a cold drive
+            // that's missing/unmounted) abort the whole directory listing.
+            this.logger.error(`Skipping unreadable entry "${file.name}" in ${dir}: ${(e as Error).message}`);
          }
       }
 
@@ -84,7 +92,7 @@ export class DirectoriesService {
 
       this.fileService.verifyFileName(dir);
 
-      await this.fs.mkdir(dir, { recursive: true });
+      this.fs.mkdirSync(dir, { recursive: true });
    }
 
    public async delete(userId: number, relativePath: string) {
@@ -109,7 +117,9 @@ export class DirectoriesService {
          }
       }
 
-      await this.fs.rmdir(dir, { recursive: true });
+      // Free any cold blobs backing symlinks under this directory before removing it.
+      await this.tieredStorage.removeColdData(dir);
+      this.fs.rmdirSync(dir, { recursive: true });
    }
 
    public async rename(userId: number, name: string, newName: string) {
@@ -121,15 +131,15 @@ export class DirectoriesService {
       }
 
       this.fileService.verifyFileName(newDir);
-      await this.fs.rename(dir, newDir);
+      this.fs.renameSync(dir, newDir);
    }
 
    public async createNewUserDir(user: User) {
       const email = await this.userService.getEmail(user.id);
       if (!email) return;
       const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), email);
-      if (!await this.fs.exists(dir)) {
-         await this.fs.mkdir(dir);
+      if (!this.fs.existsSync(dir)) {
+         this.fs.mkdirSync(dir);
       }
    }
 
@@ -169,11 +179,11 @@ export class DirectoriesService {
          throw new Error("You do not have permission to zip this directory");
       }
 
-      if (!(await this.fs.lstat(dir)).isDirectory()) {
+      if (!(this.fs.lstatSync(dir)).isDirectory()) {
          throw new Error("FIle to zip must be a directory");
       }
 
-      const output = await this.fs.createWriteStream(dir + ".zip");
+      const output = this.fs.createWriteStream(dir + ".zip");
       const archive = archiver("zip");
 
       archive.on("error", (err) => {
@@ -221,7 +231,7 @@ export class DirectoriesService {
    }
 
    private async getAllFiles(path: string) {
-      const entries = await this.fs.readdir(path);
+      const entries = this.fs.readdirSync(path);
 
       // Get files within the current directory and add a path key to the file objects
       const files = entries

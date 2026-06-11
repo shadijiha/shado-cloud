@@ -94,6 +94,7 @@ export class UserProfileService {
             search: { text: e.text } as any,
          })),
          used_data: await this.fileService.getUsedData(userId),
+         cold_storage: await this.fileService.getColdStorageStats(userId),
       };
 
       return most_accesed_files;
@@ -177,7 +178,7 @@ export class UserProfileService {
          const relative = path.relative(root, dir);
 
          if (crop == undefined) {
-            await this.fs.writeFile(dir, file.buffer);
+            this.fs.writeFileSync(dir, file.buffer);
          } else {
             const image = sharp(file.buffer);
             const metadata = await image.metadata();
@@ -189,7 +190,7 @@ export class UserProfileService {
                   height: Math.floor((crop.height / 100) * metadata.height),
                })
                .toBuffer();
-            await this.fs.writeFile(dir, resizedImg);
+            this.fs.writeFileSync(dir, resizedImg);
          }
 
          // Remove previous metadata prof indexed file

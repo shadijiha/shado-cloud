@@ -11,60 +11,60 @@ import { type Readable, type Writable } from "stream";
 
 @Injectable()
 export class NodeFileSystemService extends AbstractFileSystem {
-   public async lstat(path: string): Promise<State> {
+   public lstatSync(path: string): State {
       return fs.lstatSync(path);
    }
 
-   public async readdir(
+   public readdirSync(
       path: PathLike,
       options?: {
          encoding?: BufferEncoding | null | undefined;
       },
-   ): Promise<Dirent[]> {
+   ): Dirent[] {
       return fs.readdirSync(path, { ...options, withFileTypes: true });
    }
 
-   public async stat(path: string): Promise<State> {
+   public statSync(path: string): State {
       return fs.statSync(path);
    }
 
-   public async createWriteStream(path: PathLike, options?: BufferEncoding): Promise<Writable> {
+   public createWriteStream(path: PathLike, options?: BufferEncoding): Writable {
       return fs.createWriteStream(path, options);
    }
 
-   public async rmdir(path: string, options: { recursive: boolean }): Promise<void> {
+   public rmdirSync(path: string, options: { recursive: boolean }): void {
       fs.rmSync(path, { recursive: options?.recursive || false, force: true });
    }
 
-   public async appendFile(path: string, content: string): Promise<void> {
+   public appendFileSync(path: string, content: string): void {
       fs.appendFileSync(path, content);
    }
 
-   public async mkdir(path: string, options?: MakeDirectoryOptions): Promise<string> {
+   public mkdirSync(path: string, options?: MakeDirectoryOptions) {
       return fs.mkdirSync(path, options);
    }
 
-   public async createReadStream(path: PathLike, options?: BufferEncoding): Promise<Readable> {
+   public createReadStream(path: PathLike, options?: BufferEncoding): Readable {
       return fs.createReadStream(path, options);
    }
 
-   public async unlink(path: string): Promise<void> {
+   public unlinkSync(path: string): void {
       fs.unlinkSync(path);
    }
 
-   public async rename(path: string, newPath: string): Promise<void> {
+   public renameSync(path: string, newPath: string): void {
       fs.renameSync(path, newPath);
    }
 
-   public async writeFile(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): Promise<void> {
+   public writeFileSync(path: string, content: string | NodeJS.ArrayBufferView, encoding?: BufferEncoding): void {
       fs.writeFileSync(path, content, encoding);
    }
 
-   public async readFile(path: string, encoding: BufferEncoding): Promise<string | Buffer> {
+   public readFileSync(path: string, encoding: BufferEncoding): string | Buffer {
       return fs.readFileSync(path, encoding);
    }
 
-   public async exists(path: string): Promise<boolean> {
+   public existsSync(path: string): boolean {
       return fs.existsSync(path);
    }
 }
