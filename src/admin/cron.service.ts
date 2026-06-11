@@ -14,6 +14,8 @@ export interface CronJobInfo {
    nextRun: string | null;
    /** Whether the job is currently scheduled/active. */
    running: boolean;
+   /** Wall-clock duration of the most recent run in ms, or null if it hasn't run yet. */
+   lastDurationMs: number | null;
 }
 
 @Injectable()
@@ -27,6 +29,7 @@ export class CronAdminService {
    public list(): CronJobInfo[] {
       const out: CronJobInfo[] = [];
       for (const [name, job] of this.registry.getCronJobs()) {
+         ensureCronTimed(name, job);
          const source = (job.cronTime as { source?: unknown })?.source;
          const expression = typeof source === "string" ? source : String(source ?? "");
          out.push({
@@ -36,6 +39,7 @@ export class CronAdminService {
             lastRun: this.resolveLastRun(name, job),
             nextRun: this.resolveNextRun(job),
             running: this.isRunning(job),
+            lastDurationMs: cronLastDurationMs.get(name) ?? null,
          });
       }
       return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -173,6 +177,7 @@ export function collectCronJobs(registry: SchedulerRegistry): CronJobInfo[] {
       return out;
    }
    for (const [name, job] of jobs) {
+      ensureCronTimed(name, job);
       const source = job.cronTime?.source;
       const expression = typeof source === "string" ? source : String(source ?? "");
       let lastRun: string | null = null;
@@ -188,7 +193,30 @@ export function collectCronJobs(registry: SchedulerRegistry): CronJobInfo[] {
       } catch {
          /* ignore */
       }
-      out.push({ name, expression, human: humanizeCron(expression), lastRun, nextRun, running: Boolean(job.isActive ?? job.running) });
+      out.push({ name, expression, human: humanizeCron(expression), lastRun, nextRun, running: Boolean(job.isActive ?? job.running), lastDurationMs: cronLastDurationMs.get(name) ?? null });
    }
    return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Times cron-job runs. The `cron` library doesn't record run duration, but every scheduled
+ * and manual run goes through `fireOnTick()`. We wrap it once per job to capture the wall-clock
+ * duration of the most recent run, keyed by job name.
+ */
+const cronLastDurationMs = new Map<string, number>();
+const timedCronJobs = new WeakSet<object>();
+
+function ensureCronTimed(name: string, job: unknown): void {
+   const j = job as { fireOnTick?: (...args: unknown[]) => unknown };
+   if (typeof j.fireOnTick !== "function" || timedCronJobs.has(j)) return;
+   const original = j.fireOnTick.bind(j);
+   j.fireOnTick = async (...args: unknown[]) => {
+      const start = Date.now();
+      try {
+         return await original(...args);
+      } finally {
+         cronLastDurationMs.set(name, Date.now() - start);
+      }
+   };
+   timedCronJobs.add(j);
 }
