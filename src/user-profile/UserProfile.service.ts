@@ -29,30 +29,28 @@ export class UserProfileService {
       @Inject() private readonly fs: AbstractFileSystem,
    ) {}
 
-   public async changePassword(userId: number, old_password: string, new_password: string) {
+   // password + display-name changes moved to shado-auth-api (PATCH /auth/change/*).
+
+   // Profile picture upload moved to shado-auth-api; storage is done via
+   // saveProfilePictureForShado (called by the service endpoint) below.
+
+   /** Save the authenticated user's profile picture (no password — auth forwards the upload as the user). */
+   public async setProfilePicture(userId: number, file: Express.Multer.File, crop?: ProfileCropData) {
       const user = await this.userService.getById(userId);
       if (!user) throw new SoftException("User not found");
-
-      const ok = await this.userService.changePassword(user.shadoUserId, old_password, new_password);
-      if (!ok) throw new SoftException("Invalid password");
-
-      this.logger.log("User changed their password");
+      const [ok, err] = await this.saveProfilePicture(user, file, crop as ProfileCropData);
+      if (!ok) throw new SoftException((err as string) || "Failed to save picture");
    }
 
-   public async changeName(userId: number, password: string, new_name: string) {
-      const user = await this.userService.getById(userId);
-      if (!user) throw new SoftException("User not found");
-
-      const valid = await this.userService.verifyPassword(user.shadoUserId, password);
-      if (!valid) throw new SoftException("Invalid password");
-
-      const ok = await this.userService.changeName(user.shadoUserId, new_name);
-      if (!ok) throw new SoftException("Failed to change name");
-   }
-
-   public async changePicture(userId: number, password: string, file: Express.Multer.File, crop: ProfileCropData) {
-      const user = await this.verifyPassword(userId, password);
-      await this.saveProfilePicture(user, file, crop);
+   /** Absolute path + mime of any user's avatar (by shado UUID) — for serving avatars to others. */
+   public async avatarFileForUser(shadoUserId: string): Promise<{ absPath: string; mime: string } | null> {
+      const user = await this.userService.getUser(shadoUserId);
+      if (!user) return null;
+      const info = await this.fileService.profilePictureInfo(user.id);
+      if (!info.exists) return null;
+      const absPath = await this.fileService.absolutePath(user.id, FilesService.METADATA_FOLDER_NAME + "/prof");
+      const rec = await this.uploadedFileRepo.findOne({ where: { user: { id: user.id }, absolute_path: info.path } });
+      return { absPath, mime: rec?.mime || "image/jpeg" };
    }
 
    public async getStats(userId: number, withDeleted = false) {

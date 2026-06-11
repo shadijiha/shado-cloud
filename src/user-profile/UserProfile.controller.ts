@@ -4,8 +4,10 @@ import {
    Get,
    Inject,
    MessageEvent,
-   Patch,
+   Param,
+   Put,
    Query,
+   Res,
    Sse,
    UploadedFile,
    UseGuards,
@@ -15,10 +17,12 @@ import {
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { FileInterceptor } from "@nestjs/platform-express/multer";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Response } from "express";
+import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { OperationStatusResponse } from "src/files/filesApiTypes";
 import { LoggerToDb } from "./../logging";
 import { AuthUser } from "src/util";
-import { ChangeNameRequest, ChangePasswordRequest, ChangePictureRequest, ProfileStats } from "./user-profile-types";
+import { ProfileStats } from "./user-profile-types";
 import { UserProfileService } from "./UserProfile.service";
 import { Observable, Subject } from "rxjs";
 
@@ -28,43 +32,41 @@ import { Observable, Subject } from "rxjs";
 export class UserProfileController {
    /** Maximum accepted profile picture size (bytes). */
    static readonly MAX_PROFILE_PIC_BYTES = 5 * 1024 * 1024; // 5 MB
-   constructor(private readonly profileService: UserProfileService, @Inject() private readonly logger: LoggerToDb) {}
+   constructor(private readonly profileService: UserProfileService, @Inject() private readonly logger: LoggerToDb, @Inject() private readonly fs: AbstractFileSystem) {}
 
-   @Patch("change/password")
-   @ApiResponse({ type: OperationStatusResponse })
-   public async changePassword(@AuthUser() userId: number, @Body() body: ChangePasswordRequest) {
-      return await this.logger.errorWrapper(async () => {
-         await this.profileService.changePassword(userId, body.old_password, body.new_password);
-      });
+   /** Serve any user's avatar by their auth (shado) UUID — any logged-in user may view it (for friends, search, etc.). */
+   @Get("picture/:shadoUserId")
+   @ApiParam({ name: "shadoUserId" })
+   public async getPicture(@Param("shadoUserId") shadoUserId: string, @Res() res: Response) {
+      const f = await this.profileService.avatarFileForUser(shadoUserId);
+      if (!f) {
+         res.status(404).send();
+         return;
+      }
+      res.setHeader("Content-Type", f.mime);
+      res.setHeader("Cache-Control", "private, max-age=60");
+      this.fs.createReadStream(f.absPath).pipe(res);
    }
 
-   @Patch("change/name")
-   @ApiResponse({ type: OperationStatusResponse })
-   public async changeName(@AuthUser() userId: number, @Body() body: ChangeNameRequest) {
-      return await this.logger.errorWrapper(async () => {
-         await this.profileService.changeName(userId, body.password, body.new_name);
-      });
-   }
+   // NOTE: password + display-name changes now live in shado-auth-api
+   // (PATCH /auth/change/password, /auth/change/name).
 
-   @Patch("change/picture")
+   /**
+    * Save the user's profile picture (crop done here with sharp). shado-auth-api owns the
+    * user-facing endpoint and forwards the upload here as the authenticated user, so the
+    * picture lands in this user's own .metadata/prof — treated like any other file.
+    */
+   @Put("picture")
    @UseInterceptors(FileInterceptor("file", { limits: { fileSize: UserProfileController.MAX_PROFILE_PIC_BYTES } }))
    @ApiResponse({ type: OperationStatusResponse })
-   public async changePicture(
-      @AuthUser() userId: number,
-      @UploadedFile() file: Express.Multer.File,
-      @Body() body: ChangePictureRequest,
-   ) {
+   public async setPicture(@AuthUser() userId: number, @UploadedFile() file: Express.Multer.File, @Body() body: { crop?: string }) {
       return await this.logger.errorWrapper(async () => {
          if (!file) throw new Error("No image provided");
          if (!file.mimetype?.startsWith("image/")) throw new Error("Only image files are allowed");
-         if (file.size > UserProfileController.MAX_PROFILE_PIC_BYTES) {
-            throw new Error(`Image too large (max ${UserProfileController.MAX_PROFILE_PIC_BYTES / (1024 * 1024)}MB)`);
-         }
-         await this.profileService.changePicture(
+         await this.profileService.setProfilePicture(
             userId,
-            body.password,
             file,
-            body.crop && body.crop != "undefined" ? JSON.parse(body.crop as string) : undefined,
+            body.crop && body.crop !== "undefined" ? JSON.parse(body.crop) : undefined,
          );
       });
    }
