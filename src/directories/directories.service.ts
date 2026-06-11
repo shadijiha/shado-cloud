@@ -39,14 +39,14 @@ export class DirectoriesService {
          throw new Error("You do not have access to this directory");
       }
 
-      const files = this.fs.readdirSync(dir);
+      const files = await this.fs.readdir(dir);
       const result: Array<DirectoryInfo | FileInfo> = [];
 
       for (const file of files) {
          if (file.isDirectory()) {
             const userRoot = await this.fileService.getUserRootPath(userId);
             const fullPath = path.join(dir, file.name);
-            const stats = this.fs.statSync(fullPath);
+            const stats = await this.fs.stat(fullPath);
             result.push({
                name: file.name,
                path: path.relative(userRoot, dir),
@@ -84,7 +84,7 @@ export class DirectoriesService {
 
       this.fileService.verifyFileName(dir);
 
-      this.fs.mkdirSync(dir, { recursive: true });
+      await this.fs.mkdir(dir, { recursive: true });
    }
 
    public async delete(userId: number, relativePath: string) {
@@ -97,10 +97,10 @@ export class DirectoriesService {
 
       // Get all files in that dir recusively, and for each
       // delete the index from DB
-      for (const file of this.getAllFiles(dir)) {
+      for (const file of await this.getAllFiles(dir)) {
          const relative = path.relative(root, file.path);
          try {
-            this.uploadedFileRepo.softRemove({
+            await this.uploadedFileRepo.softRemove({
                absolute_path: relative,
                user: { id: userId },
             });
@@ -109,7 +109,7 @@ export class DirectoriesService {
          }
       }
 
-      this.fs.rmdirSync(dir, { recursive: true });
+      await this.fs.rmdir(dir, { recursive: true });
    }
 
    public async rename(userId: number, name: string, newName: string) {
@@ -121,21 +121,21 @@ export class DirectoriesService {
       }
 
       this.fileService.verifyFileName(newDir);
-      this.fs.renameSync(dir, newDir);
+      await this.fs.rename(dir, newDir);
    }
 
    public async createNewUserDir(user: User) {
       const email = await this.userService.getEmail(user.id);
       if (!email) return;
       const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), email);
-      if (!this.fs.existsSync(dir)) {
-         this.fs.mkdirSync(dir);
+      if (!await this.fs.exists(dir)) {
+         await this.fs.mkdir(dir);
       }
    }
 
    public async listrecursive(userId: number, showHidden = false) {
       const dir = await this.fileService.getUserRootPath(userId);
-      const files = this.getAllFiles(dir);
+      const files = await this.getAllFiles(dir);
 
       return files
          .map((filedata) => {
@@ -157,7 +157,7 @@ export class DirectoriesService {
       const stat = new SearchStat();
       stat.text = searchText;
       stat.user = await this.userService.getById(userId);
-      this.searchStatRepo.save(stat);
+      await this.searchStatRepo.save(stat);
 
       return files ?? [];
    }
@@ -169,11 +169,11 @@ export class DirectoriesService {
          throw new Error("You do not have permission to zip this directory");
       }
 
-      if (!this.fs.lstatSync(dir).isDirectory()) {
+      if (!(await this.fs.lstat(dir)).isDirectory()) {
          throw new Error("FIle to zip must be a directory");
       }
 
-      const output = this.fs.createWriteStream(dir + ".zip");
+      const output = await this.fs.createWriteStream(dir + ".zip");
       const archive = archiver("zip");
 
       archive.on("error", (err) => {
@@ -181,7 +181,7 @@ export class DirectoriesService {
       });
       archive.pipe(output);
       archive.directory(dir, false);
-      archive.finalize();
+      void archive.finalize();
    }
 
    public async unzip(userId: number, name: string) {
@@ -198,7 +198,7 @@ export class DirectoriesService {
       await extract(dir, { dir: outputPath });
 
       // After extracting the zip, go though all the files and index them
-      const files = this.getAllFiles(outputPath);
+      const files = await this.getAllFiles(outputPath);
       const absoluteRootPath = await this.fileService.absolutePath(userId, "");
       const user = await this.userService.getById(userId);
 
@@ -208,7 +208,7 @@ export class DirectoriesService {
          indexed.user = user;
          indexed.absolute_path = relativePath;
          indexed.mime = FilesService.detectFile(file.path);
-         this.uploadedFileRepo.save(indexed);
+         await this.uploadedFileRepo.save(indexed);
       }
    }
 
@@ -220,8 +220,8 @@ export class DirectoriesService {
       }
    }
 
-   private getAllFiles(path: string) {
-      const entries = this.fs.readdirSync(path);
+   private async getAllFiles(path: string) {
+      const entries = await this.fs.readdir(path);
 
       // Get files within the current directory and add a path key to the file objects
       const files = entries
@@ -237,7 +237,7 @@ export class DirectoriesService {
             */
 
       for (const folder of folders) {
-         files.push(...this.getAllFiles(`${path}/${folder.name}/`));
+         files.push(...await this.getAllFiles(`${path}/${folder.name}/`));
       }
 
       return files;

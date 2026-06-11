@@ -118,11 +118,11 @@ describe("FilesService", () => {
             {
                provide: AbstractFileSystem,
                useValue: {
-                  writeFileSync: jest.fn(),
-                  existsSync: jest.fn(),
-                  mkdirSync: jest.fn(),
-                  unlinkSync: jest.fn(),
-                  readdirSync: jest.fn().mockReturnValue([]),
+                  writeFile: jest.fn(),
+                  exists: jest.fn(),
+                  mkdir: jest.fn(),
+                  unlink: jest.fn(),
+                  readdir: jest.fn().mockReturnValue([]),
                },
             },
             {
@@ -162,7 +162,7 @@ describe("FilesService", () => {
    });
 
    describe("upload", () => {
-      let mockFsWriteFileSync;
+      let mockFsWriteFile;
       const mockFile = {
          fieldname: "file",
          originalname: "test.txt",
@@ -173,7 +173,7 @@ describe("FilesService", () => {
       } as Express.Multer.File;
 
       beforeEach(async () => {
-         mockFsWriteFileSync = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {});
+         mockFsWriteFile = jest.spyOn(fs, "writeFile").mockResolvedValue(undefined);
       });
 
       it("should successfully upload a file if space is available and permissions are granted", async () => {
@@ -181,7 +181,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(2048) }; // 2KB max space
 
          // Mock external service methods
          userService.getById = jest.fn().mockResolvedValue(user);
@@ -198,7 +198,7 @@ describe("FilesService", () => {
 
          // Assert
          expect(result).toEqual([true, ""]);
-         expect(mockFsWriteFileSync).toHaveBeenCalledWith("/root/uploads/test.txt", mockFile.buffer);
+         expect(mockFsWriteFile).toHaveBeenCalledWith("/root/uploads/test.txt", mockFile.buffer);
          expect(uploadedFileRepo.save).toHaveBeenCalled();
       });
 
@@ -207,7 +207,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(1024) }; // 1KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(1024) }; // 1KB max space
 
          userService.getById = jest.fn().mockResolvedValue(user);
          service.getUsedData = jest.fn().mockResolvedValue(usedData);
@@ -224,7 +224,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(2048) }; // 2KB max space
 
          userService.getById = jest.fn().mockResolvedValue(user);
          service.getUsedData = jest.fn().mockResolvedValue(usedData);
@@ -241,7 +241,7 @@ describe("FilesService", () => {
 
       it("should handle file replacement and invalidate thumbnails if file exists", async () => {
          // Arrange
-         const user = { id: 1, email: "cait@queen.com", getMaxData: jest.fn().mockResolvedValue(2048) };
+         const user = { id: 1, email: "cait@queen.com", getMaxData: jest.fn().mockReturnValue(2048) };
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
 
@@ -254,8 +254,8 @@ describe("FilesService", () => {
          uploadedFileRepo.findOne = jest.fn().mockResolvedValue(existingFile); // File already exists
 
          // Mock invalidateThumbnailsFor method
-         fs.unlinkSync = jest.fn();
-         fs.readdirSync = jest.fn().mockReturnValue([
+         fs.unlink = jest.fn();
+         fs.readdir = jest.fn().mockReturnValue([
             { name: `${existingFile.id}_100x120.jpg` },
             { name: `${existingFile.id}_100xundefined.jpg` },
             { name: "24_100x100.jpg" }, // <--- Shouldn't be deleted!!
@@ -284,9 +284,9 @@ describe("FilesService", () => {
             `${config.get("this-service.cloud-dir")}/${"cait@queen.com"}/${FilesService.METADATA_FOLDER_NAME}/${
                FilesService.THUMBNAILS_FOLDER_NAME
             }/${path}`;
-         expect(fs.unlinkSync).toHaveBeenCalledWith(thumbailAbsolute(`${existingFile.id}_100x120.jpg`));
-         expect(fs.unlinkSync).toHaveBeenCalledWith(thumbailAbsolute(`${existingFile.id}_100xundefined.jpg`));
-         expect(fs.unlinkSync).not.toHaveBeenCalledWith(thumbailAbsolute("24_100x100.jpg"));
+         expect(fs.unlink).toHaveBeenCalledWith(thumbailAbsolute(`${existingFile.id}_100x120.jpg`));
+         expect(fs.unlink).toHaveBeenCalledWith(thumbailAbsolute(`${existingFile.id}_100xundefined.jpg`));
+         expect(fs.unlink).not.toHaveBeenCalledWith(thumbailAbsolute("24_100x100.jpg"));
 
          // Redis clear
          expect(cache.del).toHaveBeenCalledWith(
@@ -300,7 +300,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(2048) }; // 2KB max space
 
          userService.getById = jest.fn().mockResolvedValue(user);
          service.getUsedData = jest.fn().mockResolvedValue(usedData);
@@ -342,13 +342,13 @@ describe("FilesService", () => {
          fileAccessStatRepo.find = jest.fn().mockResolvedValue([]);
          fileAccessStatRepo.softRemove = jest.fn();
          uploadedFileRepo.softRemove = jest.fn();
-         fs.unlinkSync = jest.fn();
-         fs.readdirSync = jest.fn().mockReturnValue([]);
+         fs.unlink = jest.fn();
+         fs.readdir = jest.fn().mockReturnValue([]);
 
          const result = await service.delete(1, relativePath);
 
          expect(result).toEqual([true, ""]);
-         expect(fs.unlinkSync).toHaveBeenCalledWith(absolutePath);
+         expect(fs.unlink).toHaveBeenCalledWith(absolutePath);
          expect(uploadedFileRepo.findOne).toHaveBeenCalledWith({
             where: { absolute_path: relativePath, user: { id: user.id } },
          });
@@ -375,7 +375,7 @@ describe("FilesService", () => {
          const result = await service.delete(1, relativePath);
 
          expect(result).toEqual([true, ""]);
-         expect(fs.unlinkSync).toHaveBeenCalled();
+         expect(fs.unlink).toHaveBeenCalled();
       });
 
       it("should return an error if an exception occurs during deletion", async () => {
@@ -404,8 +404,8 @@ describe("FilesService", () => {
          fileAccessStatRepo.find = jest.fn().mockResolvedValue([]);
          fileAccessStatRepo.softRemove = jest.fn();
          uploadedFileRepo.softRemove = jest.fn();
-         fs.unlinkSync = jest.fn();
-         fs.readdirSync = jest.fn().mockReturnValue([
+         fs.unlink = jest.fn();
+         fs.readdir = jest.fn().mockReturnValue([
             { name: `${uploadedFile.id}_100x100.jpg` },
             { name: `${uploadedFile.id}_100xundefined.jpg` },
             { name: "24_100x100.jpg" }, // <--- Shouldn't be deleted!!
@@ -420,10 +420,10 @@ describe("FilesService", () => {
             `${config.get("this-service.cloud-dir")}/${"cait@queen.com"}/${FilesService.METADATA_FOLDER_NAME}/${
                FilesService.THUMBNAILS_FOLDER_NAME
             }/${path}`;
-         expect(fs.unlinkSync).toHaveBeenCalledWith(absolutePath);
-         expect(fs.unlinkSync).toHaveBeenCalledWith(thumbailAbsolute(`${uploadedFile.id}_100x100.jpg`));
-         expect(fs.unlinkSync).toHaveBeenCalledWith(thumbailAbsolute(`${uploadedFile.id}_100xundefined.jpg`));
-         expect(fs.unlinkSync).not.toHaveBeenCalledWith(thumbailAbsolute("24_100x100.jpg"));
+         expect(fs.unlink).toHaveBeenCalledWith(absolutePath);
+         expect(fs.unlink).toHaveBeenCalledWith(thumbailAbsolute(`${uploadedFile.id}_100x100.jpg`));
+         expect(fs.unlink).toHaveBeenCalledWith(thumbailAbsolute(`${uploadedFile.id}_100xundefined.jpg`));
+         expect(fs.unlink).not.toHaveBeenCalledWith(thumbailAbsolute("24_100x100.jpg"));
 
          expect(uploadedFileRepo.findOne).toHaveBeenCalledWith({
             where: { absolute_path: relativePath, user: { id: user.id } },
@@ -452,7 +452,7 @@ describe("FilesService", () => {
 
          FilesService.detectFile = jest.fn().mockReturnValue("image/jpeg");
          service.isOwner = jest.fn().mockResolvedValue(true);
-         fs.existsSync = jest.fn().mockReturnValue(false);
+         fs.exists = jest.fn().mockReturnValue(false);
 
          await expect(service.toThumbnail("path/to/file.png", 1)).rejects.toThrow(
             `${config.get("this-service.cloud-dir")}/${"cait@queen.com"}/path/to/file.png does not exist`,
@@ -467,14 +467,14 @@ describe("FilesService", () => {
          FilesService.detectFile = jest.fn().mockReturnValue("image/jpeg");
          service.isOwner = jest.fn().mockReturnValue(true);
 
-         jest.spyOn(fs, "existsSync").mockReturnValue(true);
+         jest.spyOn(fs, "exists").mockResolvedValue(true);
 
          uploadedFileRepo.findOne = jest.fn().mockResolvedValue(mockFile);
          service.createMetaFolderIfNotExists = jest
             .fn()
             .mockResolvedValue(`${config.get("this-service.cloud-dir")}/${"cait@queen.com"}/${FilesService.METADATA_FOLDER_NAME}`);
 
-         jest.spyOn(fs, "existsSync").mockReturnValue(true);
+         jest.spyOn(fs, "exists").mockResolvedValue(true);
          fs.createReadStream = jest.fn().mockReturnValue("readStream");
 
          const result = await service.toThumbnail("test/path.jpg", 1, 100, 100);
@@ -496,8 +496,8 @@ describe("FilesService", () => {
 
          // Return true if file is not a thumbnail
          jest
-            .spyOn(fs, "existsSync")
-            .mockImplementation((path: string) => !path.includes(FilesService.THUMBNAILS_FOLDER_NAME));
+            .spyOn(fs, "exists")
+            .mockImplementation(async (path: string) => !path.includes(FilesService.THUMBNAILS_FOLDER_NAME));
 
          uploadedFileRepo.findOne = jest.fn().mockResolvedValue(mockFile);
          const metaDir = `${config.get("this-service.cloud-dir")}/${"cait@queen.com"}/${FilesService.METADATA_FOLDER_NAME}`;
@@ -550,7 +550,7 @@ describe("FilesService", () => {
          FilesService.detectFile = jest.fn().mockReturnValue("image/jpeg");
          service.isOwner = jest.fn().mockResolvedValue(true);
 
-         jest.spyOn(fs, "existsSync").mockReturnValue(true);
+         jest.spyOn(fs, "exists").mockResolvedValue(true);
 
          fs.createReadStream = jest.fn().mockReturnValue({ pipe: jest.fn().mockReturnValue("Mocked image data") });
 
@@ -581,12 +581,12 @@ describe("FilesService", () => {
          service.isOwner = jest.fn().mockResolvedValue(true);
          service.createMetaFolderIfNotExists = jest.fn().mockResolvedValue(metaDir);
 
-         fs.readFileSync = jest.fn().mockReturnValue("mock pdf content");
-         fs.writeFileSync = jest.fn();
-         fs.unlinkSync = jest.fn();
+         fs.readFile = jest.fn().mockReturnValue("mock pdf content");
+         fs.writeFile = jest.fn();
+         fs.unlink = jest.fn();
 
          // File exists but no cached thumbnail, temp file exists for cleanup
-         jest.spyOn(fs, "existsSync").mockImplementation((path: string) => {
+         jest.spyOn(fs, "exists").mockImplementation(async (path: string) => {
             if (path === absolutePath) return true;
             if (path.includes("_pdf_")) return false; // No cached thumbnail
             if (path.includes("pdf_thumb_") && path.endsWith(".1.png")) return true; // Temp file exists
@@ -599,12 +599,12 @@ describe("FilesService", () => {
          const result = await service.toThumbnail("document.pdf", 1, 400, 300);
 
          expect(result).toBe("pdfThumbnailStream");
-         expect(fs.writeFileSync).toHaveBeenCalledWith(
+         expect(fs.writeFile).toHaveBeenCalledWith(
             `${thumbnailFolder}/${mockFile.id}_pdf_400x300.png`,
             expect.any(Buffer),
          );
          // Verify temp file cleanup
-         expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringMatching(/pdf_thumb_.*\.1\.png$/));
+         expect(fs.unlink).toHaveBeenCalledWith(expect.stringMatching(/pdf_thumb_.*\.1\.png$/));
       });
 
       it("should return cached PDF thumbnail if it exists", async () => {
@@ -622,7 +622,7 @@ describe("FilesService", () => {
          service.createMetaFolderIfNotExists = jest.fn().mockResolvedValue(metaDir);
 
          // Both file and cached thumbnail exist
-         jest.spyOn(fs, "existsSync").mockReturnValue(true);
+         jest.spyOn(fs, "exists").mockResolvedValue(true);
 
          uploadedFileRepo.findOne = jest.fn().mockResolvedValue(mockFile);
          fs.createReadStream = jest.fn().mockReturnValue("cachedPdfThumbnailStream");
@@ -642,7 +642,7 @@ describe("FilesService", () => {
          FilesService.detectFile = jest.fn().mockReturnValue("application/pdf");
          service.isOwner = jest.fn().mockResolvedValue(true);
 
-         jest.spyOn(fs, "existsSync").mockReturnValue(false);
+         jest.spyOn(fs, "exists").mockResolvedValue(false);
 
          await expect(service.toThumbnail("missing.pdf", 1, 400, 300)).rejects.toThrow(
             `${absolutePath} does not exist`,

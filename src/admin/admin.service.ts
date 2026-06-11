@@ -216,7 +216,7 @@ export class AdminService {
 
    public async generateServerSetupBackup(sudoPassword?: string): Promise<Buffer> {
       const tmpDir = `/tmp/server-setup-${Date.now()}`;
-      this.fs.mkdirSync(tmpDir, { recursive: true });
+      await this.fs.mkdir(tmpDir, { recursive: true });
 
       const errors: string[] = [];
       const sudoPrefix = sudoPassword ? `echo '${sudoPassword}' | sudo -S` : "";
@@ -237,11 +237,11 @@ export class AdminService {
       errors.push(...configErrors);
 
       if (errors.length > 0) {
-         this.fs.writeFileSync(`${tmpDir}/errors.txt`, errors.join("\n"));
+         await this.fs.writeFile(`${tmpDir}/errors.txt`, errors.join("\n"));
       }
 
       const zipBuffer = await this.createZipBuffer(tmpDir);
-      this.fs.rmdirSync(tmpDir, { recursive: true });
+      await this.fs.rmdir(tmpDir, { recursive: true });
       return zipBuffer;
    }
 
@@ -256,7 +256,7 @@ export class AdminService {
       // Apache configs (all sites-available)
       const apacheDir = isMac ? "/opt/homebrew/etc/httpd" : "/etc/apache2/sites-available";
       try {
-         this.fs.mkdirSync(`${tmpDir}/apache`, { recursive: true });
+         await this.fs.mkdir(`${tmpDir}/apache`, { recursive: true });
          const listCmd = sudoPrefix && !isMac
             ? `${sudoPrefix} ls ${apacheDir}/*.conf 2>/dev/null`
             : `ls ${apacheDir}/*.conf 2>/dev/null`;
@@ -267,8 +267,8 @@ export class AdminService {
             if (sudoPrefix && !isMac) {
                await this.execSync(`${sudoPrefix} cat ${file} > ${tmpDir}/apache/${filename}`);
             } else {
-               const content = this.fs.readFileSync(file, "utf-8");
-               this.fs.writeFileSync(`${tmpDir}/apache/${filename}`, content);
+               const content = await this.fs.readFile(file, "utf-8");
+               await this.fs.writeFile(`${tmpDir}/apache/${filename}`, content);
             }
          }
       } catch (err) {
@@ -281,16 +281,16 @@ export class AdminService {
 
       // .env file
       try {
-         const content = this.fs.readFileSync(path.join(process.cwd(), ".env"), "utf-8");
-         this.fs.writeFileSync(`${tmpDir}/env-file.txt`, content);
+         const content = await this.fs.readFile(path.join(process.cwd(), ".env"), "utf-8");
+         await this.fs.writeFile(`${tmpDir}/env-file.txt`, content);
       } catch (e) {
          errors.push(`.env file failed: ${(e as Error).message}`);
       }
 
       // config.yml file (for this service)
       try {
-         const content = this.fs.readFileSync(path.join(process.cwd(), CONFIG_FILE_NAME), "utf-8");
-         this.fs.writeFileSync(`${tmpDir}/config.yml.txt`, content);
+         const content = await this.fs.readFile(path.join(process.cwd(), CONFIG_FILE_NAME), "utf-8");
+         await this.fs.writeFile(`${tmpDir}/config.yml.txt`, content);
       } catch (e) {
          errors.push(`config.yml file failed: ${(e as Error).message}`);
       }
@@ -299,9 +299,9 @@ export class AdminService {
       const cloudflaredDir = "/etc/cloudflared";
       try {
          const configPath = `${cloudflaredDir}/config.yml`;
-         if (this.fs.existsSync(configPath)) {
-            const content = this.fs.readFileSync(configPath, "utf-8");
-            this.fs.writeFileSync(`${tmpDir}/cloudflared-config.yml`, content);
+         if (await this.fs.exists(configPath)) {
+            const content = await this.fs.readFile(configPath, "utf-8");
+            await this.fs.writeFile(`${tmpDir}/cloudflared-config.yml`, content);
          } else if (sudoPrefix) {
             await this.execSync(`${sudoPrefix} cat ${configPath} > ${tmpDir}/cloudflared-config.yml`);
          }
@@ -320,8 +320,8 @@ export class AdminService {
             if (sudoPrefix) {
                await this.execSync(`${sudoPrefix} cat ${file} > ${tmpDir}/${filename}`);
             } else {
-               const content = this.fs.readFileSync(file, "utf-8");
-               this.fs.writeFileSync(`${tmpDir}/${filename}`, content);
+               const content = await this.fs.readFile(file, "utf-8");
+               await this.fs.writeFile(`${tmpDir}/${filename}`, content);
             }
          }
       } catch (e) {
@@ -331,9 +331,9 @@ export class AdminService {
       // Cloudflare origin certificate
       for (const certFile of ["/etc/ssl/cloudflare-origin.pem", "/etc/ssl/cloudflare-origin.key"]) {
          try {
-            if (this.fs.existsSync(certFile)) {
-               const content = this.fs.readFileSync(certFile, "utf-8");
-               this.fs.writeFileSync(`${tmpDir}/${path.basename(certFile)}`, content);
+            if (await this.fs.exists(certFile)) {
+               const content = await this.fs.readFile(certFile, "utf-8");
+               await this.fs.writeFile(`${tmpDir}/${path.basename(certFile)}`, content);
             } else if (sudoPrefix) {
                await this.execSync(`${sudoPrefix} cat ${certFile} > ${tmpDir}/${path.basename(certFile)} 2>/dev/null || true`);
             }
@@ -355,7 +355,7 @@ export class AdminService {
          archive.on("error", reject);
 
          archive.directory(sourceDir, false);
-         archive.finalize();
+         void archive.finalize();
       });
    }
 
@@ -373,7 +373,7 @@ export class AdminService {
    private async runServerSetupBackup(subject: Subject<MessageEvent>) {
       const tmpDir = `/tmp/server-setup-${Date.now()}`;
       const zipPath = `/tmp/server-backup-${Date.now()}.zip`;
-      this.fs.mkdirSync(tmpDir, { recursive: true });
+      await this.fs.mkdir(tmpDir, { recursive: true });
 
       // Step 1: MySQL dump with progress
       subject.next({ data: { type: "progress", step: "Dumping MySQL databases...", percent: 0, phase: "mysql" } });
@@ -381,9 +381,9 @@ export class AdminService {
          const dbHost = this.config.get("db.host", { infer: true }) || "localhost";
          const dbUser = this.config.get("db.username", { infer: true });
          const dbPass = this.config.get("db.password", { infer: true });
+         const dumpPath = `${tmpDir}/mysql-dump.sql`;
+         const output = await this.fs.createWriteStream(dumpPath);
          await new Promise<void>((resolve, reject) => {
-            const dumpPath = `${tmpDir}/mysql-dump.sql`;
-            const output = this.fs.createWriteStream(dumpPath);
             const child = require("child_process").spawn("mysqldump", [
                "-h", dbHost,
                "-u", dbUser,
@@ -415,7 +415,7 @@ export class AdminService {
             child.on("error", reject);
          });
       } catch (e) {
-         await this.fs.writeFileSync(`${tmpDir}/mysql-error.txt`, (e as Error).message);
+         await this.fs.writeFile(`${tmpDir}/mysql-error.txt`, (e as Error).message);
          subject.next({ data: { type: "progress", step: "MySQL dump failed", phase: "mysql" } });
       }
 
@@ -423,15 +423,15 @@ export class AdminService {
       subject.next({ data: { type: "progress", step: "Copying config files...", phase: "copy" } });
       const errors = await this.collectServerConfigFiles(tmpDir);
       if (errors.length > 0) {
-         this.fs.writeFileSync(`${tmpDir}/errors.txt`, errors.join("\n"));
+         await this.fs.writeFile(`${tmpDir}/errors.txt`, errors.join("\n"));
       }
 
       // Step 6: Create zip with byte progress
       subject.next({ data: { type: "progress", step: "Scanning files...", percent: 0, phase: "zip" } });
       const totalSize = await this.getDirSize(tmpDir);
 
+      const output = await this.fs.createWriteStream(zipPath);
       await new Promise<void>((resolve, reject) => {
-         const output = this.fs.createWriteStream(zipPath);
          const archive = archiver("zip", { zlib: { level: 9 } });
 
          archive.on("error", reject);
@@ -453,10 +453,10 @@ export class AdminService {
 
          archive.pipe(output);
          archive.directory(tmpDir, false);
-         archive.finalize();
+         void archive.finalize();
       });
 
-      this.fs.rmdirSync(tmpDir, { recursive: true });
+      await this.fs.rmdir(tmpDir, { recursive: true });
 
       subject.next({ data: { type: "complete", downloadPath: `/admin/backup/download?file=${encodeURIComponent(zipPath)}` } });
       subject.complete();
@@ -486,8 +486,8 @@ export class AdminService {
       const totalSize = await this.getDirSize(cloudDir);
       let processedSize = 0;
 
+      const output = await this.fs.createWriteStream(zipPath);
       await new Promise<void>((resolve, reject) => {
-         const output = this.fs.createWriteStream(zipPath);
          const archive = archiver("zip", { zlib: { level: 1 } }); // Fast compression for large files
 
          archive.on("error", reject);
@@ -501,7 +501,7 @@ export class AdminService {
 
          archive.pipe(output);
          archive.directory(cloudDir, "cloud");
-         archive.finalize();
+         void archive.finalize();
       });
 
       subject?.next({ data: { type: "complete", downloadPath: `/admin/backup/download?file=${encodeURIComponent(zipPath)}` } });
@@ -512,13 +512,13 @@ export class AdminService {
 
    private async getDirSize(dir: string): Promise<number> {
       let size = 0;
-      const files = await this.fs.readdirSync(dir);
+      const files = await this.fs.readdir(dir);
       for (const file of files) {
          const filePath = path.join(dir, file.name);
          if (file.isDirectory()) {
             size += await this.getDirSize(filePath);
          } else {
-            const stat = await this.fs.statSync(filePath);
+            const stat = await this.fs.stat(filePath);
             size += stat.size;
          }
       }
@@ -529,15 +529,15 @@ export class AdminService {
       if (!filePath.startsWith("/tmp/") || !filePath.includes("-backup-")) {
          throw new HttpException("Invalid file path", HttpStatus.BAD_REQUEST);
       }
-      if (!this.fs.existsSync(filePath)) {
+      if (!await this.fs.exists(filePath)) {
          throw new HttpException("Backup file not found or already downloaded", HttpStatus.NOT_FOUND);
       }
       return this.fs.createReadStream(filePath);
    }
 
-   public deleteBackupFile(filePath: string): void {
+   public async deleteBackupFile(filePath: string): Promise<void> {
       try {
-         this.fs.unlinkSync(filePath);
+         await this.fs.unlink(filePath);
       } catch (e) {
          this.logger.error(`Failed to delete backup file ${filePath}: ${(<Error>e).message}`);
       }
@@ -546,18 +546,18 @@ export class AdminService {
    /**
     * Background images management
     */
-   private getBackgroundsDir(): string {
+   private async getBackgroundsDir(): Promise<string> {
       const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), "_system", "backgrounds");
-      if (!this.fs.existsSync(dir)) {
-         this.fs.mkdirSync(dir, { recursive: true });
+      if (!await this.fs.exists(dir)) {
+         await this.fs.mkdir(dir, { recursive: true });
       }
       return dir;
    }
 
    public async getBackgroundImages(): Promise<{ images: string[] }> {
-      const dir = this.getBackgroundsDir();
+      const dir = await this.getBackgroundsDir();
       try {
-         const files = this.fs.readdirSync(dir);
+         const files = await this.fs.readdir(dir);
          const images = files.map(f => f.name).filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f));
          return { images };
       } catch {
@@ -573,12 +573,12 @@ export class AdminService {
          throw new HttpException("Invalid file type. Only images allowed.", HttpStatus.BAD_REQUEST);
       }
 
-      const dir = this.getBackgroundsDir();
+      const dir = await this.getBackgroundsDir();
       const ext = path.extname(file.originalname) || ".jpg";
       const filename = `bg_${Date.now()}${ext}`;
       const filePath = path.join(dir, filename);
 
-      this.fs.writeFileSync(filePath, file.buffer);
+      await this.fs.writeFile(filePath, file.buffer);
       return { filename };
    }
 
@@ -586,25 +586,25 @@ export class AdminService {
       if (filename.includes("/") || filename.includes("..")) {
          throw new HttpException("Invalid filename", HttpStatus.BAD_REQUEST);
       }
-      const filePath = path.join(this.getBackgroundsDir(), filename);
-      if (!this.fs.existsSync(filePath)) {
+      const filePath = path.join(await this.getBackgroundsDir(), filename);
+      if (!await this.fs.exists(filePath)) {
          throw new HttpException("Image not found", HttpStatus.NOT_FOUND);
       }
-      this.fs.unlinkSync(filePath);
+      await this.fs.unlink(filePath);
    }
 
    public async getBackgroundImageStream(filename: string): Promise<Readable> {
       if (filename.includes("/") || filename.includes("..")) {
          throw new HttpException("Invalid filename", HttpStatus.BAD_REQUEST);
       }
-      const filePath = path.join(this.getBackgroundsDir(), filename);
-      if (!this.fs.existsSync(filePath)) {
+      const filePath = path.join(await this.getBackgroundsDir(), filename);
+      if (!await this.fs.exists(filePath)) {
          throw new HttpException("Image not found", HttpStatus.NOT_FOUND);
       }
       return this.fs.createReadStream(filePath);
    }
 
    public invalidateThumbnails() {
-      this.fileService.invalidateAllThumbnails();
+      return this.fileService.invalidateAllThumbnails();
    }
 }

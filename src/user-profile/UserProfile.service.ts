@@ -52,7 +52,7 @@ export class UserProfileService {
 
    public async changePicture(userId: number, password: string, file: Express.Multer.File, crop: ProfileCropData) {
       const user = await this.verifyPassword(userId, password);
-      this.saveProfilePicture(user, file, crop);
+      await this.saveProfilePicture(user, file, crop);
    }
 
    public async getStats(userId: number, withDeleted = false) {
@@ -168,7 +168,7 @@ export class UserProfileService {
 
    private async saveProfilePicture(user: User, file: Express.Multer.File, crop: ProfileCropData) {
       // Create metadata folder
-      this.fileService.createMetaFolderIfNotExists(user.id);
+      await this.fileService.createMetaFolderIfNotExists(user.id);
       const userId = user.id;
 
       try {
@@ -177,7 +177,7 @@ export class UserProfileService {
          const relative = path.relative(root, dir);
 
          if (crop == undefined) {
-            this.fs.writeFileSync(dir, file.buffer);
+            await this.fs.writeFile(dir, file.buffer);
          } else {
             const image = sharp(file.buffer);
             const metadata = await image.metadata();
@@ -189,7 +189,7 @@ export class UserProfileService {
                   height: Math.floor((crop.height / 100) * metadata.height),
                })
                .toBuffer();
-            this.fs.writeFileSync(dir, resizedImg);
+            await this.fs.writeFile(dir, resizedImg);
          }
 
          // Remove previous metadata prof indexed file
@@ -199,7 +199,7 @@ export class UserProfileService {
          fileDB.absolute_path = relative;
          fileDB.user = user;
          fileDB.mime = file.mimetype;
-         this.uploadedFileRepo.save(fileDB);
+         await this.uploadedFileRepo.save(fileDB);
 
          return [true, ""];
       } catch (e) {

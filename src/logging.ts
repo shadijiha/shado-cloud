@@ -59,50 +59,62 @@ export class LoggerToDb extends ConsoleLogger {
    public error(message: any, stack?: string): void {
       message = this.alterMessage(message);
       super.error(message, stack);
-      this.logToDb(message, "error", stack);
+      void this.logToDb(message, "error", stack);
    }
 
    public log(message: any): void {
       message = this.alterMessage(message);
       super.log(message, this.context);
-      this.logToDb(message, "info", undefined);
+      void this.logToDb(message, "info", undefined);
    }
 
    public warn(message: any): void {
       message = this.alterMessage(message);
       super.warn(message, this.context);
-      this.logToDb(message, "warn", undefined);
+      void this.logToDb(message, "warn", undefined);
    }
 
-   public async debug(message: any) {
-      if (await this.loggingDisabled()) {
-         return;
-      }
-      message = this.alterMessage(message);
-      super.debug(message, this.context);
-      this.logToDb(message, "debug", undefined);
+   public debug(message: any): void {
+      // Fire-and-forget: debug logging must never block or throw at call sites.
+      void (async () => {
+         try {
+            if (await this.loggingDisabled()) {
+               return;
+            }
+            message = this.alterMessage(message);
+            super.debug(message, this.context);
+            await this.logToDb(message, "debug", undefined);
+         } catch {
+            // Swallow — logging is best-effort.
+         }
+      })();
    }
 
    private async logToDb(message: any, logType: Log["type"], stack?: string): Promise<void> {
-      const ctx = RequestContext.currentContext;
-      const req: (Request & { configService: ConfigService<EnvVariables> }) | undefined = ctx?.req;
+      try {
+         const ctx = RequestContext.currentContext;
+         const req: (Request & { configService: ConfigService<EnvVariables> }) | undefined = ctx?.req;
 
-      const log = new Log();
-      log.message = message;
-      log.controller = this.context;
-      log.route = req?.originalUrl;
-      log.type = logType;
-      log.userAgent = req && "user-agent" in req.headers ? req.headers["user-agent"] : "unknown";
-      log.ipAddress = this.getIp() || "localhost";
-      log.stack = stack?.substring(0, 512);
+         const log = new Log();
+         log.message = message;
+         log.controller = this.context;
+         log.route = req?.originalUrl;
+         log.type = logType;
+         log.userAgent = req && "user-agent" in req.headers ? req.headers["user-agent"] : "unknown";
+         log.ipAddress = this.getIp() || "localhost";
+         log.stack = stack?.substring(0, 512);
 
-      // Get user
-      const userId = getUserIdFromRequest(req);
-      if (userId != -1) {
-         log.user = await User.findOne({ where: { id: userId } });
+         // Get user
+         const userId = getUserIdFromRequest(req);
+         if (userId != -1) {
+            log.user = await User.findOne({ where: { id: userId } });
+         }
+
+         await this.logRepo.save(log);
+      } catch (e) {
+         // Logging must never throw — fall back to console only.
+         super.error(`Failed to persist log to DB: ${(e as Error).message}`);
       }
-
-      this.logRepo.save(log);
    }
 
    private async loggingDisabled(): Promise<boolean> {

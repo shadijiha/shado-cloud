@@ -63,4 +63,7 @@ async function bootstrap() {
    }
    await app.listen(envConfig.get("this-service.port.http", { infer: true }) ?? 9000, "0.0.0.0");
 }
-bootstrap();
+bootstrap().catch((err) => {
+   console.error("Fatal error during bootstrap:", err);
+   process.exit(1);
+});

@@ -28,6 +28,13 @@ this-service:
   deployment:
     github-webhook-secret: 
 
+  # Secondary "cold storage" drives for the dynamic_file_system feature.
+  # Each name maps to a mount point at /mnt/<name>; cold files live under /mnt/<name>/cloud-dir.
+  # Files unaccessed for ~6 months are demoted here (only while the dynamic_file_system flag is enabled).
+  # Leave empty to disable demotion.
+  cold-storage:
+    drives: []
+
 
 # X service communication
 cross-service:

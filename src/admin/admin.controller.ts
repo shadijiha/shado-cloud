@@ -338,7 +338,7 @@ export class AdminController {
 
       stream.pipe(res);
       stream.on("close", () => {
-         this.adminService.deleteBackupFile(filePath);
+         void this.adminService.deleteBackupFile(filePath);
       });
    }
 
