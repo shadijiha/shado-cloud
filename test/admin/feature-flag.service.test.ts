@@ -141,3 +141,45 @@ describe("FeatureFlagService - event listeners", () => {
       );
    });
 });
+
+
+describe("FeatureFlagService - default payloads + getPayload", () => {
+   const NAMESPACE = FeatureFlagNamespace.Files;
+
+   const build = () => {
+      const repo = { upsert: jest.fn().mockResolvedValue(undefined), findOne: jest.fn(), increment: jest.fn().mockResolvedValue(undefined) };
+      const redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue("OK"), del: jest.fn().mockResolvedValue(1) };
+      const service = new FeatureFlagService(repo as any, redis as any);
+      return { service, repo, redis };
+   };
+
+   it("seeds the registered default payload + description when creating the hot-tier flag", async () => {
+      const { service, repo } = build();
+      await service.createFeatureFlag({ namespace: NAMESPACE, key: "tiered_storage_hot" } as any);
+
+      const arg = repo.upsert.mock.calls[0][0];
+      expect(arg.description).toContain("Hot tier");
+      const payload = JSON.parse(arg.payload);
+      expect(payload).toMatchObject({ accessThreshold: 5, ttlSeconds: 3600, maxFileBytes: 5242880, frequencyWindowSeconds: 1800 });
+   });
+
+   it("leaves payload undefined for a flag with no registered default", async () => {
+      const { service, repo } = build();
+      await service.createFeatureFlag({ namespace: NAMESPACE, key: "some_other_flag" } as any);
+      expect(repo.upsert.mock.calls[0][0].payload).toBeUndefined();
+   });
+
+   it("getPayload merges the stored JSON over the provided defaults", async () => {
+      const { service, repo } = build();
+      repo.findOne.mockResolvedValue({ namespace: NAMESPACE, key: "tiered_storage_hot", enabled: true, payload: JSON.stringify({ accessThreshold: 99 }) });
+      const cfg = await service.getPayload(NAMESPACE, "tiered_storage_hot", { accessThreshold: 5, ttlSeconds: 3600 });
+      expect(cfg).toEqual({ accessThreshold: 99, ttlSeconds: 3600 });
+   });
+
+   it("getPayload falls back to defaults on invalid JSON", async () => {
+      const { service, repo } = build();
+      repo.findOne.mockResolvedValue({ namespace: NAMESPACE, key: "tiered_storage_hot", enabled: true, payload: "{not json" });
+      const defaults = { accessThreshold: 5 };
+      expect(await service.getPayload(NAMESPACE, "tiered_storage_hot", defaults)).toEqual(defaults);
+   });
+});

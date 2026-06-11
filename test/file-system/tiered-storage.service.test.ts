@@ -6,7 +6,11 @@ const dirent = (name: string, isDir = false): fs.Dirent =>
 
 describe("TieredStorageService", () => {
    let config: { get: jest.Mock };
-   let featureFlag: { isFeatureFlagEnabled: jest.Mock };
+   let featureFlag: { isFeatureFlagEnabled: jest.Mock; getPayload: jest.Mock };
+   let redis: {
+      getBuffer: jest.Mock; incr: jest.Mock; expire: jest.Mock; exists: jest.Mock;
+      set: jest.Mock; del: jest.Mock; strlen: jest.Mock; scan: jest.Mock;
+   };
    let metrics: {
       coldStorageDemotions: number;
       coldStorageBytesMoved: number;
@@ -16,6 +20,10 @@ describe("TieredStorageService", () => {
       coldStoragePromotions: number;
       coldStorageBytesPromoted: number;
       coldStoragePromotionErrors: number;
+      hotStorageHits: number;
+      hotStoragePromotions: number;
+      hotStorageBytesCached: number;
+      hotStorageErrors: number;
    };
    let service: TieredStorageService;
 
@@ -31,13 +39,27 @@ describe("TieredStorageService", () => {
             return undefined;
          }),
       };
-      featureFlag = { isFeatureFlagEnabled: jest.fn().mockResolvedValue(true) };
+      featureFlag = {
+         isFeatureFlagEnabled: jest.fn().mockResolvedValue(true),
+         getPayload: jest.fn().mockResolvedValue({ accessThreshold: 5, ttlSeconds: 3600, maxFileBytes: 5 * 1024 * 1024, frequencyWindowSeconds: 1800 }),
+      };
+      redis = {
+         getBuffer: jest.fn().mockResolvedValue(null),
+         incr: jest.fn().mockResolvedValue(1),
+         expire: jest.fn().mockResolvedValue(1),
+         exists: jest.fn().mockResolvedValue(0),
+         set: jest.fn().mockResolvedValue("OK"),
+         del: jest.fn().mockResolvedValue(1),
+         strlen: jest.fn().mockResolvedValue(0),
+         scan: jest.fn().mockResolvedValue(["0", []]),
+      };
       metrics = {
          coldStorageDemotions: 0, coldStorageBytesMoved: 0, coldStorageDemotionErrors: 0,
          coldStorageLastSweepMs: 0, coldStorageLastSweepAt: 0,
          coldStoragePromotions: 0, coldStorageBytesPromoted: 0, coldStoragePromotionErrors: 0,
+         hotStorageHits: 0, hotStoragePromotions: 0, hotStorageBytesCached: 0, hotStorageErrors: 0,
       };
-      service = new TieredStorageService(config as any, featureFlag as any, metrics as any);
+      service = new TieredStorageService(config as any, featureFlag as any, redis as any, metrics as any);
 
       jest.spyOn(fs.promises, "statfs").mockResolvedValue({ bavail: 1_000_000, bsize: 4096 } as any);
       jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => false } as any);
@@ -245,6 +267,83 @@ describe("TieredStorageService", () => {
          await service.removeColdData("/cloud/d");
 
          expect(fs.promises.rm).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/d/a.png", { force: true });
+      });
+   });
+
+   describe("hot tier (Redis)", () => {
+      it("getHotStream returns null when the hot flag is off", async () => {
+         featureFlag.isFeatureFlagEnabled.mockResolvedValue(false);
+         expect(await service.getHotStream("/cloud/a.png")).toBeNull();
+         expect(redis.getBuffer).not.toHaveBeenCalled();
+      });
+
+      it("getHotStream returns a stream from Redis and refreshes the TTL (sliding)", async () => {
+         redis.getBuffer.mockResolvedValue(Buffer.from("hello-bytes"));
+         const stream = await service.getHotStream("/cloud/a.png");
+         expect(stream).not.toBeNull();
+         expect(redis.expire).toHaveBeenCalledWith("hot:blob:/cloud/a.png", 3600);
+         expect(metrics.hotStorageHits).toBe(1);
+
+         const chunks: Buffer[] = [];
+         for await (const c of stream as NodeJS.ReadableStream) chunks.push(c as Buffer);
+         expect(Buffer.concat(chunks).toString()).toBe("hello-bytes");
+      });
+
+      it("getHotStream slices the buffer for a byte range", async () => {
+         redis.getBuffer.mockResolvedValue(Buffer.from("0123456789"));
+         const stream = await service.getHotStream("/cloud/a.png", { start: 2, end: 4 });
+         const chunks: Buffer[] = [];
+         for await (const c of stream as NodeJS.ReadableStream) chunks.push(c as Buffer);
+         expect(Buffer.concat(chunks).toString()).toBe("234");
+      });
+
+      it("recordServe promotes a file into Redis once it crosses the access threshold", async () => {
+         redis.incr.mockResolvedValue(5); // == accessThreshold
+         redis.exists.mockResolvedValue(0); // not cached yet
+         jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 1234 } as any);
+         jest.spyOn(fs.promises, "readFile").mockResolvedValue(Buffer.from("payload") as any);
+
+         service.recordServe("/cloud/a.png");
+         await new Promise((r) => setImmediate(r)); // let the fire-and-forget settle
+
+         expect(redis.set).toHaveBeenCalledWith("hot:blob:/cloud/a.png", expect.any(Buffer), "EX", 3600);
+         expect(metrics.hotStoragePromotions).toBe(1);
+         expect(metrics.hotStorageBytesCached).toBe(1234);
+      });
+
+      it("recordServe does not cache below the threshold", async () => {
+         redis.incr.mockResolvedValue(2); // < threshold
+         service.recordServe("/cloud/a.png");
+         await new Promise((r) => setImmediate(r));
+         expect(redis.set).not.toHaveBeenCalled();
+      });
+
+      it("recordServe skips files larger than maxFileBytes", async () => {
+         redis.incr.mockResolvedValue(10);
+         redis.exists.mockResolvedValue(0);
+         jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 10 * 1024 * 1024 } as any); // > 5 MB
+         service.recordServe("/cloud/big.bin");
+         await new Promise((r) => setImmediate(r));
+         expect(redis.set).not.toHaveBeenCalled();
+      });
+
+      it("removeHotData deletes the blob + counter and any subtree keys", async () => {
+         redis.scan.mockResolvedValue(["0", []]);
+         await service.removeHotData("/cloud/a.png");
+         expect(redis.del).toHaveBeenCalledWith("hot:blob:/cloud/a.png", "hot:freq:/cloud/a.png");
+      });
+
+      it("isHotFile reflects the blob's existence in Redis", async () => {
+         redis.exists.mockResolvedValue(1);
+         expect(await service.isHotFile("/cloud/a.png")).toBe(true);
+         redis.exists.mockResolvedValue(0);
+         expect(await service.isHotFile("/cloud/a.png")).toBe(false);
+      });
+
+      it("hotStats counts cached blobs and sums their bytes", async () => {
+         redis.scan.mockResolvedValueOnce(["0", ["hot:blob:/cloud/a.png", "hot:blob:/cloud/b.png"]]);
+         redis.strlen.mockResolvedValueOnce(100).mockResolvedValueOnce(50);
+         expect(await service.hotStats()).toEqual({ fileCount: 2, bytes: 150 });
       });
    });
 });

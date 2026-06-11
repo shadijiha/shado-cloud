@@ -148,6 +148,11 @@ describe("FilesService", () => {
                   onAccess: jest.fn(),
                   removeColdData: jest.fn().mockResolvedValue(undefined),
                   coldStats: jest.fn().mockReturnValue({ total: 0, cold: 0 }),
+                  recordServe: jest.fn(),
+                  getHotStream: jest.fn().mockResolvedValue(null),
+                  removeHotData: jest.fn().mockResolvedValue(undefined),
+                  isHotFile: jest.fn().mockResolvedValue(false),
+                  hotStats: jest.fn().mockResolvedValue({ fileCount: 0, bytes: 0 }),
                },
             },
             {

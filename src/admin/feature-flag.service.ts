@@ -5,6 +5,7 @@ import { FeatureFlag, FeatureFlagNamespace } from "src/models/admin/featureFlag"
 import { REDIS_CACHE } from "src/util";
 import { Repository } from "typeorm";
 import { CreateFeatureFlagRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
+import { defaultDescriptionFor, defaultPayloadFor } from "./feature-flag-defaults";
 
 type FeatureFlagEventListener = (value: boolean) => Promise<void>;
 
@@ -77,10 +78,30 @@ export class FeatureFlagService {
    }
 
    public async createFeatureFlag(request: CreateFeatureFlagRequest): Promise<void | never> {
+      // Seed a default payload/description (if one is registered for this flag) so the
+      // configurable JSON shape is visible to admins as soon as the flag is created.
+      const payload = request.payload ?? defaultPayloadFor(request.namespace, request.key);
+      const description = request.description ?? defaultDescriptionFor(request.namespace, request.key);
       await this.featureFlagRepo.upsert(
-         { namespace: request.namespace, key: request.key, payload: request.payload, description: request.description, enabled: false },
+         { namespace: request.namespace, key: request.key, payload, description, enabled: false },
          { conflictPaths: ["namespace", "key"], skipUpdateIfNoValuesChanged: true },
       );
+   }
+
+   /**
+    * Reads and parses a flag's JSON payload, merged over the provided defaults. Returns the
+    * defaults as-is if the flag has no payload or the payload is invalid JSON.
+    */
+   public async getPayload<T extends object>(namespace: FeatureFlagNamespace, key: string, defaults: T): Promise<T> {
+      const flag = await this.getFeatureFlag(namespace, key);
+      if (!flag?.payload) return defaults;
+      try {
+         const parsed = JSON.parse(flag.payload);
+         return { ...defaults, ...parsed };
+      } catch {
+         this.logger.warn(`Feature flag ${namespace}::${key} has an invalid JSON payload; using defaults`);
+         return defaults;
+      }
    }
 
    public async deleteFeatureFlag(namespace: FeatureFlagNamespace, key: string) {

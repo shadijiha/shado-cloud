@@ -44,6 +44,7 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
       this.measure("writeFile", "write", () => this.inner.writeFileSync(path, content, encoding));
       this.trackWrite(Buffer.byteLength(content as any));
       this.tiered?.onAccess(path);
+      void this.tiered?.removeHotData(path); // overwrite — drop any stale hot copy
    }
 
    readFileSync(path: string, encoding: BufferEncoding): string | Buffer {
@@ -54,8 +55,8 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
    }
 
    existsSync(path: string): boolean { return this.measure("exists", "meta", () => this.inner.existsSync(path)); }
-   renameSync(path: string, newPath: string): void { this.measure("rename", "write", () => this.inner.renameSync(path, newPath)); }
-   unlinkSync(path: string): void { this.measure("unlink", "write", () => this.inner.unlinkSync(path)); }
+   renameSync(path: string, newPath: string): void { this.measure("rename", "write", () => this.inner.renameSync(path, newPath)); void this.tiered?.removeHotData(path); }
+   unlinkSync(path: string): void { this.measure("unlink", "write", () => this.inner.unlinkSync(path)); void this.tiered?.removeHotData(path); }
 
    createReadStream(path: PathLike, options?: BufferEncoding): Readable {
       const stream = this.measure("createReadStream", "read", () => this.inner.createReadStream(path, options));
@@ -67,6 +68,7 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
 
    createWriteStream(path: PathLike, options?: BufferEncoding): Writable {
       const inner = this.measure("createWriteStream", "write", () => this.inner.createWriteStream(path, options));
+      void this.tiered?.removeHotData(path.toString()); // overwrite — drop any stale hot copy
       const origWrite = inner.write.bind(inner);
       const self = this;
       inner.write = function (chunk: any, ...args: any[]) {
@@ -83,6 +85,7 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
       this.measure("appendFile", "write", () => this.inner.appendFileSync(path, content));
       this.trackWrite(Buffer.byteLength(content));
       this.tiered?.onAccess(path);
+      void this.tiered?.removeHotData(path); // content changed — drop any stale hot copy
    }
 
    readdirSync(path: PathLike, options?: { encoding?: BufferEncoding | null }): Dirent[] {
