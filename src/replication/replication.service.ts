@@ -14,10 +14,10 @@ export class ReplicationService implements OnModuleInit {
    constructor(private readonly config: ConfigService<EnvVariables>, private readonly fs: AbstractFileSystem) { }
 
    public onModuleInit() {
-      this.replicate();
+      void this.replicate();
    }
 
-   @Cron(CronExpression.EVERY_MINUTE)
+   @Cron(CronExpression.EVERY_MINUTE, { name: "replication:replicate" })
    public async replicate() {
       if (this.isReplicating) {
          this.logger.warn("A replication job is currently running. Skipping this Cron iteration");
@@ -35,7 +35,7 @@ export class ReplicationService implements OnModuleInit {
             }
 
             const masterIp = "http://" + this.config.get("this-service.replication.master-or-replica-ip", { infer: true });
-            const replicaFiles = this.listCloudDir();
+            const replicaFiles = await this.listCloudDir();
             const masterFiles: typeof replicaFiles = await (await fetch(`${masterIp}/replication/listall`)).json();
 
             // Files to replicate
@@ -55,21 +55,22 @@ export class ReplicationService implements OnModuleInit {
                }
                const filePath = path.join(this.cloudDir, file.path);
 
-               await new Promise<void>(async (resolve, reject) => {
-                  try {
-                     const dest = this.fs.createWriteStream(filePath);
+               const dest = this.fs.createWriteStream(filePath);
+               await new Promise<void>((resolve, reject) => {
+                  dest.on("finish", resolve);
+                  dest.on("error", reject);
 
-                     // Stream chunks directly to file
-                     for await (const chunk of response.body as any) {
-                        dest.write(chunk);
+                  void (async () => {
+                     try {
+                        // Stream chunks directly to file
+                        for await (const chunk of response.body as any) {
+                           dest.write(chunk);
+                        }
+                        dest.end();
+                     } catch (err) {
+                        reject(err);
                      }
-
-                     dest.end();
-                     dest.on("finish", resolve);
-                     dest.on("error", reject);
-                  } catch (err) {
-                     reject(err);
-                  }
+                  })();
                });
 
                this.logger.log(`Done ${filesReplicated + 1} of ${replicaDoesNotHave.length} files`);
@@ -102,15 +103,15 @@ export class ReplicationService implements OnModuleInit {
       }
    }
 
-   public listCloudDir() {
+   public async listCloudDir() {
       return this.listRecusively(this.cloudDir);
    }
 
-   public getFile(path_: string) {
+   public async getFile(path_: string) {
       return new StreamableFile(this.fs.createReadStream(path.join(this.cloudDir, path_)));
    }
 
-   private listRecusively(path_: string) {
+   private async listRecusively(path_: string) {
       const entries = this.fs.readdirSync(path_);
 
       // Get files within the current directory and add a path key to the file objects
@@ -126,7 +127,7 @@ export class ReplicationService implements OnModuleInit {
        * current function itself
        */
       for (const folder of folders) {
-         files.push(...this.listRecusively(path.join(path_, folder.name)));
+         files.push(...(await this.listRecusively(path.join(path_, folder.name))));
       }
       return files;
    }

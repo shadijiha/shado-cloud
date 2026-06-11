@@ -82,6 +82,19 @@ export class UsedData {
       return this.images + this.videos + this.other + this.documents;
    }
 }
+export class ColdStorageStats {
+   @ApiProperty({ description: "Total number of files in the user's drive" })
+   total = 0;
+
+   @ApiProperty({ description: "Number of those files currently moved to cold (tiered) storage" })
+   cold = 0;
+
+   @ApiProperty({ description: "Number of the user's files currently cached in the hot (Redis) tier" })
+   hot = 0;
+
+   @ApiProperty({ description: "Total bytes the user has cached in the hot (Redis) tier" })
+   hot_bytes = 0;
+}
 export class ProfileStats {
    @ApiProperty({ type: [AccessFileStat] })
    most_accesed_files: AccessFileStat[];
@@ -91,6 +104,9 @@ export class ProfileStats {
 
    @ApiProperty({ type: UsedData })
    used_data: UsedData;
+
+   @ApiProperty({ type: ColdStorageStats })
+   cold_storage: ColdStorageStats;
 }
 
 /**

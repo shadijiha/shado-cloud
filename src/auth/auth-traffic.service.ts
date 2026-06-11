@@ -73,7 +73,7 @@ export class AuthTrafficService implements OnModuleInit {
       };
    }
 
-   @Cron(CronExpression.EVERY_MINUTE)
+   @Cron(CronExpression.EVERY_MINUTE, { name: "auth-traffic:persist" })
    async persist() {
       const byPattern: Record<string, TrafficRecord> = {};
       for (const [pattern, rec] of this.traffic) {

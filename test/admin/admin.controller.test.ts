@@ -14,6 +14,8 @@ import { DeploymentService } from "src/admin/deployment.service";
 import { AuthService } from "src/auth/auth.service";
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { TieredStorageService } from "src/file-system/tiered-storage.service";
+import { CronAdminService } from "src/admin/cron.service";
 
 describe("AdminController", () => {
    let adminController: AdminController;
@@ -93,6 +95,19 @@ describe("AdminController", () => {
                   getCurrentDeployment: jest.fn().mockReturnValue(null),
                   startDeployment: jest.fn(),
                   getProject: jest.fn().mockResolvedValue({ slug: "backend", branch: "master", enabled: true }),
+               },
+            },
+            {
+               provide: TieredStorageService,
+               useValue: {
+                  getOverview: jest.fn().mockResolvedValue({ flags: { demotion: false, promotion: false, hot: false }, hot: { fileCount: 0, bytes: 0, config: { accessThreshold: 5, ttlSeconds: 3600, maxFileBytes: 5242880, frequencyWindowSeconds: 1800 } }, drives: [] }),
+               },
+            },
+            {
+               provide: CronAdminService,
+               useValue: {
+                  list: jest.fn().mockReturnValue([]),
+                  trigger: jest.fn().mockResolvedValue({ name: "x", triggeredAt: new Date().toISOString() }),
                },
             },
             {

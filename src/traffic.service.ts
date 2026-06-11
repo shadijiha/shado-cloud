@@ -44,7 +44,7 @@ export class TrafficService implements OnModuleInit {
       this.totalBytesSent += bytesSent;
       this.totalBytesReceived += bytesReceived;
 
-      this.persist();
+      void this.persist();
    }
 
    getStats() {

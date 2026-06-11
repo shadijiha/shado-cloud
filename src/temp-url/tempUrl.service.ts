@@ -37,7 +37,7 @@ export class TempUrlService {
       tempUrl.expires_at = expires_at;
       tempUrl.filepath = filepath;
       tempUrl.is_readonly = is_readonly;
-      this.tempUrlRepo.save(tempUrl);
+      await this.tempUrlRepo.save(tempUrl);
 
       return `${request.protocol}://${request.headers.host}/temp/${tempUrl.url}/get`;
    }
@@ -57,7 +57,7 @@ export class TempUrlService {
       }
 
       temp.requests += 1;
-      this.tempUrlRepo.save(temp);
+      await this.tempUrlRepo.save(temp);
 
       const dir = await this.fileService.absolutePath(temp.user.id, temp.filepath);
 
@@ -88,7 +88,7 @@ export class TempUrlService {
       }
 
       temp.requests += 1;
-      this.tempUrlRepo.save(temp);
+      await this.tempUrlRepo.save(temp);
       const dir = await this.fileService.absolutePath(temp.user.id, temp.filepath);
 
       // Check if file still exists
@@ -129,7 +129,7 @@ export class TempUrlService {
       }
 
       // Otherwise delete
-      this.tempUrlRepo.delete(tempUrl.id);
+      await this.tempUrlRepo.delete(tempUrl.id);
    }
 
    private verifyUrlConditions(tempUrl: TempUrl, readAndWrite = false) {

@@ -1,9 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
+import { Cron, CronExpression, SchedulerRegistry } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "./config/config.validator";
 import { TrafficService } from "./traffic.service";
 import { isDev } from "./util";
+import { collectCronJobs } from "./admin/cron.service";
 
 @Injectable()
 export class HeartbeatService {
@@ -12,9 +13,10 @@ export class HeartbeatService {
    constructor(
       private readonly config: ConfigService<EnvVariables>,
       private readonly traffic: TrafficService,
+      private readonly schedulerRegistry: SchedulerRegistry,
    ) {}
 
-   @Cron(CronExpression.EVERY_30_SECONDS)
+   @Cron(CronExpression.EVERY_30_SECONDS, { name: "heartbeat:beat" })
    async beat() {
       const host = this.config.get("cross-service.metrics-api.host", { infer: true });
       if (!host) return;
@@ -34,6 +36,7 @@ export class HeartbeatService {
                name: "shado-cloud-backend",
                port: this.config.get("this-service.port.http", { infer: true }) ?? 9000,
                traffic: this.traffic.getStats(),
+               crons: collectCronJobs(this.schedulerRegistry),
             }),
          });
       } catch(e) {

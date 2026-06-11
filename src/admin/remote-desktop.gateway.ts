@@ -142,7 +142,7 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    }
 
    /** Disconnect any client whose remote-access grant has expired. */
-   @Cron(CronExpression.EVERY_30_SECONDS)
+   @Cron(CronExpression.EVERY_30_SECONDS, { name: "remote-desktop:sweep-grants" })
    private async sweepExpiredGrants() {
       for (const [clientId, entry] of this.clientUsers) {
          try {
@@ -168,13 +168,15 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    private startMjpegFallback() {
       const captureCmd = this.display.getScreenshotCommand();
       const mime = this.display.getScreenshotMimeType();
-      this.streamInterval = setInterval(async () => {
-         try {
-            const { stdout } = await execAsync(captureCmd, { maxBuffer: 10 * 1024 * 1024, timeout: 1000 });
-            this.server.emit("frame", `data:${mime};base64,${stdout.trim()}`);
-         } catch {
-            // Silent fail - WebRTC might be working
-         }
+      this.streamInterval = setInterval(() => {
+         void (async () => {
+            try {
+               const { stdout } = await execAsync(captureCmd, { maxBuffer: 10 * 1024 * 1024, timeout: 1000 });
+               this.server.emit("frame", `data:${mime};base64,${stdout.trim()}`);
+            } catch {
+               // Silent fail - WebRTC might be working
+            }
+         })();
       }, 500);
    }
 

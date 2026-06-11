@@ -53,7 +53,7 @@ export class AuthService {
       if (cached) {
          const user = JSON.parse(cached) as User;
          if (user.shadoUserId === shadoUserId) return user;
-         this.cache.del(key);
+         await this.cache.del(key);
       }
 
       const remote = await this.send<{ id: string; email: string } | null>(
@@ -68,7 +68,7 @@ export class AuthService {
          user = await this.userRepo.save(user);
       }
 
-      this.cache.set(key, JSON.stringify(user));
+      await this.cache.set(key, JSON.stringify(user));
       return user;
    }
 

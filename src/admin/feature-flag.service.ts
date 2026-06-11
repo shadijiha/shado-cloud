@@ -1,17 +1,31 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import type Redis from "ioredis";
 import { FeatureFlag, FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { REDIS_CACHE } from "src/util";
 import { Repository } from "typeorm";
 import { CreateFeatureFlagRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
+import { defaultDescriptionFor, defaultPayloadFor } from "./feature-flag-defaults";
+
+type FeatureFlagEventListener = (value: boolean) => Promise<void>;
 
 @Injectable()
 export class FeatureFlagService {
+
+   // How long a feature flag is cached in Redis. Bounds how long a flag edited
+   // directly in the DB (bypassing enable/disableFeatureFlag) stays stale.
+   private static readonly CACHE_TTL_SECONDS = 30;
+
+   private readonly eventListeners: Record<string, { listenerId: string, listener: FeatureFlagEventListener }[]> = {};
+
+   // Plain logger (not LoggerToDb) — LoggerToDb depends on FeatureFlagService, so injecting
+   // it here would create a circular dependency.
+   private readonly logger = new Logger(FeatureFlagService.name);
+
    constructor(
       @InjectRepository(FeatureFlag) private readonly featureFlagRepo: Repository<FeatureFlag>,
       @Inject(REDIS_CACHE) private readonly redis: Redis,
-   ) {}
+   ) { }
 
    public getFeatureFlags(namespace?: FeatureFlagNamespace): Promise<FeatureFlag[]> {
       return this.featureFlagRepo.find(namespace ? { where: { namespace } } : undefined);
@@ -28,7 +42,9 @@ export class FeatureFlagService {
 
       const flag = await this.featureFlagRepo.findOne({ where: { namespace, key } });
       if (flag) {
-         await this.redis.set(cacheKey, JSON.stringify(flag));
+         // TTL so flags toggled directly in the DB (bypassing enable/disableFeatureFlag,
+         // which would otherwise invalidate this key) become visible within the window.
+         await this.redis.set(cacheKey, JSON.stringify(flag), "EX", FeatureFlagService.CACHE_TTL_SECONDS);
          this.inrementFeatureFlagTriggerCount(namespace, key, false);
       } else {
          // Create it so we can disabled/enable it in the frontend
@@ -43,8 +59,10 @@ export class FeatureFlagService {
          throw new Error(`Feature flag ${namespace}::${key} not found`);
       }
       flag.enabled = true;
-      this.featureFlagRepo.save(flag);
-      this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
+      await this.featureFlagRepo.save(flag);
+      await this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
+
+      await this.invokeEventListeners(namespace, key, true);
    }
 
    public async disableFeatureFlag(namespace: FeatureFlagNamespace, key: string): Promise<void | never> {
@@ -53,20 +71,42 @@ export class FeatureFlagService {
          throw new Error(`Feature flag ${namespace}::${key} not found`);
       }
       flag.enabled = false;
-      this.featureFlagRepo.save(flag);
-      this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
+      await this.featureFlagRepo.save(flag);
+      await this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
+
+      await this.invokeEventListeners(namespace, key, false);
    }
 
    public async createFeatureFlag(request: CreateFeatureFlagRequest): Promise<void | never> {
+      // Seed a default payload/description (if one is registered for this flag) so the
+      // configurable JSON shape is visible to admins as soon as the flag is created.
+      const payload = request.payload ?? defaultPayloadFor(request.namespace, request.key);
+      const description = request.description ?? defaultDescriptionFor(request.namespace, request.key);
       await this.featureFlagRepo.upsert(
-         { namespace: request.namespace, key: request.key, payload: request.payload, description: request.description, enabled: false },
+         { namespace: request.namespace, key: request.key, payload, description, enabled: false },
          { conflictPaths: ["namespace", "key"], skipUpdateIfNoValuesChanged: true },
       );
    }
 
+   /**
+    * Reads and parses a flag's JSON payload, merged over the provided defaults. Returns the
+    * defaults as-is if the flag has no payload or the payload is invalid JSON.
+    */
+   public async getPayload<T extends object>(namespace: FeatureFlagNamespace, key: string, defaults: T): Promise<T> {
+      const flag = await this.getFeatureFlag(namespace, key);
+      if (!flag?.payload) return defaults;
+      try {
+         const parsed = JSON.parse(flag.payload);
+         return { ...defaults, ...parsed };
+      } catch {
+         this.logger.warn(`Feature flag ${namespace}::${key} has an invalid JSON payload; using defaults`);
+         return defaults;
+      }
+   }
+
    public async deleteFeatureFlag(namespace: FeatureFlagNamespace, key: string) {
       await this.featureFlagRepo.delete({ namespace, key });
-      this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
+      await this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
    }
 
    public async updateFeatureFlag(namespace: FeatureFlagNamespace, key: string, request: UpdateFeatureFlagRequest) {
@@ -78,7 +118,7 @@ export class FeatureFlagService {
       flag.description = request.description;
 
       await this.featureFlagRepo.save(flag);
-      this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
+      await this.redis.del(this.getFeatureFlagCacheKey(namespace, key));
    }
 
    public async isFeatureFlagEnabled(namespace: FeatureFlagNamespace, key: string): Promise<boolean> {
@@ -90,11 +130,40 @@ export class FeatureFlagService {
       return !(await this.isFeatureFlagEnabled(namespace, key));
    }
 
+   public addEventListener(namespace: FeatureFlagNamespace, key: string, eventListenerId: string, func: FeatureFlagEventListener) {
+      this.eventListeners[`${namespace}::${key}`] ??= [];
+      this.eventListeners[`${namespace}::${key}`].push({ listenerId: eventListenerId, listener: func });
+   }
+
+   public removeEventListener(namespace: FeatureFlagNamespace, key: string, eventListenerId: string) {
+      if (this.eventListeners[`${namespace}::${key}`]) {
+         this.eventListeners[`${namespace}::${key}`] = this.eventListeners[`${namespace}::${key}`].filter(x => x.listenerId !== eventListenerId);
+
+         if (this.eventListeners[`${namespace}::${key}`].length === 0) {
+            delete this.eventListeners[`${namespace}::${key}`];
+         }
+      }
+   }
+
+   private async invokeEventListeners(namespace: FeatureFlagNamespace, key: string, value: boolean) {
+      for (const e of this.eventListeners[`${namespace}::${key}`] ?? []) {
+         this.logger.log(`Invoking event listener ${e.listenerId} for feature flag ${namespace}::${key}`);
+         try {
+            await e.listener(value);
+         } catch (err) {
+            this.logger.error(`Event listener ${e.listenerId} failed for feature flag ${namespace}::${key}: ${err}`);
+         }
+      }
+   }
+
    private getFeatureFlagCacheKey(namespace: FeatureFlagNamespace, key: string): string {
       return `feature_flag:${namespace}:${key}`;
    }
 
    private inrementFeatureFlagTriggerCount(namespace: FeatureFlagNamespace, key: string, cached: boolean): void {
-      this.featureFlagRepo.increment({ namespace, key }, `${cached ? "cached" : "db"}_trigger_count`, 1);
+      // Fire-and-forget telemetry; failures should not affect the flag lookup.
+      void this.featureFlagRepo
+         .increment({ namespace, key }, `${cached ? "cached" : "db"}_trigger_count`, 1)
+         .catch((e) => this.logger.error(`Failed to increment trigger count for ${namespace}::${key}: ${e}`));
    }
 }

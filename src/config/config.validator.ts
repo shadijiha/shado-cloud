@@ -8,6 +8,7 @@ import {
    IsOptional,
    isString,
    IsString,
+   IsArray,
    Max,
    Min,
    MinLength,
@@ -148,6 +149,14 @@ class DeploymentConfig {
    "github-webhook-secret": string;
 }
 
+class ColdStorageConfig {
+   // Names of secondary drives used for cold storage, each mounted at /mnt/<name>.
+   @IsArray()
+   @IsString({ each: true })
+   @IsOptional()
+   drives?: string[];
+}
+
 class ThisServiceConfig {
    @IsEnum(Stage)
    stage: Stage;
@@ -185,6 +194,11 @@ class ThisServiceConfig {
    @Type(() => DeploymentConfig)
    @IsOptional()
    deployment: DeploymentConfig;
+
+   @ValidateNested()
+   @Type(() => ColdStorageConfig)
+   @IsOptional()
+   "cold-storage": ColdStorageConfig;
 }
 
 /* ---------------- CROSS SERVICE ---------------- */

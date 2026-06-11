@@ -355,7 +355,7 @@ export class AdminService {
          archive.on("error", reject);
 
          archive.directory(sourceDir, false);
-         archive.finalize();
+         void archive.finalize();
       });
    }
 
@@ -381,9 +381,9 @@ export class AdminService {
          const dbHost = this.config.get("db.host", { infer: true }) || "localhost";
          const dbUser = this.config.get("db.username", { infer: true });
          const dbPass = this.config.get("db.password", { infer: true });
+         const dumpPath = `${tmpDir}/mysql-dump.sql`;
+         const output = this.fs.createWriteStream(dumpPath);
          await new Promise<void>((resolve, reject) => {
-            const dumpPath = `${tmpDir}/mysql-dump.sql`;
-            const output = this.fs.createWriteStream(dumpPath);
             const child = require("child_process").spawn("mysqldump", [
                "-h", dbHost,
                "-u", dbUser,
@@ -415,7 +415,7 @@ export class AdminService {
             child.on("error", reject);
          });
       } catch (e) {
-         await this.fs.writeFileSync(`${tmpDir}/mysql-error.txt`, (e as Error).message);
+         this.fs.writeFileSync(`${tmpDir}/mysql-error.txt`, (e as Error).message);
          subject.next({ data: { type: "progress", step: "MySQL dump failed", phase: "mysql" } });
       }
 
@@ -430,8 +430,8 @@ export class AdminService {
       subject.next({ data: { type: "progress", step: "Scanning files...", percent: 0, phase: "zip" } });
       const totalSize = await this.getDirSize(tmpDir);
 
+      const output = this.fs.createWriteStream(zipPath);
       await new Promise<void>((resolve, reject) => {
-         const output = this.fs.createWriteStream(zipPath);
          const archive = archiver("zip", { zlib: { level: 9 } });
 
          archive.on("error", reject);
@@ -453,7 +453,7 @@ export class AdminService {
 
          archive.pipe(output);
          archive.directory(tmpDir, false);
-         archive.finalize();
+         void archive.finalize();
       });
 
       this.fs.rmdirSync(tmpDir, { recursive: true });
@@ -486,8 +486,8 @@ export class AdminService {
       const totalSize = await this.getDirSize(cloudDir);
       let processedSize = 0;
 
+      const output = this.fs.createWriteStream(zipPath);
       await new Promise<void>((resolve, reject) => {
-         const output = this.fs.createWriteStream(zipPath);
          const archive = archiver("zip", { zlib: { level: 1 } }); // Fast compression for large files
 
          archive.on("error", reject);
@@ -501,7 +501,7 @@ export class AdminService {
 
          archive.pipe(output);
          archive.directory(cloudDir, "cloud");
-         archive.finalize();
+         void archive.finalize();
       });
 
       subject?.next({ data: { type: "complete", downloadPath: `/admin/backup/download?file=${encodeURIComponent(zipPath)}` } });
@@ -512,13 +512,13 @@ export class AdminService {
 
    private async getDirSize(dir: string): Promise<number> {
       let size = 0;
-      const files = await this.fs.readdirSync(dir);
+      const files = this.fs.readdirSync(dir);
       for (const file of files) {
          const filePath = path.join(dir, file.name);
          if (file.isDirectory()) {
             size += await this.getDirSize(filePath);
          } else {
-            const stat = await this.fs.statSync(filePath);
+            const stat = this.fs.statSync(filePath);
             size += stat.size;
          }
       }
@@ -535,7 +535,7 @@ export class AdminService {
       return this.fs.createReadStream(filePath);
    }
 
-   public deleteBackupFile(filePath: string): void {
+   public async deleteBackupFile(filePath: string): Promise<void> {
       try {
          this.fs.unlinkSync(filePath);
       } catch (e) {
@@ -546,7 +546,7 @@ export class AdminService {
    /**
     * Background images management
     */
-   private getBackgroundsDir(): string {
+   private async getBackgroundsDir(): Promise<string> {
       const dir = path.join(this.config.get("this-service.cloud-dir", { infer: true }), "_system", "backgrounds");
       if (!this.fs.existsSync(dir)) {
          this.fs.mkdirSync(dir, { recursive: true });
@@ -555,7 +555,7 @@ export class AdminService {
    }
 
    public async getBackgroundImages(): Promise<{ images: string[] }> {
-      const dir = this.getBackgroundsDir();
+      const dir = await this.getBackgroundsDir();
       try {
          const files = this.fs.readdirSync(dir);
          const images = files.map(f => f.name).filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f));
@@ -573,7 +573,7 @@ export class AdminService {
          throw new HttpException("Invalid file type. Only images allowed.", HttpStatus.BAD_REQUEST);
       }
 
-      const dir = this.getBackgroundsDir();
+      const dir = await this.getBackgroundsDir();
       const ext = path.extname(file.originalname) || ".jpg";
       const filename = `bg_${Date.now()}${ext}`;
       const filePath = path.join(dir, filename);
@@ -586,7 +586,7 @@ export class AdminService {
       if (filename.includes("/") || filename.includes("..")) {
          throw new HttpException("Invalid filename", HttpStatus.BAD_REQUEST);
       }
-      const filePath = path.join(this.getBackgroundsDir(), filename);
+      const filePath = path.join(await this.getBackgroundsDir(), filename);
       if (!this.fs.existsSync(filePath)) {
          throw new HttpException("Image not found", HttpStatus.NOT_FOUND);
       }
@@ -597,7 +597,7 @@ export class AdminService {
       if (filename.includes("/") || filename.includes("..")) {
          throw new HttpException("Invalid filename", HttpStatus.BAD_REQUEST);
       }
-      const filePath = path.join(this.getBackgroundsDir(), filename);
+      const filePath = path.join(await this.getBackgroundsDir(), filename);
       if (!this.fs.existsSync(filePath)) {
          throw new HttpException("Image not found", HttpStatus.NOT_FOUND);
       }
@@ -605,6 +605,6 @@ export class AdminService {
    }
 
    public invalidateThumbnails() {
-      this.fileService.invalidateAllThumbnails();
+      return this.fileService.invalidateAllThumbnails();
    }
 }

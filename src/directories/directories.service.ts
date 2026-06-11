@@ -13,6 +13,7 @@ import { In, Like, Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
 import { InjectRepository } from "@nestjs/typeorm";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 
@@ -26,6 +27,7 @@ export class DirectoriesService {
       @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
+      @Inject() private readonly tieredStorage: TieredStorageService,
    ) {}
 
    public async root(userId: number) {
@@ -43,18 +45,24 @@ export class DirectoriesService {
       const result: Array<DirectoryInfo | FileInfo> = [];
 
       for (const file of files) {
-         if (file.isDirectory()) {
-            const userRoot = await this.fileService.getUserRootPath(userId);
-            const fullPath = path.join(dir, file.name);
-            const stats = this.fs.statSync(fullPath);
-            result.push({
-               name: file.name,
-               path: path.relative(userRoot, dir),
-               is_dir: true,
-               lastModified: stats.mtime.toISOString(),
-            });
-         } else {
-            result.push(await this.fileService.info(userId, path.join(relativePath, file.name), fetch_related_keys_in_redis ?? false, fetch_db_records ?? false));
+         try {
+            if (file.isDirectory()) {
+               const userRoot = await this.fileService.getUserRootPath(userId);
+               const fullPath = path.join(dir, file.name);
+               const stats = this.fs.statSync(fullPath);
+               result.push({
+                  name: file.name,
+                  path: path.relative(userRoot, dir),
+                  is_dir: true,
+                  lastModified: stats.mtime.toISOString(),
+               });
+            } else {
+               result.push(await this.fileService.info(userId, path.join(relativePath, file.name), fetch_related_keys_in_redis ?? false, fetch_db_records ?? false));
+            }
+         } catch (e) {
+            // Don't let one unreadable entry (e.g. a dangling symlink from a cold drive
+            // that's missing/unmounted) abort the whole directory listing.
+            this.logger.error(`Skipping unreadable entry "${file.name}" in ${dir}: ${(e as Error).message}`);
          }
       }
 
@@ -97,10 +105,10 @@ export class DirectoriesService {
 
       // Get all files in that dir recusively, and for each
       // delete the index from DB
-      for (const file of this.getAllFiles(dir)) {
+      for (const file of await this.getAllFiles(dir)) {
          const relative = path.relative(root, file.path);
          try {
-            this.uploadedFileRepo.softRemove({
+            await this.uploadedFileRepo.softRemove({
                absolute_path: relative,
                user: { id: userId },
             });
@@ -109,6 +117,9 @@ export class DirectoriesService {
          }
       }
 
+      // Free any cold blobs backing symlinks under this directory before removing it.
+      await this.tieredStorage.removeColdData(dir);
+      await this.tieredStorage.removeHotData(dir);
       this.fs.rmdirSync(dir, { recursive: true });
    }
 
@@ -135,7 +146,7 @@ export class DirectoriesService {
 
    public async listrecursive(userId: number, showHidden = false) {
       const dir = await this.fileService.getUserRootPath(userId);
-      const files = this.getAllFiles(dir);
+      const files = await this.getAllFiles(dir);
 
       return files
          .map((filedata) => {
@@ -157,7 +168,7 @@ export class DirectoriesService {
       const stat = new SearchStat();
       stat.text = searchText;
       stat.user = await this.userService.getById(userId);
-      this.searchStatRepo.save(stat);
+      await this.searchStatRepo.save(stat);
 
       return files ?? [];
    }
@@ -169,7 +180,7 @@ export class DirectoriesService {
          throw new Error("You do not have permission to zip this directory");
       }
 
-      if (!this.fs.lstatSync(dir).isDirectory()) {
+      if (!(this.fs.lstatSync(dir)).isDirectory()) {
          throw new Error("FIle to zip must be a directory");
       }
 
@@ -181,7 +192,7 @@ export class DirectoriesService {
       });
       archive.pipe(output);
       archive.directory(dir, false);
-      archive.finalize();
+      void archive.finalize();
    }
 
    public async unzip(userId: number, name: string) {
@@ -198,7 +209,7 @@ export class DirectoriesService {
       await extract(dir, { dir: outputPath });
 
       // After extracting the zip, go though all the files and index them
-      const files = this.getAllFiles(outputPath);
+      const files = await this.getAllFiles(outputPath);
       const absoluteRootPath = await this.fileService.absolutePath(userId, "");
       const user = await this.userService.getById(userId);
 
@@ -208,7 +219,7 @@ export class DirectoriesService {
          indexed.user = user;
          indexed.absolute_path = relativePath;
          indexed.mime = FilesService.detectFile(file.path);
-         this.uploadedFileRepo.save(indexed);
+         await this.uploadedFileRepo.save(indexed);
       }
    }
 
@@ -220,7 +231,7 @@ export class DirectoriesService {
       }
    }
 
-   private getAllFiles(path: string) {
+   private async getAllFiles(path: string) {
       const entries = this.fs.readdirSync(path);
 
       // Get files within the current directory and add a path key to the file objects
@@ -237,7 +248,7 @@ export class DirectoriesService {
             */
 
       for (const folder of folders) {
-         files.push(...this.getAllFiles(`${path}/${folder.name}/`));
+         files.push(...await this.getAllFiles(`${path}/${folder.name}/`));
       }
 
       return files;

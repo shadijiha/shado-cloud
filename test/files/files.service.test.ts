@@ -14,6 +14,7 @@ import { User } from "src/models/user";
 import type Redis from "ioredis";
 import { ThumbnailCacheInterceptor } from "src/files/thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { REDIS_CACHE } from "src/util";
@@ -141,6 +142,20 @@ describe("FilesService", () => {
                },
             },
             {
+               provide: TieredStorageService,
+               useValue: {
+                  isColdFile: jest.fn().mockReturnValue(false),
+                  onAccess: jest.fn(),
+                  removeColdData: jest.fn().mockResolvedValue(undefined),
+                  coldStats: jest.fn().mockReturnValue({ total: 0, cold: 0 }),
+                  recordServe: jest.fn(),
+                  getHotStream: jest.fn().mockResolvedValue(null),
+                  removeHotData: jest.fn().mockResolvedValue(undefined),
+                  isHotFile: jest.fn().mockResolvedValue(false),
+                  hotStats: jest.fn().mockResolvedValue({ fileCount: 0, bytes: 0 }),
+               },
+            },
+            {
                provide: getRepositoryToken(User),
                useValue: {},
             },
@@ -181,7 +196,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(2048) }; // 2KB max space
 
          // Mock external service methods
          userService.getById = jest.fn().mockResolvedValue(user);
@@ -207,7 +222,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(1024) }; // 1KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(1024) }; // 1KB max space
 
          userService.getById = jest.fn().mockResolvedValue(user);
          service.getUsedData = jest.fn().mockResolvedValue(usedData);
@@ -224,7 +239,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(2048) }; // 2KB max space
 
          userService.getById = jest.fn().mockResolvedValue(user);
          service.getUsedData = jest.fn().mockResolvedValue(usedData);
@@ -241,7 +256,7 @@ describe("FilesService", () => {
 
       it("should handle file replacement and invalidate thumbnails if file exists", async () => {
          // Arrange
-         const user = { id: 1, email: "cait@queen.com", getMaxData: jest.fn().mockResolvedValue(2048) };
+         const user = { id: 1, email: "cait@queen.com", getMaxData: jest.fn().mockReturnValue(2048) };
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
 
@@ -300,7 +315,7 @@ describe("FilesService", () => {
          const userId = 1;
          const dest = "/uploads";
          const usedData = { total: jest.fn().mockReturnValue(1024) }; // 1KB used
-         const user = { getMaxData: jest.fn().mockResolvedValue(2048) }; // 2KB max space
+         const user = { getMaxData: jest.fn().mockReturnValue(2048) }; // 2KB max space
 
          userService.getById = jest.fn().mockResolvedValue(user);
          service.getUsedData = jest.fn().mockResolvedValue(usedData);

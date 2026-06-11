@@ -84,7 +84,7 @@ export class DeploymentController {
             await this.deploymentService.enqueue(slug, "github-webhook");
             return { message: "Deployment queued" };
          }
-         this.deploymentService.startDeployment(slug, "github-webhook");
+         void this.deploymentService.startDeployment(slug, "github-webhook");
 
          return { message: "Deployment triggered successfully" };
       } catch (error) {

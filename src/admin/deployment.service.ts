@@ -101,8 +101,12 @@ export class DeploymentService implements OnModuleInit {
    ) {}
 
    private async sendDeploymentEmail(options: Parameters<EmailService["sendEmail"]>[0]) {
-      if (await this.featureFlagService.isFeatureFlagEnabled(FeatureFlagNamespace.Admin, "allow_deployment_email_sending")) {
-         this.emailService.sendEmail(options);
+      try {
+         if (await this.featureFlagService.isFeatureFlagEnabled(FeatureFlagNamespace.Admin, "allow_deployment_email_sending")) {
+            await this.emailService.sendEmail(options);
+         }
+      } catch (e) {
+         this.logger.error(`Failed to send deployment email: ${(e as Error).message}`);
       }
    }
 
@@ -122,7 +126,7 @@ export class DeploymentService implements OnModuleInit {
             deployment.currentStep = { step: remainingSteps[0].step, status: "running", output: "", startedAt: new Date() };
             await this.saveState(deployment, REDIS_KEY_CURRENT);
          }
-         this.runSteps(remainingSteps, this.resolveWorkDir(project), deployment.project, deployment);
+         void this.runSteps(remainingSteps, this.resolveWorkDir(project), deployment.project, deployment);
       }
    }
 
@@ -273,7 +277,7 @@ export class DeploymentService implements OnModuleInit {
       if (!project) throw new Error(`Project ${current.project} not found`);
 
       const stepsToRun = this.getFollowingSteps(current.currentStep, project.getSteps());
-      this.runSteps(stepsToRun, this.resolveWorkDir(project), current.project, current);
+      void this.runSteps(stepsToRun, this.resolveWorkDir(project), current.project, current);
       return this.deploymentSubject;
    }
 
@@ -314,7 +318,7 @@ export class DeploymentService implements OnModuleInit {
       };
       await this.saveState(deployment, REDIS_KEY_CURRENT);
 
-      this.runDeployment(steps, workDir, projectSlug, deployment);
+      void this.runDeployment(steps, workDir, projectSlug, deployment);
 
       return this.deploymentSubject;
    }
@@ -426,7 +430,7 @@ export class DeploymentService implements OnModuleInit {
             this.emit({ type: "deployment_complete", deployment });
             this.deploymentSubject?.complete();
             this.logger.error(`Deployment failed at ${stepConfig.step}: ${stepState.error}`);
-            this.sendDeploymentEmail({
+            void this.sendDeploymentEmail({
                subject: `Shado Cloud - ${projectSlug} deployment FAILED`,
                html: this.buildEmailHtml({
                   title: "Deployment Failed",
@@ -438,7 +442,7 @@ export class DeploymentService implements OnModuleInit {
                   deployPageUrl,
                }),
             });
-            this.processQueue();
+            void this.processQueue();
             return;
          }
       }
@@ -452,7 +456,7 @@ export class DeploymentService implements OnModuleInit {
       this.logger.log(`Deployment completed successfully`);
 
       const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
-      this.sendDeploymentEmail({
+      void this.sendDeploymentEmail({
          subject: `Shado Cloud - ${projectSlug} deployment SUCCESS`,
          html: this.buildEmailHtml({
             title: "Deployment Successful",
@@ -463,7 +467,7 @@ export class DeploymentService implements OnModuleInit {
             deployPageUrl,
          }),
       });
-      this.processQueue();
+      void this.processQueue();
    }
 
    private async runDeployment(
@@ -487,7 +491,7 @@ export class DeploymentService implements OnModuleInit {
          return;
       }
 
-      this.sendDeploymentEmail({
+      void this.sendDeploymentEmail({
          subject: `Shado Cloud - ${projectSlug} deployment started`,
          html: this.buildEmailHtml({
             title: "Deployment Started",

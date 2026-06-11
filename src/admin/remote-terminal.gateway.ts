@@ -235,7 +235,7 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
    }
 
    /** Disconnect any session whose remote-access grant has expired. */
-   @Cron(CronExpression.EVERY_30_SECONDS)
+   @Cron(CronExpression.EVERY_30_SECONDS, { name: "remote-terminal:sweep-grants" })
    private async sweepExpiredGrants() {
       for (const [clientId, session] of this.sessions) {
          try {

@@ -17,6 +17,7 @@ import { Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
 import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import type Redis from "ioredis";
@@ -46,6 +47,7 @@ export class FilesService {
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly featureFlagService: FeatureFlagService,
+      @Inject() private readonly tieredStorage: TieredStorageService,
    ) {
       this.dirService = new DirectoriesService(
          userService,
@@ -55,6 +57,7 @@ export class FilesService {
          logger,
          fs,
          config,
+         this.tieredStorage,
       );
 
       // Sharp cache
@@ -76,6 +79,12 @@ export class FilesService {
          throw new Error("You don't have permission to access this file " + relativePath);
       }
 
+      // Hot tier: count this serve (may promote the file into Redis) and, if it's already
+      // cached there, serve the bytes straight from Redis instead of touching the disk.
+      this.tieredStorage.recordServe(dir);
+      const hot = await this.tieredStorage.getHotStream(dir, options);
+      if (hot) return hot;
+
       return this.fs.createReadStream(dir, options);
    }
 
@@ -85,7 +94,7 @@ export class FilesService {
          const usedData = await this.getUsedData(userId);
          const user = await this.userService.getById(userId);
 
-         if (usedData.total() + file.size > (await user.getMaxData())) {
+         if (usedData.total() + file.size > user.getMaxData()) {
             return [false, "You don't have enough space to upload this file"];
          }
 
@@ -130,7 +139,7 @@ export class FilesService {
    public async chunkedUploadInit(userId: number, dest: string, filename: string, totalSize: number) {
       const usedData = await this.getUsedData(userId);
       const user = await this.userService.getById(userId);
-      if (usedData.total() + totalSize > (await user.getMaxData())) {
+      if (usedData.total() + totalSize > user.getMaxData()) {
          throw new Error("You don't have enough space to upload this file");
       }
 
@@ -189,7 +198,7 @@ export class FilesService {
          fileDB.absolute_path = relative;
          fileDB.user = await this.userService.getById(userId);
          fileDB.mime = mime.lookup(upload.filename) || "application/octet-stream";
-         this.uploadedFileRepo.save(fileDB);
+         await this.uploadedFileRepo.save(fileDB);
       }
 
       this.chunkedUploads.delete(uploadId);
@@ -213,7 +222,7 @@ export class FilesService {
       file.user = await this.userService.getById(userId);
       file.absolute_path = relative;
       file.mime = "text/plain";
-      this.uploadedFileRepo.save(file);
+      await this.uploadedFileRepo.save(file);
    }
 
    public async save(
@@ -269,6 +278,10 @@ export class FilesService {
          }
 
          const relative = path.relative(root, dir);
+         // If this is a cold file, free its cold blob now (don't wait for GC) — otherwise a
+         // re-upload of the same name before GC would leave a stale blob at the mirror path.
+         await this.tieredStorage.removeColdData(dir);
+         await this.tieredStorage.removeHotData(dir);
          this.fs.unlinkSync(dir);
 
          // See if file is in DB, if yes, then delete it
@@ -316,7 +329,7 @@ export class FilesService {
       if (file) {
          this.logger.debug(`[::${this.rename.name}] Renaming file in DB from ${relative} to ${relativeNew}`);
          file.absolute_path = relativeNew;
-         this.uploadedFileRepo.save(file);
+         await this.uploadedFileRepo.save(file);
       } else {
          // Else if it is not in DB then insert it
          this.logger.debug(
@@ -330,7 +343,7 @@ export class FilesService {
          uploadedFile.user = user;
          uploadedFile.absolute_path = relativeNew;
          uploadedFile.mime = mime;
-         this.uploadedFileRepo.save(uploadedFile);
+         await this.uploadedFileRepo.save(uploadedFile);
       }
    }
 
@@ -344,6 +357,18 @@ export class FilesService {
       }
 
       const stats = this.fs.statSync(dir);
+
+      // For directories, summarise how many files (recursively) are in cold/hot storage.
+      let file_count: number | undefined;
+      let cold_file_count: number | undefined;
+      let hot_file_count: number | undefined;
+      if (stats.isDirectory()) {
+         const s = this.tieredStorage.coldStats(dir);
+         file_count = s.total;
+         cold_file_count = s.cold;
+         hot_file_count = (await this.tieredStorage.hotStats(dir + path.sep)).fileCount;
+      }
+
       const file = await this.uploadedFileRepo.findOne({
          where: { absolute_path: relative },
       });
@@ -382,6 +407,11 @@ export class FilesService {
          is_pdf: fileMime.includes("pdf"),
          size: stats.size,
          lastModified: stats.mtime.toISOString(),
+         is_cold_storage: this.tieredStorage.isColdFile(dir),
+         is_hot_storage: await this.tieredStorage.isHotFile(dir),
+         file_count,
+         cold_file_count,
+         hot_file_count,
          temp_url: tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid()) : null,
          db_record: file,
          related_keys_in_redis: file && fetch_related_keys_in_redis ? await this.getCacheKeysForFile(userId, file) : [],
@@ -449,7 +479,7 @@ export class FilesService {
          const resized = sharp()
             .resize(Number(width) || undefined, Number(height) || undefined)
             .withMetadata();
-         const readStream = this.fs.createReadStream(dir).pipe(resized);
+         const readStream = (this.fs.createReadStream(dir)).pipe(resized);
 
          // cache thumbnail for next time and return it
          // Don't do it if we are inside the thumbnail folder (to avoid recursive thumbnail generation)
@@ -501,7 +531,11 @@ export class FilesService {
          // Delete that thumbnail after 1 second (request sent)
          // TODO make this a job instead
          setTimeout(() => {
-            this.fs.unlinkSync(thumbnailPath);
+            try {
+               this.fs.unlinkSync(thumbnailPath);
+            } catch (e) {
+               this.logger.error(`Failed to delete temp thumbnail ${thumbnailPath}: ${(e as Error).message}`);
+            }
          }, 1000);
 
          return this.fs.createReadStream(thumbnailPath);
@@ -669,11 +703,11 @@ export class FilesService {
       used_data.max = user.getMaxData();
 
       const arrayOfFiles = await this.dirService.listrecursive(userId);
-      arrayOfFiles.forEach((relativePath) => {
+      for (const relativePath of arrayOfFiles) {
          const filePath = path.join(root, relativePath);
          // Get the file extension
          const ext = path.extname(filePath).toLowerCase();
-         const size = this.fs.statSync(filePath).size;
+         const size = (this.fs.statSync(filePath)).size;
 
          if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif") used_data.images += size;
          else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".wmv") {
@@ -694,9 +728,17 @@ export class FilesService {
          ) {
             used_data.documents += size;
          } else used_data.other += size;
-      });
+      }
 
       return used_data;
+   }
+
+   /** Counts how many of the user's files (recursively) are in cold/tiered storage, plus hot-tier (Redis) totals. */
+   public async getColdStorageStats(userId: number): Promise<{ total: number; cold: number; hot: number; hot_bytes: number }> {
+      const root = await this.getUserRootPath(userId);
+      const cold = this.tieredStorage.coldStats(root);
+      const hot = await this.tieredStorage.hotStats(root + path.sep);
+      return { total: cold.total, cold: cold.cold, hot: hot.fileCount, hot_bytes: hot.bytes };
    }
 
    public async createMetaFolderIfNotExists(userId: number): Promise<string> {
@@ -792,12 +834,12 @@ export class FilesService {
          FilesService.THUMBNAILS_FOLDER_NAME,
       );
       const files = this.fs.readdirSync(thumbnailFolder);
-      files.forEach((fileEntry) => {
+      for (const fileEntry of files) {
          if (fileEntry.name.startsWith(`${uploadedFile.id}_`)) {
             this.fs.unlinkSync(path.join(thumbnailFolder, fileEntry.name));
             this.logger.debug(`[::${this.invalidateThumbnailsFor.name}] Deleted thumbnail file ${path.join(thumbnailFolder, fileEntry.name)}`);
          }
-      });
+      }
 
       // Invalidate cache
       const cachedFileKeys = await this.getCacheKeysForFile(userId, uploadedFile);

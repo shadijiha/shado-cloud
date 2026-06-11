@@ -23,7 +23,7 @@ export class LocalNetworkMiddleware implements NestMiddleware {
       if (this.isLocalNetwork(ip)) {
          next();
       } else {
-         if (this.logger) this.logger.debug(`Refused connection from ${ip}`);
+         if (this.logger) void this.logger.debug(`Refused connection from ${ip}`);
          throw new ForbiddenException("Access is allowed only from local network");
       }
    }

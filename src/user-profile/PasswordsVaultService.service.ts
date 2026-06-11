@@ -67,7 +67,7 @@ export class PasswordsVaultService {
          throw new SoftException("You don't have permission to access this password");
       }
 
-      this.encrtyptedPasswordRepo.delete(vault.id);
+      await this.encrtyptedPasswordRepo.delete(vault.id);
    }
 
    /**
@@ -89,7 +89,7 @@ export class PasswordsVaultService {
       passwordVault.username = username;
       passwordVault.user = user;
       passwordVault.website = website.origin;
-      this.encrtyptedPasswordRepo.save(passwordVault);
+      await this.encrtyptedPasswordRepo.save(passwordVault);
 
       return passwordVault;
    }

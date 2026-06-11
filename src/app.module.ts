@@ -20,6 +20,7 @@ import { DataSource } from "typeorm";
 import { AbstractFileSystem } from "./file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "./file-system/file-system.service";
 import { InstrumentedFileSystemService } from "./file-system/instrumented-file-system.service";
+import { TieredStorageService } from "./file-system/tiered-storage.service";
 import { MetricsPusherService, METRICS_SERVICE } from "./metrics-pusher.service";
 import { HeartbeatService } from "./heartbeat.service";
 import { ScheduleModule } from "@nestjs/schedule";
@@ -75,6 +76,7 @@ import yamlConfigLoader from "./config/config.loader";
          useClass: InstrumentedFileSystemService,
       },
       NodeFileSystemService,
+      TieredStorageService,
       MetricsPusherService,
       HeartbeatService,
       {
@@ -92,7 +94,7 @@ import yamlConfigLoader from "./config/config.loader";
       FeatureFlagService,
       TrafficService,
    ],
-   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, ClientsModule],
+   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, TieredStorageService, ClientsModule],
 })
 export class GlobalUtilityModule { }
 

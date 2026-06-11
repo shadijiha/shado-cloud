@@ -17,6 +17,7 @@ import { DeploymentController } from "./deployment.controller";
 import { DeploymentService } from "./deployment.service";
 import { DeploymentProject } from "../models/admin/deploymentProject";
 import { TwoFactorGuard } from "./two-factor.guard";
+import { CronAdminService } from "./cron.service";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController, DeploymentController],
@@ -24,7 +25,7 @@ import { TwoFactorGuard } from "./two-factor.guard";
       FilesModule,
       DirectoriesModule
    ],
-   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, RemoteTerminalGateway, DeploymentService, TwoFactorGuard],
+   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, RemoteTerminalGateway, DeploymentService, TwoFactorGuard, CronAdminService],
    exports: [AdminService],
 })
 export class AdminModule { }
