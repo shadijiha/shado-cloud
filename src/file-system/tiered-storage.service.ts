@@ -68,8 +68,7 @@ export class TieredStorageService {
     * Daily sweep: move stale, large files off the main drive to a cold drive and leave a
     * symlink behind. Uses filesystem access time (atime) as the "last accessed" signal.
     */
-   //@Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-   @Cron(CronExpression.EVERY_MINUTE, { name: "tiered-storage:demote-stale" })
+   @Cron(CronExpression.EVERY_6_HOURS, { name: "tiered-storage:demote-stale" })
    public async demoteStaleFiles(): Promise<void> {
       if (this.demoting) return;
       if (!(await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.DEMOTION_FLAG))) return;
