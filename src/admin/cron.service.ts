@@ -199,24 +199,34 @@ export function collectCronJobs(registry: SchedulerRegistry): CronJobInfo[] {
 }
 
 /**
- * Times cron-job runs. The `cron` library doesn't record run duration, but every scheduled
- * and manual run goes through `fireOnTick()`. We wrap it once per job to capture the wall-clock
- * duration of the most recent run, keyed by job name.
+ * Times cron-job runs. The `cron` library doesn't record run duration, and its `fireOnTick`
+ * does NOT await async callbacks (waitForCompletion defaults to false) — so timing fireOnTick
+ * would only capture the synchronous slice (≈0ms for I/O-bound jobs). Instead we wrap the job's
+ * actual callback and measure its returned promise, capturing the full async duration without
+ * changing cron's scheduling behaviour.
  */
 const cronLastDurationMs = new Map<string, number>();
 const timedCronJobs = new WeakSet<object>();
 
 function ensureCronTimed(name: string, job: unknown): void {
-   const j = job as { fireOnTick?: (...args: unknown[]) => unknown };
-   if (typeof j.fireOnTick !== "function" || timedCronJobs.has(j)) return;
-   const original = j.fireOnTick.bind(j);
-   j.fireOnTick = async (...args: unknown[]) => {
-      const start = Date.now();
-      try {
-         return await original(...args);
-      } finally {
-         cronLastDurationMs.set(name, Date.now() - start);
-      }
-   };
+   const j = job as { _callbacks?: Array<(...args: unknown[]) => unknown> };
+   const callbacks = j._callbacks;
+   if (!Array.isArray(callbacks) || timedCronJobs.has(j)) return;
+   for (let i = 0; i < callbacks.length; i++) {
+      const original = callbacks[i];
+      callbacks[i] = function (this: unknown, ...args: unknown[]) {
+         const start = Date.now();
+         const record = () => cronLastDurationMs.set(name, Date.now() - start);
+         const result = original.apply(this, args);
+         if (result && typeof (result as { then?: unknown }).then === "function") {
+            // settle on both success and failure; provide both handlers so we never create
+            // a second unhandled rejection (cron already attaches its own .catch).
+            void Promise.resolve(result).then(record, record);
+         } else {
+            record();
+         }
+         return result;
+      };
+   }
    timedCronJobs.add(j);
 }
