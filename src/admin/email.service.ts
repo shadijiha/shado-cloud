@@ -37,16 +37,26 @@ export class EmailService {
    }
 
    /**
-    * TCP payloads are JSON-serialized, so a Buffer would arrive as
-    * {type:"Buffer",data:[...]} and break the attachment. Convert any Buffer
-    * `content` to a base64 string + `encoding:"base64"`, which survives JSON and
-    * is decoded natively by nodemailer on the auth-api side.
+    * TCP payloads are JSON-serialized, so binary content would arrive mangled
+    * (a Buffer becomes {type:"Buffer",data:[...]} and a Uint8Array becomes
+    * {"0":..,"1":..}) and break the attachment. Convert any binary `content`
+    * (Buffer, Uint8Array/TypedArray, or ArrayBuffer — e.g. what Puppeteer v22+
+    * `page.screenshot()` returns) to a base64 string + `encoding:"base64"`,
+    * which survives JSON and is decoded natively by nodemailer on the auth-api side.
     */
    private normalizeAttachments(attachments?: any[]): any[] | undefined {
       if (!attachments?.length) return attachments;
       return attachments.map((att) => {
-         if (att && Buffer.isBuffer(att.content)) {
-            return { ...att, content: att.content.toString("base64"), encoding: "base64" };
+         const content = att?.content;
+         if (Buffer.isBuffer(content)) {
+            return { ...att, content: content.toString("base64"), encoding: "base64" };
+         }
+         if (content instanceof Uint8Array || ArrayBuffer.isView(content)) {
+            // Covers Uint8Array and other TypedArray views (Puppeteer screenshots, etc.)
+            return { ...att, content: Buffer.from(content.buffer, content.byteOffset, content.byteLength).toString("base64"), encoding: "base64" };
+         }
+         if (content instanceof ArrayBuffer) {
+            return { ...att, content: Buffer.from(content).toString("base64"), encoding: "base64" };
          }
          return att;
       });
