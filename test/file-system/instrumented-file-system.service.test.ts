@@ -1,4 +1,5 @@
 import { InstrumentedFileSystemService } from "src/file-system/instrumented-file-system.service";
+import { PassThrough } from "stream";
 
 /**
  * InstrumentedFileSystemService is a synchronous metrics wrapper around
@@ -26,7 +27,7 @@ describe("InstrumentedFileSystemService - metrics", () => {
          readdirSync: jest.fn().mockReturnValue([]),
          renameSync: jest.fn(),
          unlinkSync: jest.fn(),
-         createReadStream: jest.fn().mockReturnValue({ pipe: jest.fn().mockReturnValue({}) }),
+         createReadStream: jest.fn().mockImplementation(() => new PassThrough()),
       };
 
       metrics = {
@@ -52,6 +53,32 @@ describe("InstrumentedFileSystemService - metrics", () => {
 
       expect(tiered.onAccess).toHaveBeenCalledWith("/cloud/a.txt");
       expect(tiered.onAccess).toHaveBeenCalledWith("/cloud/b.txt");
+   });
+
+   it("destroys the source read stream when the consumer tears down (no fd/buffer leak)", async () => {
+      const source = new PassThrough();
+      fsMock.createReadStream.mockReturnValueOnce(source);
+
+      const out = service.createReadStream("/cloud/b.txt");
+      // Simulate the HTTP response/consumer going away mid-stream.
+      out.destroy();
+      // 'close' propagates on the next tick.
+      await new Promise((r) => setImmediate(r));
+
+      expect(source.destroyed).toBe(true);
+   });
+
+   it("destroys the tracker when the source stream errors", () => {
+      const source = new PassThrough();
+      fsMock.createReadStream.mockReturnValueOnce(source);
+
+      const out = service.createReadStream("/cloud/b.txt");
+      const onError = jest.fn();
+      out.on("error", onError);
+
+      source.emit("error", new Error("disk gone"));
+
+      expect(out.destroyed).toBe(true);
    });
 
    it("records a read op with latency and byte count for readFileSync", () => {

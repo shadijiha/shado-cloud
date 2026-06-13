@@ -3,6 +3,7 @@ import { ClientProxy } from "@nestjs/microservices";
 import { ConfigService } from "@nestjs/config";
 import { DataSource } from "typeorm";
 import { firstValueFrom } from "rxjs";
+import { timeout } from "rxjs/operators";
 import { EnvVariables } from "./config/config.validator";
 
 const METRICS_SERVICE = "METRICS_SERVICE";
@@ -201,7 +202,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
             this.metricsClient.send("metrics.put", {
                serviceKey: this.serviceKey,
                datapoints,
-            }),
+            }).pipe(timeout(10_000)),
          );
       } catch (err) {
          this.logger.warn(`Failed to push metrics to shado-metrics: ${(err as Error).message}`);

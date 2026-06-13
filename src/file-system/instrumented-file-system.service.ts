@@ -59,11 +59,22 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
    unlinkSync(path: string): void { this.measure("unlink", "write", () => this.inner.unlinkSync(path)); void this.tiered?.removeHotData(path); }
 
    createReadStream(path: PathLike, options?: BufferEncoding): Readable {
-      const stream = this.measure("createReadStream", "read", () => this.inner.createReadStream(path, options));
+      const source = this.measure("createReadStream", "read", () => this.inner.createReadStream(path, options));
+      this.tiered?.onAccess(path.toString());
+
       const tracker = new PassThrough();
       tracker.on("data", (chunk: Buffer) => this.trackRead(chunk.length));
-      this.tiered?.onAccess(path.toString());
-      return stream.pipe(tracker);
+
+      // `.pipe()` does NOT propagate teardown: if the consumer (e.g. the HTTP
+      // response) aborts mid-stream, or the source errors, the other end is only
+      // unpiped — never destroyed. That orphans the file descriptor and any
+      // buffered chunks (plus this listener closure), leaking memory + fds on the
+      // file-serving path (downloads, range-based video/audio seeking). Destroy
+      // both ends together so everything is released on abort/error.
+      source.on("error", (e) => tracker.destroy(e));
+      tracker.on("close", () => { if (!source.destroyed) source.destroy(); });
+
+      return source.pipe(tracker);
    }
 
    createWriteStream(path: PathLike, options?: BufferEncoding): Writable {

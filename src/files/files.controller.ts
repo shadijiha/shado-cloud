@@ -20,6 +20,7 @@ import { JwtAuthGuard } from "src/auth/auth.guard";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiOperation, ApiParam, ApiProduces, ApiProperty, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
+import { Readable } from "stream";
 import { LoggerToDb } from "./../logging";
 import { ApiFile, AuthUser } from "src/util";
 import { FilesService } from "./files.service";
@@ -247,6 +248,14 @@ export class FilesConstoller {
       try {
          const fileInto = await this.fileService.info(userId, path, false, false);
 
+         // Tear the file stream down if the client disconnects before the transfer
+         // finishes. Without this, an aborted download/seek orphans the underlying
+         // read stream (open fd + buffered bytes), which leaks memory over time.
+         const pipeWithCleanup = (stream: NodeJS.ReadableStream) => {
+            res.on("close", () => (stream as Readable).destroy());
+            stream.pipe(res);
+         };
+
          // In case that it is a video or audio
          // We need to see if this request is for seeking
          if (fileInto.is_video || fileInto.is_audio) {
@@ -272,13 +281,13 @@ export class FilesConstoller {
                   "Content-Type": fileInto.mime,
                });
 
-               file.pipe(res);
+               pipeWithCleanup(file);
             } else {
                res.writeHead(200, {
                   "Content-Length": total,
                   "Content-Type": fileInto.mime,
                });
-               (await this.fileService.asStream(userId, path, req.headers["user-agent"])).pipe(res);
+               pipeWithCleanup(await this.fileService.asStream(userId, path, req.headers["user-agent"]));
             }
          }
          // Otherwise for any other file just do a simple stream
@@ -288,7 +297,7 @@ export class FilesConstoller {
                "Content-Type": fileInto.mime,
                "Content-Length": fileInto.size,
             });
-            file.pipe(res);
+            pipeWithCleanup(file);
          }
       } catch (e) {
          this.logger.logException(e);
