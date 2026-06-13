@@ -36,10 +36,10 @@ export class TieredStorageService {
    private readonly mountPattern = "/mnt/$drive_name";
    private readonly coldSubdir = "cloud-dir";
 
-   // A file is eligible for demotion once it hasn't been accessed for ~6 months.
-   private static readonly STALE_AFTER_MS = 10 * 1000; //6 * 30 * 24 * 60 * 60 * 1000;
+   // A file is eligible for demotion once it hasn't been accessed for ~1 months.
+   private static readonly STALE_AFTER_MS = 1 * 30 * 24 * 60 * 60 * 1000;
    // Don't bother demoting tiny files — the move isn't worth the space reclaimed.
-   private static readonly MIN_DEMOTE_SIZE_BYTES = /*1*/ 0.25 * 1024 * 1024; // 1 MB
+   private static readonly MIN_DEMOTE_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
 
    // Independent feature flags (namespace: Files) for each background behaviour.
    private static readonly DEMOTION_FLAG = "tiered_storage_demotion";
