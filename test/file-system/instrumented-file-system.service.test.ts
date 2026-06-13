@@ -13,6 +13,7 @@ describe("InstrumentedFileSystemService - metrics", () => {
       fsBytesWritten: number;
       fsReadOps: number;
       fsWriteOps: number;
+      openFileStreams: number;
       recordFsOp: jest.Mock;
    };
    let service: InstrumentedFileSystemService;
@@ -35,6 +36,7 @@ describe("InstrumentedFileSystemService - metrics", () => {
          fsBytesWritten: 0,
          fsReadOps: 0,
          fsWriteOps: 0,
+         openFileStreams: 0,
          recordFsOp: jest.fn(function (this: void, _op: string, _ms: number, kind: string) {
             if (kind === "read") metrics.fsReadOps++;
             else if (kind === "write") metrics.fsWriteOps++;
@@ -66,6 +68,18 @@ describe("InstrumentedFileSystemService - metrics", () => {
       await new Promise((r) => setImmediate(r));
 
       expect(source.destroyed).toBe(true);
+   });
+
+   it("tracks the live open-stream gauge: +1 on open, back to 0 on teardown", async () => {
+      const source = new PassThrough();
+      fsMock.createReadStream.mockReturnValueOnce(source);
+
+      const out = service.createReadStream("/cloud/b.txt");
+      expect(metrics.openFileStreams).toBe(1);
+
+      out.destroy();
+      await new Promise((r) => setImmediate(r));
+      expect(metrics.openFileStreams).toBe(0);
    });
 
    it("destroys the tracker when the source stream errors", () => {

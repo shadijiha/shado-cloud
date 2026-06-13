@@ -4,6 +4,8 @@ import { ConfigService } from "@nestjs/config";
 import { DataSource } from "typeorm";
 import { firstValueFrom } from "rxjs";
 import { timeout } from "rxjs/operators";
+import * as fs from "fs";
+import { monitorEventLoopDelay, type IntervalHistogram } from "perf_hooks";
 import { EnvVariables } from "./config/config.validator";
 
 const METRICS_SERVICE = "METRICS_SERVICE";
@@ -55,6 +57,12 @@ export class MetricsPusherService implements OnApplicationBootstrap {
    private requestRecords: { route: string; method: string; ip: string; bytesIn: number; bytesOut: number; userAgent: string; origin: string }[] = [];
    private requestDurations: { ms: number; route: string }[] = [];
    private unauthorizedRecords: { ip: string; route: string }[] = [];
+
+   // Live gauge: number of instrumented file read streams currently open. A steady
+   // climb here points to leaked/orphaned streams (e.g. aborted downloads not torn down).
+   public openFileStreams = 0;
+   // Event-loop delay histogram (nanoseconds); reset on each flush.
+   private eventLoopDelay: IntervalHistogram = monitorEventLoopDelay({ resolution: 20 });
 
    constructor(
       @Inject(METRICS_SERVICE) private readonly metricsClient: ClientProxy,
@@ -115,6 +123,49 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       }
 
       setInterval(() => { void this.flush(); }, 15_000);
+      this.eventLoopDelay.enable();
+   }
+
+   /** Count the process's open file descriptors (Linux only). Climbing fds alongside RSS = stream/fd leak. */
+   private countOpenFds(): number {
+      if (process.platform !== "linux") return -1;
+      try {
+         return fs.readdirSync("/proc/self/fd").length;
+      } catch {
+         return -1;
+      }
+   }
+
+   /** Number of active libuv handles (timers, sockets, streams). Rising = leaked handles. */
+   private countActiveHandles(): number {
+      try {
+         const p = process as unknown as { getActiveResourcesInfo?: () => unknown[]; _getActiveHandles?: () => unknown[] };
+         if (typeof p.getActiveResourcesInfo === "function") return p.getActiveResourcesInfo().length;
+         return p._getActiveHandles?.().length ?? -1;
+      } catch {
+         return -1;
+      }
+   }
+
+   /** Snapshot of process memory + libuv/event-loop health, emitted as gauges each flush. */
+   private runtimeGauges(now: string): any[] {
+      const mem = process.memoryUsage();
+      const g = (metric: string, value: number, unit: MetricUnit) => ({ namespace: "shado-cloud", metric, value, unit, timestamp: now });
+      const mean = Number.isFinite(this.eventLoopDelay.mean) ? this.eventLoopDelay.mean / 1e6 : 0;
+      const max = Number.isFinite(this.eventLoopDelay.max) ? this.eventLoopDelay.max / 1e6 : 0;
+      this.eventLoopDelay.reset();
+      return [
+         g("process_rss_bytes", mem.rss, MetricUnit.Bytes),
+         g("process_heap_used_bytes", mem.heapUsed, MetricUnit.Bytes),
+         g("process_heap_total_bytes", mem.heapTotal, MetricUnit.Bytes),
+         g("process_external_bytes", mem.external, MetricUnit.Bytes),
+         g("process_array_buffers_bytes", mem.arrayBuffers ?? 0, MetricUnit.Bytes),
+         g("process_open_fds", this.countOpenFds(), MetricUnit.Count),
+         g("process_active_handles", this.countActiveHandles(), MetricUnit.Count),
+         g("open_file_streams", this.openFileStreams, MetricUnit.Count),
+         g("event_loop_delay_mean_ms", Math.round(mean * 100) / 100, MetricUnit.Milliseconds),
+         g("event_loop_delay_max_ms", Math.round(max * 100) / 100, MetricUnit.Milliseconds),
+      ];
    }
 
    private async flush() {
@@ -195,6 +246,7 @@ export class MetricsPusherService implements OnApplicationBootstrap {
          { namespace: "shado-cloud", metric: "hot_storage_errors", value: hotErrors, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_demotion_sweep_ms", value: coldSweepMs, unit: MetricUnit.Milliseconds, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_last_sweep_timestamp", value: coldLastSweepAt, unit: MetricUnit.None, timestamp: now },
+         ...this.runtimeGauges(now),
       ];
 
       try {

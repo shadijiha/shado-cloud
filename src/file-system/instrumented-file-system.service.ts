@@ -65,6 +65,9 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
       const tracker = new PassThrough();
       tracker.on("data", (chunk: Buffer) => this.trackRead(chunk.length));
 
+      // Live gauge of open read streams — lets us spot stream leaks remotely via metrics.
+      if (this.metrics) this.metrics.openFileStreams++;
+
       // `.pipe()` does NOT propagate teardown: if the consumer (e.g. the HTTP
       // response) aborts mid-stream, or the source errors, the other end is only
       // unpiped — never destroyed. That orphans the file descriptor and any
@@ -72,7 +75,10 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
       // file-serving path (downloads, range-based video/audio seeking). Destroy
       // both ends together so everything is released on abort/error.
       source.on("error", (e) => tracker.destroy(e));
-      tracker.on("close", () => { if (!source.destroyed) source.destroy(); });
+      tracker.on("close", () => {
+         if (!source.destroyed) source.destroy();
+         if (this.metrics) this.metrics.openFileStreams--;
+      });
 
       return source.pipe(tracker);
    }
