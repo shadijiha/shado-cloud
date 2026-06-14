@@ -526,9 +526,23 @@ export class TieredStorageService {
 
       if (typeof options?.start === "number") {
          const end = typeof options.end === "number" ? options.end : buf.length - 1;
-         buf = buf.subarray(options.start, end + 1);
+         // `subarray` returns a VIEW sharing the full blob's underlying ArrayBuffer, which
+         // keeps the entire file resident in memory for as long as the stream lives. Range
+         // requests (video/audio seeking) would therefore pin whole files — the off-heap
+         // arrayBuffers leak we saw. Copy the requested range into its own buffer so the
+         // full-file bytes are released to GC immediately.
+         buf = Buffer.from(buf.subarray(options.start, end + 1));
       }
-      return Readable.from(buf);
+
+      // Surface hot-tier streams on the same gauge as disk streams (so leaks here are
+      // observable too), and drop our reference to the buffer once the stream is torn
+      // down (client abort or normal completion).
+      const stream = Readable.from(buf);
+      if (this.metrics) {
+         this.metrics.openFileStreams++;
+         stream.once("close", () => { if (this.metrics) this.metrics.openFileStreams--; });
+      }
+      return stream;
    }
 
    /** Records a file serve (fire-and-forget): bumps the access counter and promotes to Redis once hot enough. */

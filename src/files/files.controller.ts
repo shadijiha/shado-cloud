@@ -20,7 +20,7 @@ import { JwtAuthGuard } from "src/auth/auth.guard";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiOperation, ApiParam, ApiProduces, ApiProperty, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
-import { Readable } from "stream";
+import { pipeline } from "stream";
 import { LoggerToDb } from "./../logging";
 import { ApiFile, AuthUser } from "src/util";
 import { FilesService } from "./files.service";
@@ -251,9 +251,20 @@ export class FilesConstoller {
          // Tear the file stream down if the client disconnects before the transfer
          // finishes. Without this, an aborted download/seek orphans the underlying
          // read stream (open fd + buffered bytes), which leaks memory over time.
+         //
+         // `stream.pipeline` guarantees teardown propagates in BOTH directions: if the
+         // client aborts (res closes/errors) the source read stream is destroyed —
+         // releasing its fd + buffered chunks — and if the source errors the response is
+         // ended. Plain `.pipe()` does neither, which is what orphaned the streams.
          const pipeWithCleanup = (stream: NodeJS.ReadableStream) => {
-            res.on("close", () => (stream as Readable).destroy());
-            stream.pipe(res);
+            pipeline(stream, res, (err) => {
+               // Client aborts (premature close / connection reset) are the case we WANT
+               // to tear down, not real failures — don't log them as errors.
+               const code = (err as NodeJS.ErrnoException | null)?.code ?? "";
+               if (err && !["ERR_STREAM_PREMATURE_CLOSE", "ECONNRESET", "EPIPE"].includes(code)) {
+                  this.logger.logException(err);
+               }
+            });
          };
 
          // In case that it is a video or audio
