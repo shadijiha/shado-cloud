@@ -536,8 +536,15 @@ export class TieredStorageService {
 
       // Surface hot-tier streams on the same gauge as disk streams (so leaks here are
       // observable too), and drop our reference to the buffer once the stream is torn
-      // down (client abort or normal completion).
-      const stream = Readable.from(buf);
+      // down (client abort or normal completion). Yield in 64 KB chunks rather than
+      // `Readable.from(buf)` directly: a Buffer is iterable per-byte, so the plain form
+      // runs in object mode and pins the whole file buffer abnormally long per serve.
+      const HWM = 64 * 1024;
+      const stream = Readable.from((function* () {
+         for (let off = 0; off < buf.length; off += HWM) {
+            yield buf.subarray(off, Math.min(off + HWM, buf.length));
+         }
+      })());
       if (this.metrics) {
          this.metrics.openFileStreams++;
          stream.once("close", () => { if (this.metrics) this.metrics.openFileStreams--; });

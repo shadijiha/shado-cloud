@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { HttpException, Inject, Injectable } from "@nestjs/common";
+import { HttpException, Inject, Injectable, Optional } from "@nestjs/common";
 import { AuthService } from "./../auth/auth.service";
 import path from "path";
 import { UploadedFile } from "./../models/uploadedFile";
@@ -25,6 +25,8 @@ import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { fromBuffer as pdfToImage } from "pdf2pic";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
+import { MetricsPusherService, MetricUnit } from "../metrics-pusher.service";
 import { User } from "src/models/user";
 
 type FileServiceResult = Promise<[boolean, string]>;
@@ -48,6 +50,7 @@ export class FilesService {
       @Inject() private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly featureFlagService: FeatureFlagService,
       @Inject() private readonly tieredStorage: TieredStorageService,
+      @Optional() @Inject(MetricsPusherService) private readonly metrics?: MetricsPusherService,
    ) {
       this.dirService = new DirectoriesService(
          userService,
@@ -62,8 +65,30 @@ export class FilesService {
 
       // Sharp cache
       sharp.cache(true);
-      sharp.cache({ memory: 1024, items: 5000, files: 500 });
+      sharp.cache({ memory: 256, items: 5000, files: 500 });
       sharp.simd(true);
+
+      // Investigation gauges for the memory-leak hunt. These are sampled live on each
+      // metrics flush (see MetricsPusherService.registerGauge):
+      //  - chunked_upload_sessions / _bytes_pending: a steady climb means chunked-upload
+      //    sessions are being abandoned/leaked in memory (the path we hardened).
+      //  - sharp_cache_*: the libvips cache footprint, so we can see if it's a contributor.
+      if (this.metrics) {
+         this.metrics.registerGauge("chunked_upload_sessions", MetricUnit.Count, () => this.chunkedUploads.size);
+         this.metrics.registerGauge("chunked_upload_bytes_pending", MetricUnit.Bytes, () => {
+            let sum = 0;
+            for (const u of this.chunkedUploads.values()) sum += u.totalSize;
+            return sum;
+         });
+         this.metrics.registerGauge("sharp_cache_memory_bytes", MetricUnit.Bytes, () => {
+            const stats = sharp.cache() as unknown as { memory?: { current?: number } };
+            return Math.round((stats.memory?.current ?? 0) * 1024 * 1024); // sharp reports MB
+         });
+         this.metrics.registerGauge("sharp_cache_items", MetricUnit.Count, () => {
+            const stats = sharp.cache() as unknown as { items?: { current?: number } };
+            return stats.items?.current ?? 0;
+         });
+      }
    }
 
    public async asStream(userId: number, relativePath: string, user_agent: string, options?: any) {
@@ -172,36 +197,48 @@ export class FilesService {
       const tmpDir = upload.dir + ".chunked_tmp";
       const parts = Array.from(upload.received).sort((a, b) => a - b);
 
-      // Concatenate all parts by reading each as binary
-      const buffers: Buffer[] = [];
-      for (const i of parts) {
-         const partPath = path.join(tmpDir, `part_${i}`);
-         const content = this.fs.readFileSync(partPath, "binary" as BufferEncoding);
-         buffers.push(typeof content === "string" ? Buffer.from(content, "binary") : content);
-         this.fs.unlinkSync(partPath);
+      try {
+         // Stream each part directly into the destination file in order. Memory stays
+         // bounded to the stream highWaterMark (~64 KB) regardless of file size, instead
+         // of loading the entire (multi-GB) file into Buffers via Buffer.concat — which
+         // was the off-heap arrayBuffers leak on the chunked-upload (>100 MB) path.
+         const dest = this.fs.createWriteStream(upload.dir);
+         try {
+            for (let i = 0; i < parts.length; i++) {
+               const partPath = path.join(tmpDir, `part_${parts[i]}`);
+               const isLast = i === parts.length - 1;
+               // Keep `dest` open across parts; only end it after the final chunk.
+               await pipeline(this.fs.createReadStream(partPath), dest, { end: isLast });
+               this.fs.unlinkSync(partPath);
+            }
+         } catch (e) {
+            dest.destroy();
+            throw e;
+         }
+
+         // Clean up temp dir
+         try { this.fs.rmdirSync(tmpDir, { recursive: true }); } catch (e) { this.logger.logException(e); }
+
+         // Save to DB (same logic as regular upload)
+         const root = await this.getUserRootPath(userId);
+         const relative = path.relative(root, upload.dir);
+         let fileDB = await this.uploadedFileRepo.findOne({
+            where: { absolute_path: relative, user: { id: userId } },
+         });
+         if (fileDB) {
+            await this.invalidateThumbnailsFor(userId, fileDB);
+         } else {
+            fileDB = new UploadedFile();
+            fileDB.absolute_path = relative;
+            fileDB.user = await this.userService.getById(userId);
+            fileDB.mime = mime.lookup(upload.filename) || "application/octet-stream";
+            await this.uploadedFileRepo.save(fileDB);
+         }
+      } finally {
+         // Always release the in-memory session — even on failure — so the Map can't
+         // grow from abandoned/failed completions.
+         this.chunkedUploads.delete(uploadId);
       }
-      this.fs.writeFileSync(upload.dir, Buffer.concat(buffers));
-
-      // Clean up temp dir
-      try { this.fs.rmdirSync(tmpDir, { recursive: true }); } catch (e) { this.logger.logException(e); }
-
-      // Save to DB (same logic as regular upload)
-      const root = await this.getUserRootPath(userId);
-      const relative = path.relative(root, upload.dir);
-      let fileDB = await this.uploadedFileRepo.findOne({
-         where: { absolute_path: relative, user: { id: userId } },
-      });
-      if (fileDB) {
-         await this.invalidateThumbnailsFor(userId, fileDB);
-      } else {
-         fileDB = new UploadedFile();
-         fileDB.absolute_path = relative;
-         fileDB.user = await this.userService.getById(userId);
-         fileDB.mime = mime.lookup(upload.filename) || "application/octet-stream";
-         await this.uploadedFileRepo.save(fileDB);
-      }
-
-      this.chunkedUploads.delete(uploadId);
    }
 
    public async new(userId: number, name: string): Promise<void> | never {

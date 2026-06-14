@@ -6,6 +6,7 @@ import { firstValueFrom } from "rxjs";
 import { timeout } from "rxjs/operators";
 import * as fs from "fs";
 import { monitorEventLoopDelay, type IntervalHistogram } from "perf_hooks";
+import * as v8 from "v8";
 import { EnvVariables } from "./config/config.validator";
 
 const METRICS_SERVICE = "METRICS_SERVICE";
@@ -147,14 +148,25 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       }
    }
 
+   // Gauges registered by other services, sampled on every flush. Lets a service expose a
+   // live in-memory value (e.g. active session counts, cache sizes) as a metric without the
+   // pusher needing to import it. Samplers must be cheap and must not throw.
+   private readonly gaugeSamplers: { metric: string; unit: MetricUnit; sample: () => number }[] = [];
+
+   /** Register a gauge sampled on each metrics flush. See `gaugeSamplers`. */
+   public registerGauge(metric: string, unit: MetricUnit, sample: () => number): void {
+      this.gaugeSamplers.push({ metric, unit, sample });
+   }
+
    /** Snapshot of process memory + libuv/event-loop health, emitted as gauges each flush. */
    private runtimeGauges(now: string): any[] {
       const mem = process.memoryUsage();
+      const heap = v8.getHeapStatistics();
       const g = (metric: string, value: number, unit: MetricUnit) => ({ namespace: "shado-cloud", metric, value, unit, timestamp: now });
       const mean = Number.isFinite(this.eventLoopDelay.mean) ? this.eventLoopDelay.mean / 1e6 : 0;
       const max = Number.isFinite(this.eventLoopDelay.max) ? this.eventLoopDelay.max / 1e6 : 0;
       this.eventLoopDelay.reset();
-      return [
+      const gauges = [
          g("process_rss_bytes", mem.rss, MetricUnit.Bytes),
          g("process_heap_used_bytes", mem.heapUsed, MetricUnit.Bytes),
          g("process_heap_total_bytes", mem.heapTotal, MetricUnit.Bytes),
@@ -165,7 +177,22 @@ export class MetricsPusherService implements OnApplicationBootstrap {
          g("open_file_streams", this.openFileStreams, MetricUnit.Count),
          g("event_loop_delay_mean_ms", Math.round(mean * 100) / 100, MetricUnit.Milliseconds),
          g("event_loop_delay_max_ms", Math.round(max * 100) / 100, MetricUnit.Milliseconds),
+         // V8 heap internals. `detached_contexts` is a classic leak signal — contexts that
+         // should have been GC'd but are still retained; a steady climb points to a JS-side
+         // leak. malloced/native give a fuller off-heap picture than memoryUsage alone.
+         g("v8_malloced_bytes", heap.malloced_memory, MetricUnit.Bytes),
+         g("v8_native_contexts", heap.number_of_native_contexts, MetricUnit.Count),
+         g("v8_detached_contexts", heap.number_of_detached_contexts, MetricUnit.Count),
       ];
+      // Append any gauges registered by other services (sampled live at flush time).
+      for (const s of this.gaugeSamplers) {
+         try {
+            gauges.push(g(s.metric, s.sample(), s.unit));
+         } catch {
+            // a misbehaving sampler must never break the whole flush
+         }
+      }
+      return gauges;
    }
 
    private async flush() {
