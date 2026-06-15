@@ -16,7 +16,6 @@ import { ThumbnailCacheInterceptor } from "src/files/thumbnail-cache.interceptor
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
-import { EnvVariables } from "src/config/config.validator";
 import { REDIS_CACHE } from "src/util";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 
@@ -114,6 +113,9 @@ describe("FilesService", () => {
                provide: REDIS_CACHE,
                useValue: {
                   scan: jest.fn().mockReturnValue(["0", []]),
+                  exits: jest.fn().mockReturnValue(false),
+                  get: jest.fn().mockReturnValue(undefined),
+                  setex: jest.fn()
                },
             },
             {
