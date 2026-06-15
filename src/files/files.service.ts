@@ -153,6 +153,10 @@ export class FilesService {
          await this.invalidateThumbnailsFor(userId, fileDB);
          await this.uploadedFileRepo.save(fileDB);
 
+         // Update cache for used data
+         usedData.other += file.size;
+         await this.cache.setex(`${userId}::used_data`, 3600, JSON.stringify(usedData));
+
          return [true, ""];
       } catch (e) {
          return [false, (e as Error).message];
@@ -733,7 +737,16 @@ export class FilesService {
    }
 
    public async getUsedData(userId: number) {
-      // TODO: Cache this in redis
+      const CACHE_KEY = `${userId}::used_data`;
+      if (await this.cache.exists(CACHE_KEY)) {
+         const value = await this.cache.get(CACHE_KEY);
+         try {
+            return JSON.parse(value) as UsedData;
+         } catch(e) {
+            this.logger.error(`Failed to getUsedData from redis cache (value: ${value}). ` + (e as Error).message);
+         }
+      }
+
       const root = await this.getUserRootPath(userId);
       const user = await this.userService.getById(userId);
       const used_data: UsedData = new UsedData();
@@ -766,6 +779,9 @@ export class FilesService {
             used_data.documents += size;
          } else used_data.other += size;
       }
+
+      // Cache it in redis
+      this.cache.setex(CACHE_KEY, 3600, JSON.stringify(used_data));
 
       return used_data;
    }
