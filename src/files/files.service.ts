@@ -741,7 +741,9 @@ export class FilesService {
       if (await this.cache.exists(CACHE_KEY)) {
          const value = await this.cache.get(CACHE_KEY);
          try {
-            return JSON.parse(value) as UsedData;
+            // JSON.parse returns a plain object; rehydrate into a UsedData
+            // instance so callers can use methods like total().
+            return Object.assign(new UsedData(), JSON.parse(value));
          } catch(e) {
             this.logger.error(`Failed to getUsedData from redis cache (value: ${value}). ` + (e as Error).message);
          }
