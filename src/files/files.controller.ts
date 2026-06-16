@@ -59,7 +59,8 @@ export class FilesConstoller {
       @Body() body: { dest: string },
    ) {
       return await this.logger.errorWrapper(async () => {
-         await this.fileService.upload(userId, file, body.dest);
+         const [ok, message] = await this.fileService.upload(userId, file, body.dest);
+         if (!ok) throw new Error(message || "Upload failed");
       });
    }
 
