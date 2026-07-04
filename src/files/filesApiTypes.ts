@@ -74,17 +74,11 @@ export class FileInfo {
    @ApiProperty({ description: "True if the file currently lives on a cold-storage drive (tiered)." })
    is_cold_storage: boolean;
 
-   @ApiProperty({ description: "True if the file is currently cached in the hot (Redis) tier." })
-   is_hot_storage: boolean;
-
    @ApiProperty({ required: false, description: "Total files under this directory (directories only)." })
    file_count?: number;
 
    @ApiProperty({ required: false, description: "Files under this directory that are in cold storage (directories only)." })
    cold_file_count?: number;
-
-   @ApiProperty({ required: false, description: "Files under this directory that are in the hot (Redis) tier (directories only)." })
-   hot_file_count?: number;
 }
 
 export class FileInfoResponse extends ErrorProne {

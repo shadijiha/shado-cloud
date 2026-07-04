@@ -5,7 +5,6 @@ import { FeatureFlag, FeatureFlagNamespace } from "src/models/admin/featureFlag"
 import { REDIS_CACHE } from "src/util";
 import { Repository } from "typeorm";
 import { CreateFeatureFlagRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
-import { defaultDescriptionFor, defaultPayloadFor } from "./feature-flag-defaults";
 
 type FeatureFlagEventListener = (value: boolean) => Promise<void>;
 
@@ -78,12 +77,8 @@ export class FeatureFlagService {
    }
 
    public async createFeatureFlag(request: CreateFeatureFlagRequest): Promise<void | never> {
-      // Seed a default payload/description (if one is registered for this flag) so the
-      // configurable JSON shape is visible to admins as soon as the flag is created.
-      const payload = request.payload ?? defaultPayloadFor(request.namespace, request.key);
-      const description = request.description ?? defaultDescriptionFor(request.namespace, request.key);
       await this.featureFlagRepo.upsert(
-         { namespace: request.namespace, key: request.key, payload, description, enabled: false },
+         { namespace: request.namespace, key: request.key, payload: request.payload, description: request.description, enabled: false },
          { conflictPaths: ["namespace", "key"], skipUpdateIfNoValuesChanged: true },
       );
    }
