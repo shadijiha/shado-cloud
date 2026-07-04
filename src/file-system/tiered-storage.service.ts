@@ -4,13 +4,9 @@ import { ConfigService } from "@nestjs/config";
 import * as fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import { Readable } from "stream";
-import type Redis from "ioredis";
 import { EnvVariables } from "src/config/config.validator";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
-import { REDIS_CACHE } from "src/util";
-import { HOT_STORAGE_DEFAULT_CONFIG, type HotStorageConfig } from "src/admin/feature-flag-defaults";
 import { MetricsPusherService } from "../metrics-pusher.service";
 
 /**
@@ -44,12 +40,6 @@ export class TieredStorageService {
    // Independent feature flags (namespace: Files) for each background behaviour.
    private static readonly DEMOTION_FLAG = "tiered_storage_demotion";
    private static readonly PROMOTION_FLAG = "tiered_storage_promotion";
-   // Hot tier: cache frequently-served files entirely in Redis (configured via the flag payload).
-   private static readonly HOT_FLAG = "tiered_storage_hot";
-
-   // Redis key prefixes for the hot tier (all keys carry a TTL so Redis auto-evicts them).
-   private static readonly HOT_BLOB_PREFIX = "hot:blob:"; // the file bytes
-   private static readonly HOT_FREQ_PREFIX = "hot:freq:"; // per-file access counter
 
    private demoting = false;
 
@@ -60,7 +50,6 @@ export class TieredStorageService {
    constructor(
       @Inject() private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly featureFlag: FeatureFlagService,
-      @Inject(REDIS_CACHE) private readonly redis: Redis,
       @Optional() @Inject(MetricsPusherService) private readonly metrics?: MetricsPusherService,
    ) {}
 
@@ -306,19 +295,13 @@ export class TieredStorageService {
     * Walks the cold mirror trees on demand (cheap for the occasional admin page load).
     */
    public async getOverview(): Promise<{
-      flags: { demotion: boolean; promotion: boolean; hot: boolean };
-      hot: { fileCount: number; bytes: number; config: HotStorageConfig };
-      redis: { usedMemory: number; maxMemory: number };
+      flags: { demotion: boolean; promotion: boolean };
       drives: { name: string; mountPoint: string; coldFileCount: number; coldBytes: number; total: number; free: number; used: number }[];
    }> {
       const flags = {
          demotion: await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.DEMOTION_FLAG),
          promotion: await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.PROMOTION_FLAG),
-         hot: await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.HOT_FLAG),
       };
-
-      const hot = { ...(await this.hotStats()), config: await this.hotConfig() };
-      const redis = await this.redisMemory();
 
       const drives: { name: string; mountPoint: string; coldFileCount: number; coldBytes: number; total: number; free: number; used: number }[] = [];
       for (const name of this.configuredDrives()) {
@@ -349,7 +332,7 @@ export class TieredStorageService {
          drives.push({ name, mountPoint: this.mountFor(name), coldFileCount, coldBytes, total, free, used: total - free });
       }
 
-      return { flags, hot, redis, drives };
+      return { flags, drives };
    }
 
 
@@ -483,184 +466,6 @@ export class TieredStorageService {
             await this.removeColdData(path.join(absPath, entry.name));
          }
       }
-   }
-
-   /* ============================ HOT TIER (Redis) ============================ *
-    * The hottest tier: frequently-served files are copied wholesale into Redis and
-    * served from there, bypassing the disk entirely. Everything is keyed by absolute
-    * path and carries a TTL, so Redis auto-evicts both the cached bytes and the access
-    * counters — there is no background cleanup job to run.
-    *
-    * This lives on the async serving path (FilesService.asStream), not the synchronous
-    * FS abstraction, because Redis access is asynchronous.
-    * ========================================================================== */
-
-   private hotConfig(): Promise<HotStorageConfig> {
-      return this.featureFlag.getPayload(FeatureFlagNamespace.Files, TieredStorageService.HOT_FLAG, HOT_STORAGE_DEFAULT_CONFIG);
-   }
-
-   private hotBlobKey(absPath: string): string { return TieredStorageService.HOT_BLOB_PREFIX + absPath; }
-   private hotFreqKey(absPath: string): string { return TieredStorageService.HOT_FREQ_PREFIX + absPath; }
-
-   /**
-    * If the file is currently cached in Redis (the hot tier), returns a readable stream of
-    * its bytes and refreshes the blob TTL (sliding window, so popular files stay hot).
-    * Honours an optional byte range ({ start, end }) for video/audio seeking. Returns null
-    * if the hot flag is off or the file isn't cached — callers fall back to the disk.
-    */
-   public async getHotStream(absPath: string, options?: { start?: number; end?: number }): Promise<Readable | null> {
-      if (!(await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.HOT_FLAG))) return null;
-
-      const key = this.hotBlobKey(absPath);
-      let buf: Buffer | null;
-      try {
-         buf = await this.redis.getBuffer(key);
-      } catch {
-         return null;
-      }
-      if (!buf) return null;
-
-      const cfg = await this.hotConfig();
-      void this.redis.expire(key, cfg.ttlSeconds).catch(() => undefined); // sliding TTL
-      if (this.metrics) this.metrics.hotStorageHits += 1;
-
-      if (typeof options?.start === "number") {
-         const end = typeof options.end === "number" ? options.end : buf.length - 1;
-         // `subarray` returns a VIEW sharing the full blob's underlying ArrayBuffer, which
-         // keeps the entire file resident in memory for as long as the stream lives. Range
-         // requests (video/audio seeking) would therefore pin whole files — the off-heap
-         // arrayBuffers leak we saw. Copy the requested range into its own buffer so the
-         // full-file bytes are released to GC immediately.
-         buf = Buffer.from(buf.subarray(options.start, end + 1));
-      }
-
-      // Surface hot-tier streams on the same gauge as disk streams (so leaks here are
-      // observable too), and drop our reference to the buffer once the stream is torn
-      // down (client abort or normal completion). Yield in 64 KB chunks rather than
-      // `Readable.from(buf)` directly: a Buffer is iterable per-byte, so the plain form
-      // runs in object mode and pins the whole file buffer abnormally long per serve.
-      const HWM = 64 * 1024;
-      const stream = Readable.from((function* () {
-         for (let off = 0; off < buf.length; off += HWM) {
-            yield buf.subarray(off, Math.min(off + HWM, buf.length));
-         }
-      })());
-      if (this.metrics) {
-         this.metrics.openFileStreams++;
-         stream.once("close", () => { if (this.metrics) this.metrics.openFileStreams--; });
-      }
-      return stream;
-   }
-
-   /** Records a file serve (fire-and-forget): bumps the access counter and promotes to Redis once hot enough. */
-   public recordServe(absPath: string): void {
-      void this.promoteHotIfFrequent(absPath);
-   }
-
-   private async promoteHotIfFrequent(absPath: string): Promise<void> {
-      try {
-         if (!(await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.HOT_FLAG))) return;
-
-         const cfg = await this.hotConfig();
-         const freqKey = this.hotFreqKey(absPath);
-         const count = await this.redis.incr(freqKey);
-         if (count === 1) await this.redis.expire(freqKey, cfg.frequencyWindowSeconds);
-         if (count < cfg.accessThreshold) return;
-
-         const blobKey = this.hotBlobKey(absPath);
-         if (await this.redis.exists(blobKey)) return; // already hot
-
-         let size: number;
-         try {
-            size = (await fs.promises.stat(absPath)).size; // follows a cold symlink to the real bytes
-         } catch {
-            return; // gone
-         }
-         if (size > cfg.maxFileBytes) return;
-
-         const bytes = await fs.promises.readFile(absPath);
-         await this.redis.set(blobKey, bytes, "EX", cfg.ttlSeconds);
-         this.logger.log(`Cached ${absPath} in hot storage (Redis, ${(size / 1e6).toFixed(2)} MB)`);
-         if (this.metrics) {
-            this.metrics.hotStoragePromotions += 1;
-            this.metrics.hotStorageBytesCached += size;
-         }
-      } catch (e) {
-         if (this.metrics) this.metrics.hotStorageErrors += 1;
-         this.logger.error(`Hot caching failed for ${absPath}: ${(e as Error).message}`);
-      }
-   }
-
-   /**
-    * Drops a path (and, for a directory, everything beneath it) from the hot tier. Call when
-    * a file is deleted, renamed or overwritten so Redis never serves stale/removed bytes.
-    */
-   public async removeHotData(absPath: string): Promise<void> {
-      try {
-         await this.redis.del(this.hotBlobKey(absPath), this.hotFreqKey(absPath));
-         for (const prefix of [TieredStorageService.HOT_BLOB_PREFIX, TieredStorageService.HOT_FREQ_PREFIX]) {
-            const keys = await this.scanHotKeys(`${prefix}${absPath}/*`);
-            if (keys.length) await this.redis.del(...keys);
-         }
-      } catch (e) {
-         this.logger.error(`Failed to remove hot data for ${absPath}: ${(e as Error).message}`);
-      }
-   }
-
-   /** True if the file is currently cached in the hot (Redis) tier. */
-   public async isHotFile(absPath: string): Promise<boolean> {
-      try {
-         return (await this.redis.exists(this.hotBlobKey(absPath))) === 1;
-      } catch {
-         return false;
-      }
-   }
-
-   /**
-    * Hot-tier totals (number of cached files and their total bytes in Redis). Optionally
-    * scoped to files whose absolute path starts with `prefix` (e.g. a single user's dir).
-    */
-   public async hotStats(prefix?: string): Promise<{ fileCount: number; bytes: number }> {
-      const match = prefix ? `${TieredStorageService.HOT_BLOB_PREFIX}${prefix}*` : `${TieredStorageService.HOT_BLOB_PREFIX}*`;
-      let fileCount = 0;
-      let bytes = 0;
-      try {
-         const keys = await this.scanHotKeys(match);
-         fileCount = keys.length;
-         for (const k of keys) {
-            try {
-               bytes += await this.redis.strlen(k);
-            } catch {
-               // key vanished (TTL) mid-scan — ignore
-            }
-         }
-      } catch {
-         // redis unavailable — report zero
-      }
-      return { fileCount, bytes };
-   }
-
-   /** Overall Redis memory usage (bytes used + configured maxmemory; maxMemory 0 = no limit set). */
-   public async redisMemory(): Promise<{ usedMemory: number; maxMemory: number }> {
-      try {
-         const info = await this.redis.info("memory");
-         const usedMemory = Number(/used_memory:(\d+)/.exec(info)?.[1] ?? 0);
-         const maxMemory = Number(/(?:^|\n)maxmemory:(\d+)/.exec(info)?.[1] ?? 0);
-         return { usedMemory, maxMemory };
-      } catch {
-         return { usedMemory: 0, maxMemory: 0 };
-      }
-   }
-
-   private async scanHotKeys(match: string): Promise<string[]> {
-      let cursor = "0";
-      const keys: string[] = [];
-      do {
-         const [next, batch] = await this.redis.scan(cursor, "MATCH", match, "COUNT", 200);
-         cursor = next;
-         keys.push(...batch);
-      } while (cursor !== "0");
-      return keys;
    }
 
    /** Recursively counts files under `dir`: total files and how many are in cold storage. */

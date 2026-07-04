@@ -119,7 +119,6 @@ export class DirectoriesService {
 
       // Free any cold blobs backing symlinks under this directory before removing it.
       await this.tieredStorage.removeColdData(dir);
-      await this.tieredStorage.removeHotData(dir);
       this.fs.rmdirSync(dir, { recursive: true });
    }
 

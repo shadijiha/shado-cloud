@@ -88,12 +88,6 @@ export class ColdStorageStats {
 
    @ApiProperty({ description: "Number of those files currently moved to cold (tiered) storage" })
    cold = 0;
-
-   @ApiProperty({ description: "Number of the user's files currently cached in the hot (Redis) tier" })
-   hot = 0;
-
-   @ApiProperty({ description: "Total bytes the user has cached in the hot (Redis) tier" })
-   hot_bytes = 0;
 }
 export class ProfileStats {
    @ApiProperty({ type: [AccessFileStat] })
