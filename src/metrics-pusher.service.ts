@@ -46,10 +46,6 @@ export class MetricsPusherService implements OnApplicationBootstrap {
    public coldStoragePromotions = 0;      // files promoted cold -> main on access
    public coldStorageBytesPromoted = 0;   // bytes promoted cold -> main
    public coldStoragePromotionErrors = 0; // files that failed to promote
-   public hotStorageHits = 0;             // serves satisfied from the Redis hot tier
-   public hotStoragePromotions = 0;       // files copied into the Redis hot tier
-   public hotStorageBytesCached = 0;      // bytes copied into the Redis hot tier
-   public hotStorageErrors = 0;           // failures while caching into the hot tier
    public coldStorageLastSweepMs = 0;     // gauge: wall-clock duration of the last demotion sweep
    public coldStorageLastSweepAt = 0;     // gauge: epoch ms of the last completed demotion sweep
    private dbQueries = 0;
@@ -219,10 +215,6 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       const coldPromotions = this.coldStoragePromotions;
       const coldBytesPromoted = this.coldStorageBytesPromoted;
       const coldPromotionErrors = this.coldStoragePromotionErrors;
-      const hotHits = this.hotStorageHits;
-      const hotPromotions = this.hotStoragePromotions;
-      const hotBytesCached = this.hotStorageBytesCached;
-      const hotErrors = this.hotStorageErrors;
       const coldLastSweepAt = this.coldStorageLastSweepAt;     // gauge
       const coldSweepMs = this.coldStorageLastSweepMs; // gauge — reported as-is, not reset
 
@@ -241,10 +233,6 @@ export class MetricsPusherService implements OnApplicationBootstrap {
       this.coldStoragePromotions = 0;
       this.coldStorageBytesPromoted = 0;
       this.coldStoragePromotionErrors = 0;
-      this.hotStorageHits = 0;
-      this.hotStoragePromotions = 0;
-      this.hotStorageBytesCached = 0;
-      this.hotStorageErrors = 0;
 
       const datapoints: any[] = [
          { namespace: "shado-cloud", metric: "request_count", value: requests, unit: MetricUnit.Count, timestamp: now },
@@ -267,10 +255,6 @@ export class MetricsPusherService implements OnApplicationBootstrap {
          { namespace: "shado-cloud", metric: "cold_storage_promotions", value: coldPromotions, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_bytes_promoted", value: coldBytesPromoted, unit: MetricUnit.Bytes, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_promotion_errors", value: coldPromotionErrors, unit: MetricUnit.Count, timestamp: now },
-         { namespace: "shado-cloud", metric: "hot_storage_hits", value: hotHits, unit: MetricUnit.Count, timestamp: now },
-         { namespace: "shado-cloud", metric: "hot_storage_promotions", value: hotPromotions, unit: MetricUnit.Count, timestamp: now },
-         { namespace: "shado-cloud", metric: "hot_storage_bytes_cached", value: hotBytesCached, unit: MetricUnit.Bytes, timestamp: now },
-         { namespace: "shado-cloud", metric: "hot_storage_errors", value: hotErrors, unit: MetricUnit.Count, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_demotion_sweep_ms", value: coldSweepMs, unit: MetricUnit.Milliseconds, timestamp: now },
          { namespace: "shado-cloud", metric: "cold_storage_last_sweep_timestamp", value: coldLastSweepAt, unit: MetricUnit.None, timestamp: now },
          ...this.runtimeGauges(now),

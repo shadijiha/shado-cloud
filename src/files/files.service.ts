@@ -104,12 +104,6 @@ export class FilesService {
          throw new Error("You don't have permission to access this file " + relativePath);
       }
 
-      // Hot tier: count this serve (may promote the file into Redis) and, if it's already
-      // cached there, serve the bytes straight from Redis instead of touching the disk.
-      this.tieredStorage.recordServe(dir);
-      const hot = await this.tieredStorage.getHotStream(dir, options);
-      if (hot) return hot;
-
       return this.fs.createReadStream(dir, options);
    }
 
@@ -322,7 +316,6 @@ export class FilesService {
          // If this is a cold file, free its cold blob now (don't wait for GC) — otherwise a
          // re-upload of the same name before GC would leave a stale blob at the mirror path.
          await this.tieredStorage.removeColdData(dir);
-         await this.tieredStorage.removeHotData(dir);
          this.fs.unlinkSync(dir);
 
          // See if file is in DB, if yes, then delete it
@@ -399,15 +392,13 @@ export class FilesService {
 
       const stats = this.fs.statSync(dir);
 
-      // For directories, summarise how many files (recursively) are in cold/hot storage.
+      // For directories, summarise how many files (recursively) are in cold storage.
       let file_count: number | undefined;
       let cold_file_count: number | undefined;
-      let hot_file_count: number | undefined;
       if (stats.isDirectory()) {
          const s = this.tieredStorage.coldStats(dir);
          file_count = s.total;
          cold_file_count = s.cold;
-         hot_file_count = (await this.tieredStorage.hotStats(dir + path.sep)).fileCount;
       }
 
       const file = await this.uploadedFileRepo.findOne({
@@ -449,10 +440,8 @@ export class FilesService {
          size: stats.size,
          lastModified: stats.mtime.toISOString(),
          is_cold_storage: this.tieredStorage.isColdFile(dir),
-         is_hot_storage: await this.tieredStorage.isHotFile(dir),
          file_count,
          cold_file_count,
-         hot_file_count,
          temp_url: tempUrls.length > 0 ? tempUrls.filter((e) => e.isValid()) : null,
          db_record: file,
          related_keys_in_redis: file && fetch_related_keys_in_redis ? await this.getCacheKeysForFile(userId, file) : [],
@@ -782,18 +771,17 @@ export class FilesService {
          } else used_data.other += size;
       }
 
-      // Cache it in redis
-      this.cache.setex(CACHE_KEY, 3600, JSON.stringify(used_data));
+      // Cache it in redis (fire-and-forget; not critical to the returned value)
+      void this.cache.setex(CACHE_KEY, 3600, JSON.stringify(used_data));
 
       return used_data;
    }
 
-   /** Counts how many of the user's files (recursively) are in cold/tiered storage, plus hot-tier (Redis) totals. */
-   public async getColdStorageStats(userId: number): Promise<{ total: number; cold: number; hot: number; hot_bytes: number }> {
+   /** Counts how many of the user's files (recursively) are in cold/tiered storage. */
+   public async getColdStorageStats(userId: number): Promise<{ total: number; cold: number }> {
       const root = await this.getUserRootPath(userId);
       const cold = this.tieredStorage.coldStats(root);
-      const hot = await this.tieredStorage.hotStats(root + path.sep);
-      return { total: cold.total, cold: cold.cold, hot: hot.fileCount, hot_bytes: hot.bytes };
+      return { total: cold.total, cold: cold.cold };
    }
 
    public async createMetaFolderIfNotExists(userId: number): Promise<string> {
