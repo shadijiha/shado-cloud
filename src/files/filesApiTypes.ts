@@ -79,6 +79,9 @@ export class FileInfo {
 
    @ApiProperty({ required: false, description: "Files under this directory that are in cold storage (directories only)." })
    cold_file_count?: number;
+
+   @ApiProperty()
+   is_dir = false;
 }
 
 export class FileInfoResponse extends ErrorProne {

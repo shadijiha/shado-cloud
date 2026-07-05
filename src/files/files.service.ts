@@ -446,6 +446,7 @@ export class FilesService {
          db_record: file,
          related_keys_in_redis: file && fetch_related_keys_in_redis ? await this.getCacheKeysForFile(userId, file) : [],
          thumbails,
+         is_dir: stats.isDirectory(),
       };
    }
 

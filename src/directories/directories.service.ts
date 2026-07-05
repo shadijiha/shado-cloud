@@ -34,15 +34,40 @@ export class DirectoriesService {
       return await this.fileService.getUserRootPath(userId);
    }
 
-   public async list(userId: number, relativePath: string, fetch_related_keys_in_redis = false, fetch_db_records = false, sortBy?: [string, string][]) {
+   public async list(
+      userId: number,
+      relativePath: string,
+      fetch_related_keys_in_redis = false,
+      fetch_db_records = false,
+      pagination?: {page: number, limit: number},
+      sortBy?: [string, string][]
+   ) {
       const dir = await this.fileService.absolutePath(userId, relativePath);
 
       if (!(await this.fileService.isOwner(userId, dir))) {
          throw new Error("You do not have access to this directory");
       }
 
-      const files = this.fs.readdirSync(dir);
+      const dirList = this.fs.readdirSync(dir);
       const result: Array<DirectoryInfo | FileInfo> = [];
+
+      // Pagination at service level
+      // If no pagination, return everything
+      let files = dirList;
+      let paginationMetadata: { page: number, limit: number, total: number, totalPages: number, start: number } | undefined = undefined;
+
+      if (pagination && pagination.page && pagination.limit) {
+         const page = Math.max(1, pagination.page || 1);
+         const limit = Math.min(200, Math.max(1, pagination.limit || 50));
+         const total = dirList.length;
+         const totalPages = Math.ceil(total / limit);
+         const start = (page - 1) * limit;
+
+         paginationMetadata = { page, limit, total, totalPages, start };
+
+         files = dirList.slice(start, start + limit);
+      }
+
 
       for (const file of files) {
          try {
@@ -69,7 +94,7 @@ export class DirectoriesService {
       const sortCol = sortBy?.[0]?.[0] || "name";
       const sortDir = (sortBy?.[0]?.[1] || "ASC").toUpperCase();
 
-      return result.sort((a: any, b: any) => {
+      const paginatedItems = result.sort((a: DirectoryInfo | FileInfo, b: DirectoryInfo | FileInfo) => {
          // Directories always first
          if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
 
@@ -81,6 +106,11 @@ export class DirectoriesService {
          const cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
          return sortDir === "DESC" ? -cmp : cmp;
       });
+
+      return {
+         paginatedItems,
+         paginationMetadata,
+      }
    }
 
    public async new(userId: number, name: string) {

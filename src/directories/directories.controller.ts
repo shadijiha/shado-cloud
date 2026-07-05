@@ -61,24 +61,22 @@ export class DirectoriesController {
       @Paginate() query: PaginateQuery,
    ): Promise<DirListResponse> {
       try {
-         const allItems = await this.directoriesService.list(userId, path ?? "", fetch_related_keys_in_redis, fetch_db_records, query.sortBy as [string, string][]);
-
-         const page = Math.max(1, query.page || 1);
-         const limit = Math.min(200, Math.max(1, query.limit || 50));
-         const total = allItems.length;
-         const totalPages = Math.ceil(total / limit);
-         const start = (page - 1) * limit;
-         const data = allItems.slice(start, start + limit);
+         const { paginatedItems, paginationMetadata } = await this.directoriesService.list(
+            userId, path ?? "",
+            fetch_related_keys_in_redis,
+            fetch_db_records,
+            { page: query.page, limit: query.limit },
+            query.sortBy as [string, string][]);
 
          return {
             status: OperationStatus[OperationStatus.SUCCESS],
             parent: this.directoriesService.parent(path),
-            data,
+            data: paginatedItems,
             meta: {
-               itemsPerPage: limit,
-               totalItems: total,
-               currentPage: page,
-               totalPages,
+               itemsPerPage: paginationMetadata.limit,
+               totalItems: paginationMetadata.total,
+               currentPage: paginationMetadata.page,
+               totalPages: paginationMetadata.totalPages,
                sortBy: query.sortBy || [],
                searchBy: [],
                search: query.search || "",
@@ -90,7 +88,7 @@ export class DirectoriesController {
             errors: [],
          };
       } catch (e) {
-         this.logger.logException(e);
+         this.logger.logException(e as Error);
          return {
             status: OperationStatus[OperationStatus.FAILED],
             data: null,
