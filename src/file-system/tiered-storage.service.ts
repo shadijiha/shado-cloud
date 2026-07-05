@@ -4,9 +4,11 @@ import { ConfigService } from "@nestjs/config";
 import * as fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import type Redis from "ioredis";
 import { EnvVariables } from "src/config/config.validator";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
+import { REDIS_CACHE } from "src/util";
 import { MetricsPusherService } from "../metrics-pusher.service";
 
 /**
@@ -50,6 +52,7 @@ export class TieredStorageService {
    constructor(
       @Inject() private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly featureFlag: FeatureFlagService,
+      @Inject(REDIS_CACHE) private readonly redis: Redis,
       @Optional() @Inject(MetricsPusherService) private readonly metrics?: MetricsPusherService,
    ) {}
 
@@ -290,18 +293,21 @@ export class TieredStorageService {
    /****** Helpers ******/
 
    /**
-    * Lightweight snapshot for the admin UI: whether tiering is on, and per configured
-    * cold drive its mount point, current cold-file count and total cold bytes.
-    * Walks the cold mirror trees on demand (cheap for the occasional admin page load).
+    * Lightweight snapshot for the admin UI: whether tiering is on, per configured cold
+    * drive its mount point/cold-file count/total cold bytes, plus overall Redis memory
+    * usage (for the "Storage Devices" list). Walks the cold mirror trees on demand.
     */
    public async getOverview(): Promise<{
       flags: { demotion: boolean; promotion: boolean };
+      redis: { usedMemory: number; maxMemory: number };
       drives: { name: string; mountPoint: string; coldFileCount: number; coldBytes: number; total: number; free: number; used: number }[];
    }> {
       const flags = {
          demotion: await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.DEMOTION_FLAG),
          promotion: await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.PROMOTION_FLAG),
       };
+
+      const redis = await this.redisMemory();
 
       const drives: { name: string; mountPoint: string; coldFileCount: number; coldBytes: number; total: number; free: number; used: number }[] = [];
       for (const name of this.configuredDrives()) {
@@ -332,7 +338,19 @@ export class TieredStorageService {
          drives.push({ name, mountPoint: this.mountFor(name), coldFileCount, coldBytes, total, free, used: total - free });
       }
 
-      return { flags, drives };
+      return { flags, redis, drives };
+   }
+
+   /** Overall Redis memory usage (bytes used + configured maxmemory; maxMemory 0 = no limit set). */
+   public async redisMemory(): Promise<{ usedMemory: number; maxMemory: number }> {
+      try {
+         const info = await this.redis.info("memory");
+         const usedMemory = Number(/used_memory:(\d+)/.exec(info)?.[1] ?? 0);
+         const maxMemory = Number(/(?:^|\n)maxmemory:(\d+)/.exec(info)?.[1] ?? 0);
+         return { usedMemory, maxMemory };
+      } catch {
+         return { usedMemory: 0, maxMemory: 0 };
+      }
    }
 
 

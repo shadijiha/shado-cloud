@@ -100,7 +100,7 @@ describe("AdminController", () => {
             {
                provide: TieredStorageService,
                useValue: {
-                  getOverview: jest.fn().mockResolvedValue({ flags: { demotion: false, promotion: false }, drives: [] }),
+                  getOverview: jest.fn().mockResolvedValue({ flags: { demotion: false, promotion: false }, redis: { usedMemory: 0, maxMemory: 0 }, drives: [] }),
                },
             },
             {

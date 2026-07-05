@@ -7,6 +7,7 @@ const dirent = (name: string, isDir = false): fs.Dirent =>
 describe("TieredStorageService", () => {
    let config: { get: jest.Mock };
    let featureFlag: { isFeatureFlagEnabled: jest.Mock };
+   let redis: { info: jest.Mock };
    let metrics: {
       coldStorageDemotions: number;
       coldStorageBytesMoved: number;
@@ -34,12 +35,15 @@ describe("TieredStorageService", () => {
       featureFlag = {
          isFeatureFlagEnabled: jest.fn().mockResolvedValue(true),
       };
+      redis = {
+         info: jest.fn().mockResolvedValue("used_memory:1048576\r\nmaxmemory:104857600\r\n"),
+      };
       metrics = {
          coldStorageDemotions: 0, coldStorageBytesMoved: 0, coldStorageDemotionErrors: 0,
          coldStorageLastSweepMs: 0, coldStorageLastSweepAt: 0,
          coldStoragePromotions: 0, coldStorageBytesPromoted: 0, coldStoragePromotionErrors: 0,
       };
-      service = new TieredStorageService(config as any, featureFlag as any, metrics as any);
+      service = new TieredStorageService(config as any, featureFlag as any, redis as any, metrics as any);
 
       jest.spyOn(fs.promises, "statfs").mockResolvedValue({ bavail: 1_000_000, bsize: 4096 } as any);
       jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => false } as any);
@@ -247,6 +251,29 @@ describe("TieredStorageService", () => {
          await service.removeColdData("/cloud/d");
 
          expect(fs.promises.rm).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/d/a.png", { force: true });
+      });
+   });
+
+   describe("redisMemory", () => {
+      it("parses used_memory and maxmemory from INFO", async () => {
+         redis.info.mockResolvedValue("# Memory\r\nused_memory:2097152\r\nused_memory_human:2.00M\r\nmaxmemory:104857600\r\n");
+         expect(await service.redisMemory()).toEqual({ usedMemory: 2097152, maxMemory: 104857600 });
+      });
+
+      it("reports maxMemory 0 when no limit is set", async () => {
+         redis.info.mockResolvedValue("used_memory:500\r\nmaxmemory:0\r\n");
+         expect(await service.redisMemory()).toEqual({ usedMemory: 500, maxMemory: 0 });
+      });
+
+      it("returns zeros when Redis is unavailable", async () => {
+         redis.info.mockRejectedValue(new Error("connection refused"));
+         expect(await service.redisMemory()).toEqual({ usedMemory: 0, maxMemory: 0 });
+      });
+
+      it("is included in getOverview", async () => {
+         redis.info.mockResolvedValue("used_memory:1000\r\nmaxmemory:2000\r\n");
+         const overview = await service.getOverview();
+         expect(overview.redis).toEqual({ usedMemory: 1000, maxMemory: 2000 });
       });
    });
 });
