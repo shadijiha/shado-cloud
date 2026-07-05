@@ -14,7 +14,9 @@ this-service:
     role: primary
     master-or-replica-ip: 
   
-  # For cors, does NOT support ,
+  # CORS allowed origin(s). Supports a comma-separated list; each entry is trimmed,
+  # e.g. "http://localhost:3000,https://localhost" (https://localhost is the Android
+  # native WebView origin; capacitor://localhost for iOS is already allowed).
   frontend_url: http://localhost:3000
 
   # Emails sending and drive DB backup use this account secrets

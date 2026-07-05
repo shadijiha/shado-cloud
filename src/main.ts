@@ -26,7 +26,7 @@ async function bootstrap() {
 
    app.enableCors({
       origin: [
-         envConfig.get("this-service.frontend_url", { infer: true }),
+         ...(envConfig.get("this-service.frontend_url", { infer: true })?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
          /\.shadijiha\.com$/,
          "http://shadijiha.com",
          "https://shadijiha.com",
