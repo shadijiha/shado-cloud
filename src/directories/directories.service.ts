@@ -12,7 +12,7 @@ import { UploadedFile } from "./../models/uploadedFile";
 import { In, Like, Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
 import { InjectRepository } from "@nestjs/typeorm";
-import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { AbstractFileSystem, Dirent, State } from "src/file-system/abstract-file-system.interface";
 import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
@@ -48,8 +48,36 @@ export class DirectoriesService {
          throw new Error("You do not have access to this directory");
       }
 
-      const dirList = this.fs.readdirSync(dir);
-      const result: Array<DirectoryInfo | FileInfo> = [];
+      const dirListUnsorted = this.fs.readdirSync(dir);
+      
+      // Sort first before pagination, so that the user gets a consistent view of the directory across pages.
+      const sortCol = sortBy?.[0]?.[0];
+      const sortDir = (sortBy?.[0]?.[1] || "ASC")?.toUpperCase();
+
+      const fsStatsCache: Record<string, State> = {};
+      let dirList = dirListUnsorted;
+      
+      if (sortCol) {
+         dirList = dirListUnsorted.sort((a: Dirent, b: Dirent) => {
+            // Directories always first
+            if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+
+            if (sortCol === "lastModified") {
+               // Get file stats for both files to compare last modified times
+               const aPath = path.join(dir, a.name);
+               const bPath = path.join(dir, b.name);
+
+               const aStats = fsStatsCache[aPath] || (fsStatsCache[aPath] = this.fs.statSync(aPath));
+               const bStats = fsStatsCache[bPath] || (fsStatsCache[bPath] = this.fs.statSync(bPath));
+
+               const diff = aStats.mtime.getTime() - bStats.mtime.getTime();
+               return sortDir === "DESC" ? -diff : diff;
+            }
+            // Default: name
+            const cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+            return sortDir === "DESC" ? -cmp : cmp;
+         });
+      }
 
       // Pagination at service level
       // If no pagination, return everything
@@ -68,13 +96,13 @@ export class DirectoriesService {
          files = dirList.slice(start, start + limit);
       }
 
-
+      const result: Array<DirectoryInfo | FileInfo> = [];
       for (const file of files) {
          try {
             if (file.isDirectory()) {
                const userRoot = await this.fileService.getUserRootPath(userId);
                const fullPath = path.join(dir, file.name);
-               const stats = this.fs.statSync(fullPath);
+               const stats = fsStatsCache[fullPath] || this.fs.statSync(fullPath);
                result.push({
                   name: file.name,
                   path: path.relative(userRoot, dir),
@@ -91,24 +119,8 @@ export class DirectoriesService {
          }
       }
 
-      const sortCol = sortBy?.[0]?.[0] || "name";
-      const sortDir = (sortBy?.[0]?.[1] || "ASC").toUpperCase();
-
-      const paginatedItems = result.sort((a: DirectoryInfo | FileInfo, b: DirectoryInfo | FileInfo) => {
-         // Directories always first
-         if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
-
-         if (sortCol === "lastModified") {
-            const diff = new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
-            return sortDir === "DESC" ? -diff : diff;
-         }
-         // Default: name
-         const cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-         return sortDir === "DESC" ? -cmp : cmp;
-      });
-
       return {
-         paginatedItems,
+         paginatedItems: result,
          paginationMetadata,
       }
    }
