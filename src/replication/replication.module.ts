@@ -12,6 +12,10 @@ import { ServiceKeyGuard } from "src/auth/service-key.guard";
 import { EnvVariables } from "src/config/config.validator";
 import { LoggerToDb } from "src/logging";
 import { EmailService } from "src/admin/email.service";
+import { REDIS_CACHE } from "src/util";
+import Redis from "ioredis";
+import { ClientsModule, Transport } from "@nestjs/microservices";
+import { AUTH_SERVICE } from "src/auth/auth.constants";
 
 /**
  * This module is responsible for replicating data between the primary and secondary PCs
@@ -29,6 +33,19 @@ import { EmailService } from "src/admin/email.service";
          isGlobal: true,
       }),
       ScheduleModule.forRoot(),
+      ClientsModule.registerAsync([
+         {
+            name: AUTH_SERVICE,
+            useFactory: (config: ConfigService<EnvVariables>) => ({
+               transport: Transport.TCP,
+               options: {
+                  host: config.get("cross-service.auth-api.host", { infer: true }),
+                  port: config.get("cross-service.auth-api.port.tcp", { infer: true }) ?? 11002,
+               },
+            }),
+            inject: [ConfigService],
+         },
+      ]),
    ],
    controllers: [ReplicationController],
    providers: [
@@ -39,6 +56,19 @@ import { EmailService } from "src/admin/email.service";
       },
       ServiceKeyGuard,
       EmailService,
+      {
+         provide: REDIS_CACHE,
+         useFactory: (config: ConfigService<EnvVariables>) => {
+            return new Redis({
+               host: config.get("redis.host", { infer: true }),
+               port: config.get("redis.port", { infer: true }),
+               password: config.get("redis.password", { infer: true }),
+            });
+         },
+         scope: Scope.DEFAULT,
+         inject: [ConfigService],
+      },
+
    ],
 })
 export class ReplicationModule implements NestModule {
