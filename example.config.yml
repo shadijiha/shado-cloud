@@ -13,6 +13,14 @@ this-service:
   replication:
     role: primary
     master-or-replica-ip: 
+    # Optional (replica only). Glob patterns, relative to the cloud dir, that the
+    # replica will NOT download or delete. Matching is case-sensitive.
+    # e.g.
+    # ignore-patterns:
+    #   - "**/*.tmp"
+    #   - "cache/**"
+    #   - "user1/private/**"
+    ignore-patterns: []
   
   # CORS allowed origin(s). Supports a comma-separated list; each entry is trimmed,
   # e.g. "http://localhost:3000,https://localhost" (https://localhost is the Android

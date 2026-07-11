@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
 import { ConfigService } from "@nestjs/config";
 import { firstValueFrom, timeout } from "rxjs";
@@ -15,10 +15,11 @@ import { AUTH_SERVICE } from "../auth/auth.constants";
 export class EmailService {
    private readonly serviceKey: string;
 
+   private readonly logger = new Logger(EmailService.name);
+
    public constructor(
       @Inject(AUTH_SERVICE) private readonly authClient: ClientProxy,
       @Inject() private readonly config: ConfigService<EnvVariables>,
-      @Inject() private readonly logger: LoggerToDb,
    ) {
       this.serviceKey = this.config.get("cross-service.secret", { infer: true });
    }

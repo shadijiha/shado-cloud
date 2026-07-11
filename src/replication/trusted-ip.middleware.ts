@@ -3,9 +3,15 @@ import { Request, Response, NextFunction } from "express";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { LoggerToDb } from "src/logging";
+import { normalizeIp, resolveClientIp } from "./client-ip.util";
 
+/**
+ * Guards the replication endpoints. Access is granted ONLY to IPs explicitly
+ * allow-listed by an admin (stored in the replication feature flag payload).
+ * There is no local-network bypass.
+ */
 @Injectable()
-export class LocalNetworkMiddleware implements NestMiddleware {
+export class TrustedIpMiddleware implements NestMiddleware {
    constructor(
       @Optional() private readonly featureFlagService: FeatureFlagService,
       @Optional() private readonly logger: LoggerToDb,
@@ -19,21 +25,24 @@ export class LocalNetworkMiddleware implements NestMiddleware {
          throw new ForbiddenException("Replication is disabled");
       }
 
-      const ip = req.ip || req.socket.remoteAddress;
-      if (this.isLocalNetwork(ip)) {
+      const ip = resolveClientIp(req);
+
+      // The only IPs allowed in — stored in the replication feature flag payload.
+      let allowedIps: string[] = [];
+      if (this.featureFlagService) {
+         ({ allowedIps } = await this.featureFlagService.getPayload(
+            FeatureFlagNamespace.Replication,
+            "replication",
+            { allowedIps: [] as string[] },
+         ));
+      }
+      const isAllowListed = allowedIps.some((allowed) => normalizeIp(allowed) === ip);
+
+      if (isAllowListed) {
          next();
       } else {
          if (this.logger) void this.logger.debug(`Refused connection from ${ip}`);
-         throw new ForbiddenException("Access is allowed only from local network");
+         throw new ForbiddenException("Access is allowed only from an allow-listed IP");
       }
-   }
-
-   isLocalNetwork(ip: string): boolean {
-      ip = ip.replace("::ffff:", "");
-      return (
-         ip.startsWith("192.168.") ||
-         ip.startsWith("10.") ||
-         (ip.startsWith("172.") && parseInt(ip.split(".")[1]) >= 16 && parseInt(ip.split(".")[1]) <= 31)
-      );
    }
 }

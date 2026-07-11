@@ -15,6 +15,18 @@ export class FeatureFlagService {
    // directly in the DB (bypassing enable/disableFeatureFlag) stays stale.
    private static readonly CACHE_TTL_SECONDS = 30;
 
+   // Default payload + description applied when a well-known flag is first
+   // auto-created. Keeps the expected payload shape documented in code so it is
+   // not forgotten. Keyed by `${namespace}:${key}`.
+   private static readonly FLAG_DEFAULTS: Record<string, Pick<CreateFeatureFlagRequest, "payload" | "description">> = {
+      [`${FeatureFlagNamespace.Replication}:replication`]: {
+         description:
+            "Controls data replication between master and replica. The payload allow-lists extra IPs " +
+            "(beyond the local network) permitted to reach the /replication endpoints.",
+         payload: JSON.stringify({ allowedIps: [] as string[] }, null, 2),
+      },
+   };
+
    private readonly eventListeners: Record<string, { listenerId: string, listener: FeatureFlagEventListener }[]> = {};
 
    // Plain logger (not LoggerToDb) — LoggerToDb depends on FeatureFlagService, so injecting
@@ -46,8 +58,10 @@ export class FeatureFlagService {
          await this.redis.set(cacheKey, JSON.stringify(flag), "EX", FeatureFlagService.CACHE_TTL_SECONDS);
          this.inrementFeatureFlagTriggerCount(namespace, key, false);
       } else {
-         // Create it so we can disabled/enable it in the frontend
-         await this.createFeatureFlag({ namespace, key });
+         // Create it so we can disabled/enable it in the frontend, seeding any
+         // documented default payload/description for well-known flags.
+         const defaults = FeatureFlagService.FLAG_DEFAULTS[`${namespace}:${key}`] ?? {};
+         await this.createFeatureFlag({ namespace, key, ...defaults });
       }
       return flag;
    }

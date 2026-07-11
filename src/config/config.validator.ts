@@ -123,6 +123,11 @@ class ReplicationConfig {
    @IsString()
    @ValidateIf((o) => o.role === ReplicationRole.Replica)
    "master-or-replica-ip": string
+
+   @IsArray()
+   @IsString({ each: true })
+   @IsOptional()
+   "ignore-patterns"?: string[]
 }
 
 class GoogleConfig {
