@@ -309,6 +309,17 @@ export class ReplicationService implements OnModuleInit {
             else out.once("drain", resolve);
          });
 
+      // mysql2 returns JSON columns already parsed into JS objects/arrays. Passing those
+      // straight to conn.escape() produces `key = value` (its SET-clause form), not a JSON
+      // string literal — which MySQL rejects as invalid JSON. Stringify objects/arrays;
+      // Buffers (BLOB) and Dates are handled correctly by conn.escape().
+      const escapeValue = (v: unknown): string => {
+         if (v === null || v === undefined) return "NULL";
+         if (Buffer.isBuffer(v) || v instanceof Date) return conn.escape(v);
+         if (typeof v === "object") return conn.escape(JSON.stringify(v));
+         return conn.escape(v);
+      };
+
       await write("SET FOREIGN_KEY_CHECKS=0;\n");
 
       const [databases] = await conn.query("SHOW DATABASES");
@@ -346,7 +357,7 @@ export class ReplicationService implements OnModuleInit {
             };
             for await (const row of rowStream as AsyncIterable<Record<string, unknown>>) {
                if (!columns) columns = Object.keys(row);
-               const tuple = `(${columns.map((c) => conn.escape(row[c])).join(",")})`;
+               const tuple = `(${columns.map((c) => escapeValue(row[c])).join(",")})`;
                // Flush before adding if this row would push the statement over a safe
                // packet size, or the row-count cap is hit.
                if (batch.length > 0 && (batchBytes + tuple.length + 1 > ReplicationService.MAX_INSERT_BYTES || batch.length >= 500)) {
