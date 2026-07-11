@@ -247,7 +247,7 @@ export class ReplicationService implements OnModuleInit {
 
       // 1) Generate the dump to a temp file, streaming rows (bounded memory).
       // Connect without a default database so we can enumerate/read every schema.
-      const conn = await createConnection({ host, port, user, password: password ?? "" });
+      const conn = await createConnection({ host, port, user, password: password ?? "", maxAllowedPacket: 256 * 1024 * 1024 });
       try {
          await this.writeDumpToFile(conn, tmpFile);
       } catch (e) {
@@ -287,6 +287,10 @@ export class ReplicationService implements OnModuleInit {
    // would clobber the replica's own users/grants).
    private static readonly SYSTEM_SCHEMAS = new Set(["information_schema", "mysql", "performance_schema", "sys"]);
 
+   // Max byte size of a single multi-row INSERT statement. Kept well under MySQL's
+   // default max_allowed_packet (64MB) so imports never exceed the server limit.
+   private static readonly MAX_INSERT_BYTES = 4 * 1024 * 1024;
+
    /**
     * Streams ALL application databases to `tmpFile` as SQL. Each database is emitted
     * with `CREATE DATABASE IF NOT EXISTS` + `USE`, then its tables (DROP + CREATE +
@@ -312,6 +316,7 @@ export class ReplicationService implements OnModuleInit {
          const database = Object.values(dbRow)[0];
          if (ReplicationService.SYSTEM_SCHEMAS.has(database.toLowerCase())) continue;
 
+         this.logger.log(`Dumping database "${database}"...`);
          await write(`CREATE DATABASE IF NOT EXISTS ${conn.escapeId(database)};\n`);
          await write(`USE ${conn.escapeId(database)};\n`);
 
@@ -324,22 +329,35 @@ export class ReplicationService implements OnModuleInit {
             await write(`DROP TABLE IF EXISTS ${conn.escapeId(table)};\n`);
             await write(`${createSql};\n`);
 
-            // Stream rows so we never hold the whole table in memory.
+            // Stream rows so we never hold the whole table in memory. Batches are
+            // bounded by BYTE size (not just row count) so no single INSERT exceeds
+            // the server's max_allowed_packet.
             const rowStream = (conn as any).connection.query(`SELECT * FROM ${conn.escapeId(database)}.${conn.escapeId(table)}`).stream();
             let columns: string[] | null = null;
             let batch: string[] = [];
+            let batchBytes = 0;
+            let rowCount = 0;
             const flushBatch = async () => {
                if (batch.length === 0) return;
                const cols = columns!.map((c) => conn.escapeId(c)).join(",");
                await write(`INSERT INTO ${conn.escapeId(table)} (${cols}) VALUES ${batch.join(",")};\n`);
                batch = [];
+               batchBytes = 0;
             };
             for await (const row of rowStream as AsyncIterable<Record<string, unknown>>) {
                if (!columns) columns = Object.keys(row);
-               batch.push(`(${columns.map((c) => conn.escape(row[c])).join(",")})`);
-               if (batch.length >= 500) await flushBatch();
+               const tuple = `(${columns.map((c) => conn.escape(row[c])).join(",")})`;
+               // Flush before adding if this row would push the statement over a safe
+               // packet size, or the row-count cap is hit.
+               if (batch.length > 0 && (batchBytes + tuple.length + 1 > ReplicationService.MAX_INSERT_BYTES || batch.length >= 500)) {
+                  await flushBatch();
+               }
+               batch.push(tuple);
+               batchBytes += tuple.length + 1;
+               rowCount++;
             }
             await flushBatch();
+            this.logger.log(`  dumped ${database}.${table} (${rowCount} rows)`);
          }
       }
 
@@ -393,15 +411,37 @@ export class ReplicationService implements OnModuleInit {
          // is selected — the dump carries CREATE DATABASE / USE statements for every
          // service's schema (full-box standby).
          const { host, port, user, password } = this.dbConfig;
-         connection = await createConnection({ host, port, user, password: password ?? "" });
+         connection = await createConnection({ host, port, user, password: password ?? "", maxAllowedPacket: 256 * 1024 * 1024 });
 
+         const totalBytes = this.fs.existsSync(tmpFile) ? this.fs.statSync(tmpFile).size : 0;
          const rl = readline.createInterface({ input: this.fs.createReadStream(tmpFile), crlfDelay: Infinity });
          let statements = 0;
+         let bytesProcessed = 0;
+         let lastLoggedPct = 0;
+         let currentDb = "";
          for await (const line of rl) {
+            bytesProcessed += Buffer.byteLength(line) + 1; // +1 for the stripped newline
             const stmt = line.trim();
             if (!stmt) continue;
+
+            const useMatch = /^USE\s+`?([^`;\s]+)`?;?$/i.exec(stmt);
+            if (useMatch) {
+               currentDb = useMatch[1];
+               this.logger.log(`Importing database "${currentDb}"...`);
+            }
+
             await connection.query(stmt);
             statements++;
+
+            if (totalBytes > 0) {
+               const pct = Math.floor((bytesProcessed / totalBytes) * 100);
+               if (pct >= lastLoggedPct + 10) {
+                  lastLoggedPct = pct - (pct % 10);
+                  this.logger.log(
+                     `Importing database dump: ${pct}% (${this.humanSize(bytesProcessed)} / ${this.humanSize(totalBytes)}, ${statements} statements)`,
+                  );
+               }
+            }
          }
          this.logger.log(`Database replicated from master (all databases, ${statements} statements)`);
       } catch (error) {
