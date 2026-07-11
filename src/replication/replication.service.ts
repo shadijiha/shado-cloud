@@ -220,20 +220,24 @@ export class ReplicationService implements OnModuleInit {
    }
 
    /**
-    * Master: generates a `mysqldump`-equivalent of the master's database (the source
-    * of truth) and streams it encrypted to the replica.
+    * Master: generates a `mysqldump`-equivalent of ALL application databases (a full
+    * standby of the box — the source of truth) and streams it encrypted to the replica.
     *
-    * Streaming & memory: the dump is produced by streaming each table's rows from the
-    * mysql2 driver to a temp .sql file (batched INSERTs, constant memory — no CLI, no
-    * whole-DB-in-RAM), then that file is streamed through the cipher to the response
-    * using the same leading-IV + AES-256-CTR scheme as file transfer. `DROP TABLE
-    * IF EXISTS` per table means each import is a clean replace, never a duplicate.
+    * All non-system schemas are dumped, each prefixed with `CREATE DATABASE IF NOT
+    * EXISTS` + `USE`, so the replica recreates every service's database. System schemas
+    * (information_schema, mysql, performance_schema, sys) are skipped.
+    *
+    * Streaming & memory: rows are streamed from the mysql2 driver to a temp .sql file
+    * (batched INSERTs, constant memory — no CLI, no whole-DB-in-RAM), then that file is
+    * streamed through the cipher to the response using the same leading-IV + AES-256-CTR
+    * scheme as file transfer. `DROP TABLE IF EXISTS` per table means each import is a
+    * clean replace, never a duplicate.
     */
    public async getDatabaseDump(res: Response) {
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Disposition", 'attachment; filename="db-dump.sql.enc"');
 
-      const { host, port, user, password, database } = this.dbConfig;
+      const { host, port, user, password } = this.dbConfig;
       const tmpFile = path.join(os.tmpdir(), `shado-db-dump-${Date.now()}.sql`);
       const cleanup = () => {
          try {
@@ -242,9 +246,10 @@ export class ReplicationService implements OnModuleInit {
       };
 
       // 1) Generate the dump to a temp file, streaming rows (bounded memory).
-      const conn = await createConnection({ host, port, user, password: password ?? "", database });
+      // Connect without a default database so we can enumerate/read every schema.
+      const conn = await createConnection({ host, port, user, password: password ?? "" });
       try {
-         await this.writeDumpToFile(conn, database, tmpFile);
+         await this.writeDumpToFile(conn, tmpFile);
       } catch (e) {
          this.logger.error(`Database dump generation failed: ${(e as Error).message}`);
          cleanup();
@@ -263,7 +268,7 @@ export class ReplicationService implements OnModuleInit {
       fileStream.pipe(cipher).pipe(res);
 
       res.on("finish", () => {
-         this.logger.log(`Streamed encrypted database dump of "${database}"`);
+         this.logger.log("Streamed encrypted database dump (all databases)");
          cleanup();
       });
       res.on("close", cleanup);
@@ -278,12 +283,18 @@ export class ReplicationService implements OnModuleInit {
       });
    }
 
+   // Schemas that must never be replicated (server-internal; overwriting `mysql`
+   // would clobber the replica's own users/grants).
+   private static readonly SYSTEM_SCHEMAS = new Set(["information_schema", "mysql", "performance_schema", "sys"]);
+
    /**
-    * Streams the master DB to `tmpFile` as SQL. Each statement is written on a single
-    * line terminated by "\n" (CREATE statements are flattened, and mysql2 escapes any
-    * newlines inside values), so the replica can import it by splitting on lines.
+    * Streams ALL application databases to `tmpFile` as SQL. Each database is emitted
+    * with `CREATE DATABASE IF NOT EXISTS` + `USE`, then its tables (DROP + CREATE +
+    * batched INSERTs). Each statement is written on a single line terminated by "\n"
+    * (CREATE statements are flattened, and mysql2 escapes any newlines inside values),
+    * so the replica can import it by splitting on lines.
     */
-   private async writeDumpToFile(conn: Awaited<ReturnType<typeof createConnection>>, database: string, tmpFile: string) {
+   private async writeDumpToFile(conn: Awaited<ReturnType<typeof createConnection>>, tmpFile: string) {
       const out = this.fs.createWriteStream(tmpFile);
       const write = (s: string) =>
          new Promise<void>((resolve, reject) => {
@@ -296,31 +307,40 @@ export class ReplicationService implements OnModuleInit {
 
       await write("SET FOREIGN_KEY_CHECKS=0;\n");
 
-      const [tables] = await conn.query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'");
-      for (const tableRow of tables as Record<string, string>[]) {
-         const table = Object.values(tableRow)[0];
+      const [databases] = await conn.query("SHOW DATABASES");
+      for (const dbRow of databases as Record<string, string>[]) {
+         const database = Object.values(dbRow)[0];
+         if (ReplicationService.SYSTEM_SCHEMAS.has(database.toLowerCase())) continue;
 
-         const [createRows] = await conn.query(`SHOW CREATE TABLE ${conn.escapeId(table)}`);
-         const createSql = ((createRows as Record<string, string>[])[0]["Create Table"]).replace(/\r?\n/g, " ");
-         await write(`DROP TABLE IF EXISTS ${conn.escapeId(table)};\n`);
-         await write(`${createSql};\n`);
+         await write(`CREATE DATABASE IF NOT EXISTS ${conn.escapeId(database)};\n`);
+         await write(`USE ${conn.escapeId(database)};\n`);
 
-         // Stream rows so we never hold the whole table in memory.
-         const rowStream = (conn as any).connection.query(`SELECT * FROM ${conn.escapeId(table)}`).stream();
-         let columns: string[] | null = null;
-         let batch: string[] = [];
-         const flushBatch = async () => {
-            if (batch.length === 0) return;
-            const cols = columns!.map((c) => conn.escapeId(c)).join(",");
-            await write(`INSERT INTO ${conn.escapeId(table)} (${cols}) VALUES ${batch.join(",")};\n`);
-            batch = [];
-         };
-         for await (const row of rowStream as AsyncIterable<Record<string, unknown>>) {
-            if (!columns) columns = Object.keys(row);
-            batch.push(`(${columns.map((c) => conn.escape(row[c])).join(",")})`);
-            if (batch.length >= 500) await flushBatch();
+         const [tables] = await conn.query(`SHOW FULL TABLES FROM ${conn.escapeId(database)} WHERE Table_type = 'BASE TABLE'`);
+         for (const tableRow of tables as Record<string, string>[]) {
+            const table = Object.values(tableRow)[0];
+
+            const [createRows] = await conn.query(`SHOW CREATE TABLE ${conn.escapeId(database)}.${conn.escapeId(table)}`);
+            const createSql = ((createRows as Record<string, string>[])[0]["Create Table"]).replace(/\r?\n/g, " ");
+            await write(`DROP TABLE IF EXISTS ${conn.escapeId(table)};\n`);
+            await write(`${createSql};\n`);
+
+            // Stream rows so we never hold the whole table in memory.
+            const rowStream = (conn as any).connection.query(`SELECT * FROM ${conn.escapeId(database)}.${conn.escapeId(table)}`).stream();
+            let columns: string[] | null = null;
+            let batch: string[] = [];
+            const flushBatch = async () => {
+               if (batch.length === 0) return;
+               const cols = columns!.map((c) => conn.escapeId(c)).join(",");
+               await write(`INSERT INTO ${conn.escapeId(table)} (${cols}) VALUES ${batch.join(",")};\n`);
+               batch = [];
+            };
+            for await (const row of rowStream as AsyncIterable<Record<string, unknown>>) {
+               if (!columns) columns = Object.keys(row);
+               batch.push(`(${columns.map((c) => conn.escape(row[c])).join(",")})`);
+               if (batch.length >= 500) await flushBatch();
+            }
+            await flushBatch();
          }
-         await flushBatch();
       }
 
       await write("SET FOREIGN_KEY_CHECKS=1;\n");
@@ -369,9 +389,11 @@ export class ReplicationService implements OnModuleInit {
          const dest = this.fs.createWriteStream(tmpFile);
          await this.decryptResponseStream(response, dest, undefined, "database dump");
 
-         // Import statement-by-statement into the replica's OWN database.
-         const { host, port, user, password, database } = this.dbConfig;
-         connection = await createConnection({ host, port, user, password: password ?? "", database });
+         // Import statement-by-statement into the replica's server. No default database
+         // is selected — the dump carries CREATE DATABASE / USE statements for every
+         // service's schema (full-box standby).
+         const { host, port, user, password } = this.dbConfig;
+         connection = await createConnection({ host, port, user, password: password ?? "" });
 
          const rl = readline.createInterface({ input: this.fs.createReadStream(tmpFile), crlfDelay: Infinity });
          let statements = 0;
@@ -381,7 +403,7 @@ export class ReplicationService implements OnModuleInit {
             await connection.query(stmt);
             statements++;
          }
-         this.logger.log(`Database replicated from master into local database "${database}" (${statements} statements)`);
+         this.logger.log(`Database replicated from master (all databases, ${statements} statements)`);
       } catch (error) {
          const e = error as Error;
          this.logger.error(`Database replication failed: ${e.message}`, e.stack);
