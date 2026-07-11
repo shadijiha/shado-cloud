@@ -4,7 +4,13 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { EnvVariables, ReplicationRole } from "src/config/config.validator";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import * as path from "path";
-import { Readable } from "stream";
+import {
+    createCipheriv,
+    randomBytes,
+    createDecipheriv
+} from "crypto";
+import { PassThrough, Readable } from "stream";
+import { Response } from "express";
 
 @Injectable()
 export class ReplicationService implements OnModuleInit {
@@ -29,14 +35,28 @@ export class ReplicationService implements OnModuleInit {
          if (this.isReplica()) {
             this.logger.log("Replicating data from master...");
 
-            if (!this.config.get("this-service.replication.master-or-replica-ip", { infer: true })) {
+            const masterUrl = this.config.get("this-service.replication.master-or-replica-ip", { infer: true });
+            if (!masterUrl) {
                this.logger.error("Master IP is not set");
                return;
             }
 
-            const masterIp = "http://" + this.config.get("this-service.replication.master-or-replica-ip", { infer: true });
+            const protocol = masterUrl.includes("shadijiha.com") ? "https" : "http";
+            const masterIp = `${protocol}://${masterUrl}`;
             const replicaFiles = await this.listCloudDir();
-            const masterFiles: typeof replicaFiles = await (await fetch(`${masterIp}/replication/listall`)).json();
+
+            const listAllResponse = await fetch(`${masterIp}/replication/listall`, {
+               headers: {
+                  "x-service-key": this.config.get("cross-service.secret", { infer: true }),
+               }
+            });
+
+            if (!listAllResponse.ok) {
+               this.logger.error(`Failed to fetch list of files from master, status: ${listAllResponse.status}, text: ${await listAllResponse.text()}`);
+               return;
+            }
+
+            const masterFiles: typeof replicaFiles = await listAllResponse.json();
 
             // Files to replicate
             const replicaDoesNotHave = masterFiles.filter(
@@ -49,29 +69,37 @@ export class ReplicationService implements OnModuleInit {
                if (!this.fs.existsSync(path.join(this.cloudDir, file.path))) {
                   this.fs.mkdirSync(path.join(this.cloudDir, path.dirname(file.path)), { recursive: true });
                }
-               const response = await fetch(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`);
-               if (!response.ok || !response.body) {
+
+               const response = await fetch(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`, {
+                  headers: {
+                     "x-service-key": this.config.get("cross-service.secret", { infer: true }),
+                  }
+               });
+
+               if (!response.ok) {
                   this.logger.error(`Failed to download file ${file.path}, status: ${response.status}, text: ${await response.text()}`);
                }
                const filePath = path.join(this.cloudDir, file.path);
-
                const dest = this.fs.createWriteStream(filePath);
-               await new Promise<void>((resolve, reject) => {
-                  dest.on("finish", resolve);
-                  dest.on("error", reject);
 
-                  void (async () => {
-                     try {
-                        // Stream chunks directly to file
-                        for await (const chunk of response.body as any) {
-                           dest.write(chunk);
-                        }
-                        dest.end();
-                     } catch (err) {
-                        reject(err);
-                     }
-                  })();
-               });
+               await this.decryptResponseStream(response, dest);
+
+               // await new Promise<void>((resolve, reject) => {
+               //    dest.on("finish", resolve);
+               //    dest.on("error", reject);
+
+               //    void (async () => {
+               //       try {
+               //          // Stream chunks directly to file
+               //          for await (const chunk of response.body as any) {
+               //             dest.write(chunk);
+               //          }
+               //          dest.end();
+               //       } catch (err) {
+               //          reject(err);
+               //       }
+               //    })();
+               // });
 
                this.logger.log(`Done ${filesReplicated + 1} of ${replicaDoesNotHave.length} files`);
                filesReplicated++;
@@ -107,8 +135,87 @@ export class ReplicationService implements OnModuleInit {
       return this.listRecusively(this.cloudDir);
    }
 
-   public async getFile(path_: string) {
-      return new StreamableFile(this.fs.createReadStream(path.join(this.cloudDir, path_)));
+   public async getFile(path_: string, res: Response) {
+      // 1. Set explicit streaming headers
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${path.basename(path_)}.enc"`);
+
+
+      // 2. Generate a random 16-byte IV for this specific stream
+      const iv = randomBytes(12); 
+      const cipher = createCipheriv('aes-256-gcm', this.config.get("this-service.password-vault-salt", { infer: true }), iv);
+
+      // 3. Send the raw IV to the client first so they can decrypt it later
+      res.write(iv);
+
+      // 5. Create source stream and pipe: Source -> Encryption -> HTTP Response
+      const fileStream = this.fs.createReadStream(path.join(this.cloudDir, path_));
+
+      fileStream.pipe(cipher).pipe(res);
+
+      // 6. Handle errors cleanly to prevent memory leaks or hanging connections
+      fileStream.on('error', (err) => {
+         if (!res.headersSent) {
+            res.status(500).send('File system read error.');
+         }
+         res.end();
+      });
+
+      cipher.on('error', (err) => {
+         res.end();
+      });
+   }
+
+   /************* Decryption functions ************/
+   async decryptResponseStream(fetchResponse: globalThis.Response,  outputStream: NodeJS.WritableStream) {
+      const webStream = fetchResponse.body as any;
+      const res = Readable.fromWeb(webStream);
+    
+      let decipher = null;
+      let ivBuffer = Buffer.alloc(0);
+
+      // Process the incoming network chunks
+      const key = this.config.get("this-service.password-vault-salt", { infer: true });
+      res.on('data', (chunk) => {
+         
+         // Extract the 16-byte IV from the absolute beginning of the stream
+         if (ivBuffer.length < 16) {
+            const bytesNeeded = 16 - ivBuffer.length;
+            
+            // Pull only what is needed for the IV out of this chunk
+            const ivSegment = chunk.slice(0, bytesNeeded);
+            ivBuffer = Buffer.concat([ivBuffer, ivSegment]);
+            
+            // Keep the rest of the chunk as the encrypted file content
+            chunk = chunk.slice(bytesNeeded);
+
+            // Once we have exactly 16 bytes, spin up the decipher engine
+            if (ivBuffer.length === 16) {
+               decipher = createDecipheriv('aes-256-ctr', key, ivBuffer);
+               
+               // Directly pipe the decipher output to your local disk storage
+               decipher.pipe(outputStream);
+            }
+         }
+
+         // Pass all subsequent ciphertext data directly to the active decipher
+         if (decipher && chunk.length > 0) {
+            decipher.write(chunk);
+         }
+      });
+
+      // 4. Close the streams properly when the network transfer completes
+      res.on('end', () => {
+         if (decipher) {
+            decipher.end();
+         }
+         console.log('Download and decryption completed successfully.');
+      });
+
+      res.on('error', (err) => {
+         console.error('Network stream error:', err);
+         outputStream.end();
+      });
    }
 
    private async listRecusively(path_: string) {

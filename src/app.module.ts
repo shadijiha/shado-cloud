@@ -33,6 +33,7 @@ import { FeatureFlagService } from "./admin/feature-flag.service";
 import { FeatureFlag } from "./models/admin/featureFlag";
 import { ReplicationModule } from "./replication/replication.module";
 import yamlConfigLoader from "./config/config.loader";
+import { GoogleBackupModule } from "./replication/google-backup.module";
 
 @Global()
 @Module({
@@ -148,6 +149,7 @@ export class GlobalUtilityModule { }
       AdminModule,
       UserProfileModule,
       ReplicationModule,
+      GoogleBackupModule,
       ScheduleModule.forRoot(),
    ],
    controllers: [AppController],
