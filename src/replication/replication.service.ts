@@ -12,6 +12,7 @@ import {
 } from "crypto";
 import { PassThrough, Readable } from "stream";
 import { Response } from "express";
+import { minimatch } from "minimatch";
 
 @Injectable()
 export class ReplicationService implements OnModuleInit {
@@ -59,9 +60,9 @@ export class ReplicationService implements OnModuleInit {
 
             const masterFiles: typeof replicaFiles = await listAllResponse.json();
 
-            // Files to replicate
+            // Files to replicate (excluding ignored patterns)
             const replicaDoesNotHave = masterFiles.filter(
-               (e) => !replicaFiles.find((f) => this.pathEquals(f.path, e.path)),
+               (e) => !replicaFiles.find((f) => this.pathEquals(f.path, e.path)) && !this.isIgnored(e.path),
             );
             this.logger.log(`${replicaDoesNotHave.length} Files to replicate`);
 
@@ -93,9 +94,9 @@ export class ReplicationService implements OnModuleInit {
                filesReplicated++;
             }
 
-            // Files to delete
+            // Files to delete (never delete ignored paths)
             const masterDoesNotHave = replicaFiles.filter(
-               (e) => !masterFiles.find((f) => this.pathEquals(f.path, e.path)),
+               (e) => !masterFiles.find((f) => this.pathEquals(f.path, e.path)) && !this.isIgnored(e.path),
             );
             this.logger.log(`${masterDoesNotHave.length} Files to delete`);
             let filesDeleted = 0;
@@ -181,11 +182,11 @@ export class ReplicationService implements OnModuleInit {
 
          // Resolve/reject only once the output has been fully flushed to disk
          outputStream.on('finish', () => {
-            const sizeOk = expectedSize === undefined || decryptedBytes === expectedSize;
-            const status = sizeOk ? "OK" : `SIZE MISMATCH (expected ${this.humanSize(expectedSize)})`;
-            this.logger[sizeOk ? "log" : "warn"](
-               `Decrypted ${label} - ${this.humanSize(decryptedBytes)} plaintext (key ${this.keyFingerprint}) [${status}]`,
-            );
+            if (expectedSize !== undefined && decryptedBytes !== expectedSize) {
+               this.logger.warn(
+                  `Decrypted ${label} size mismatch: got ${this.humanSize(decryptedBytes)}, expected ${this.humanSize(expectedSize)}`,
+               );
+            }
             resolve();
          });
          outputStream.on('error', (err) => reject(err));
@@ -205,7 +206,6 @@ export class ReplicationService implements OnModuleInit {
 
                // Once we have exactly 16 bytes, spin up the decipher engine
                if (ivBuffer.length === 16) {
-                  this.logger.debug(`Decrypting ${label} (iv ${ivBuffer.toString("hex")}, key ${this.keyFingerprint})`);
                   decipher = createDecipheriv('aes-256-ctr', key, ivBuffer);
                   decipher.on('data', (c: Buffer) => (decryptedBytes += c.length));
                   decipher.on('error', (err) => reject(err));
@@ -295,6 +295,22 @@ export class ReplicationService implements OnModuleInit {
          i++;
       }
       return `${bytes.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+   }
+
+   /**
+    * Returns true if the given cloud-relative path matches any configured
+    * replica ignore glob pattern. Uses minimatch semantics; `dot: true` so
+    * patterns also match dotfiles/dot-directories.
+    */
+   private isIgnored(relativePath: string): boolean {
+      const patterns = this.config.get("this-service.replication.ignore-patterns", { infer: true });
+      if (!patterns || patterns.length === 0) {
+         return false;
+      }
+
+      // Normalize to forward slashes so patterns behave the same on any OS
+      const normalized = relativePath.split(path.sep).join("/");
+      return patterns.some((pattern) => minimatch(normalized, pattern, { dot: true }));
    }
 
    private pathEquals(path1: string, path2: string) {
