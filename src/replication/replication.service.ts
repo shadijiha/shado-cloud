@@ -16,6 +16,9 @@ import { minimatch } from "minimatch";
 import type Redis from "ioredis";
 import { REDIS_CACHE } from "src/util";
 import { EmailService } from "src/admin/email.service";
+import { spawn, exec } from "child_process";
+import { promisify } from "util";
+import * as os from "os";
 
 /** Metadata the master keeps (in Redis) about each replica that requests replication. */
 interface ReplicaRecord {
@@ -30,6 +33,7 @@ interface ReplicaRecord {
 export class ReplicationService implements OnModuleInit {
    private readonly logger = new Logger(ReplicationService.name);
    private isReplicating = false; // lock flag
+   private isDbReplicating = false; // lock flag for database replication
 
    // Redis hash key: field = replica IP, value = JSON(ReplicaRecord)
    private static readonly REPLICAS_KEY = "replication:replicas";
@@ -213,6 +217,111 @@ export class ReplicationService implements OnModuleInit {
          await this.redis.hdel(ReplicationService.REPLICAS_KEY, ip);
          this.logger.warn(`Removed stale replica ${ip} (idle ${hoursIdle}h) after notifying shadosite@gmail.com`);
       }
+   }
+
+   /**
+    * Master: streams an encrypted `mysqldump` of the master's database (the source
+    * of truth). Uses the same AES-256-CTR + leading-IV wire format as file transfer,
+    * so the replica decrypts it with the existing `decryptResponseStream`.
+    */
+   public getDatabaseDump(res: Response) {
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", 'attachment; filename="db-dump.sql.enc"');
+
+      const iv = randomBytes(16);
+      const cipher = createCipheriv("aes-256-ctr", this.encryptionKey, iv);
+      res.write(iv);
+
+      const { host, port, user, password, database } = this.dbConfig;
+      // Args passed as an array (no shell) and password via MYSQL_PWD to avoid
+      // shell injection and keep the secret out of the process argument list.
+      const child = spawn(
+         "mysqldump",
+         ["-h", host, "-P", String(port), "-u", user, "--protocol=tcp", "--single-transaction", "--no-tablespaces", database],
+         { env: { ...process.env, MYSQL_PWD: password ?? "" } },
+      );
+
+      child.stdout!.pipe(cipher).pipe(res);
+
+      let stderr = "";
+      child.stderr!.on("data", (d) => (stderr += d.toString()));
+      child.on("error", (err) => {
+         this.logger.error(`mysqldump failed to start: ${err.message}`);
+         if (!res.headersSent) res.status(500);
+         res.end();
+      });
+      child.on("close", (code) => {
+         if (code !== 0) this.logger.error(`mysqldump exited with code ${code}: ${stderr.trim()}`);
+         else this.logger.log(`Streamed encrypted database dump of "${database}" to replica`);
+      });
+      cipher.on("error", () => res.end());
+   }
+
+   /**
+    * Replica: fetches the master's encrypted DB dump, decrypts it, and imports it
+    * into the replica's OWN database connection. Master is the source of truth.
+    *
+    * Runs hourly (separate from the per-minute file sync — a full dump/restore is
+    * expensive). Adjust the Cron expression to change frequency.
+    */
+   @Cron(CronExpression.EVERY_HOUR, { name: "replication:replicate-database" })
+   public async replicateDatabase() {
+      if (!this.isReplica()) return;
+      if (this.isDbReplicating) {
+         this.logger.warn("A database replication job is already running. Skipping this iteration");
+         return;
+      }
+      this.isDbReplicating = true;
+
+      const tmpFile = path.join(os.tmpdir(), `shado-db-replica-${Date.now()}.sql`);
+      try {
+         const masterUrl = this.config.get("this-service.replication.master-or-replica-ip", { infer: true });
+         if (!masterUrl) {
+            this.logger.error("Master IP is not set");
+            return;
+         }
+         const protocol = masterUrl.includes("shadijiha.com") ? "https" : "http";
+         const masterIp = `${protocol}://${masterUrl}`;
+
+         this.logger.log("Replicating database from master...");
+         const response = await fetch(`${masterIp}/replication/database`, {
+            headers: { "x-service-key": this.config.get("cross-service.secret", { infer: true }) },
+         });
+         if (!response.ok) {
+            this.logger.error(`Failed to fetch database dump, status: ${response.status}, text: ${await response.text()}`);
+            return;
+         }
+
+         // Decrypt the dump to a temp file
+         const dest = this.fs.createWriteStream(tmpFile);
+         await this.decryptResponseStream(response, dest, undefined, "database dump");
+
+         // Import into the replica's OWN database connection
+         const { host, port, user, password, database } = this.dbConfig;
+         await promisify(exec)(
+            `mysql -h ${host} -P ${port} -u ${user} --protocol=tcp ${database} < ${tmpFile}`,
+            { env: { ...process.env, MYSQL_PWD: password ?? "" }, maxBuffer: 1024 * 1024 * 64 },
+         );
+         this.logger.log(`Database replicated from master into local database "${database}"`);
+      } catch (error) {
+         const e = error as Error;
+         this.logger.error(`Database replication failed: ${e.message}`, e.stack);
+      } finally {
+         try {
+            if (this.fs.existsSync(tmpFile)) this.fs.unlinkSync(tmpFile);
+         } catch { /* best-effort temp cleanup */ }
+         this.isDbReplicating = false;
+      }
+   }
+
+   private get dbConfig() {
+      return {
+         host: this.config.get("db.host", { infer: true }) || "localhost",
+         port: this.config.get("db.port", { infer: true }) ?? 3306,
+         user: this.config.get("db.username", { infer: true }),
+         password: this.config.get("db.password", { infer: true }),
+         database: this.config.get("db.name", { infer: true }),
+      };
    }
 
    public async getFile(path_: string, res: Response) {

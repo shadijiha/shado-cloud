@@ -1,7 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule, Scope } from "@nestjs/common";
 import { ReplicationService } from "./replication.service";
 import { GoogleDriveBackupService } from "./google-drive-backup.service";
-import { LocalNetworkMiddleware } from "./local-network.middleware";
+import { TrustedIpMiddleware } from "./trusted-ip.middleware";
 import { ReplicationController } from "./replication.controller";
 import { ConditionalModule, ConfigModule, ConfigService } from "@nestjs/config";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
@@ -73,6 +73,6 @@ import { AUTH_SERVICE } from "src/auth/auth.constants";
 })
 export class ReplicationModule implements NestModule {
    configure(consumer: MiddlewareConsumer) {
-      consumer.apply(LocalNetworkMiddleware).forRoutes("replication");
+      consumer.apply(TrustedIpMiddleware).forRoutes("replication");
    }
 }

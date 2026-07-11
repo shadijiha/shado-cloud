@@ -31,4 +31,10 @@ export class ReplicationController {
    public async getFile(@Param("path") path: string, @Res() res: Response) {
       return this.replicationService.getFile(path, res);
    }
+
+   @Get("database")
+   @UseGuards(ServiceKeyGuard)
+   public async getDatabase(@Res() res: Response) {
+      return this.replicationService.getDatabaseDump(res);
+   }
 }
