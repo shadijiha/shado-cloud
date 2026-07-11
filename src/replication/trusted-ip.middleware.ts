@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from "express";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { LoggerToDb } from "src/logging";
+import { normalizeIp, resolveClientIp } from "./client-ip.util";
 
 /**
  * Guards the replication endpoints. Access is granted ONLY to IPs explicitly
@@ -24,7 +25,7 @@ export class TrustedIpMiddleware implements NestMiddleware {
          throw new ForbiddenException("Replication is disabled");
       }
 
-      const ip = this.resolveClientIp(req);
+      const ip = resolveClientIp(req);
 
       // The only IPs allowed in — stored in the replication feature flag payload.
       let allowedIps: string[] = [];
@@ -35,7 +36,7 @@ export class TrustedIpMiddleware implements NestMiddleware {
             { allowedIps: [] as string[] },
          ));
       }
-      const isAllowListed = allowedIps.some((allowed) => this.normalizeIp(allowed) === ip);
+      const isAllowListed = allowedIps.some((allowed) => normalizeIp(allowed) === ip);
 
       if (isAllowListed) {
          next();
@@ -43,28 +44,5 @@ export class TrustedIpMiddleware implements NestMiddleware {
          if (this.logger) void this.logger.debug(`Refused connection from ${ip}`);
          throw new ForbiddenException("Access is allowed only from an allow-listed IP");
       }
-   }
-
-   /**
-    * Resolves the real client IP.
-    *
-    * Behind a Cloudflare tunnel, cloudflared runs on the same host and proxies to
-    * the app on loopback, so req.socket.remoteAddress is always 127.0.0.1/::1 and
-    * the true client IP is in the `CF-Connecting-IP` header. We only trust that
-    * header when the socket is actually loopback (i.e. the request really came
-    * from the local tunnel); otherwise a direct client could spoof it.
-    */
-   private resolveClientIp(req: Request): string {
-      const socketIp = this.normalizeIp(req.socket.remoteAddress);
-      const isFromLocalTunnel = socketIp === "127.0.0.1" || socketIp === "::1";
-      const cfIp = req.headers["cf-connecting-ip"];
-      if (isFromLocalTunnel && typeof cfIp === "string" && cfIp.trim()) {
-         return this.normalizeIp(cfIp);
-      }
-      return this.normalizeIp(req.ip || req.socket.remoteAddress);
-   }
-
-   private normalizeIp(ip?: string): string {
-      return (ip ?? "").replace("::ffff:", "").trim();
    }
 }
