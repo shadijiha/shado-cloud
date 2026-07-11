@@ -247,7 +247,7 @@ export class ReplicationService implements OnModuleInit {
 
       // 1) Generate the dump to a temp file, streaming rows (bounded memory).
       // Connect without a default database so we can enumerate/read every schema.
-      const conn = await createConnection({ host, port, user, password: password ?? "", maxAllowedPacket: 256 * 1024 * 1024 });
+      const conn = await createConnection({ host, port, user, password: password ?? "" });
       try {
          await this.writeDumpToFile(conn, tmpFile);
       } catch (e) {
@@ -411,7 +411,7 @@ export class ReplicationService implements OnModuleInit {
          // is selected — the dump carries CREATE DATABASE / USE statements for every
          // service's schema (full-box standby).
          const { host, port, user, password } = this.dbConfig;
-         connection = await createConnection({ host, port, user, password: password ?? "", maxAllowedPacket: 256 * 1024 * 1024 });
+         connection = await createConnection({ host, port, user, password: password ?? "" });
 
          const totalBytes = this.fs.existsSync(tmpFile) ? this.fs.statSync(tmpFile).size : 0;
          const rl = readline.createInterface({ input: this.fs.createReadStream(tmpFile), crlfDelay: Infinity });
