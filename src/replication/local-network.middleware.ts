@@ -19,17 +19,35 @@ export class LocalNetworkMiddleware implements NestMiddleware {
          throw new ForbiddenException("Replication is disabled");
       }
 
-      const ip = req.ip || req.socket.remoteAddress;
-      if (this.isLocalNetwork(ip)) {
+      const ip = this.normalizeIp(req.ip || req.socket.remoteAddress);
+
+      // Extra IPs allow-listed by an admin, stored in the replication feature flag payload
+      let allowedIps: string[] = [];
+      if (this.featureFlagService) {
+         ({ allowedIps } = await this.featureFlagService.getPayload(
+            FeatureFlagNamespace.Replication,
+            "replication",
+            { allowedIps: [] as string[] },
+         ));
+      }
+      const isAllowListed = allowedIps.some((allowed) => this.normalizeIp(allowed) === ip);
+
+      if (isAllowListed) {
          next();
       } else {
          if (this.logger) void this.logger.debug(`Refused connection from ${ip}`);
-         throw new ForbiddenException("Access is allowed only from local network");
+         throw new ForbiddenException("Access is allowed only from the local network or an allow-listed IP");
       }
    }
 
-   isLocalNetwork(ip: string): boolean {
-      return true; // For testing purposes, allow all IPs. Remove this line in production.
+   private normalizeIp(ip?: string): string {
+      return (ip ?? "").replace("::ffff:", "").trim();
+   }
+
+   /**
+    * Unused. Kept here incase we need it in the future
+    */
+   private isLocalNetwork(ip: string): boolean {
       ip = ip.replace("::ffff:", "");
       return (
          ip.startsWith("192.168.") ||

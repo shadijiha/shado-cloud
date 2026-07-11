@@ -7,11 +7,11 @@ import { ConditionalModule, ConfigModule, ConfigService } from "@nestjs/config";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "src/file-system/file-system.service";
 import { ScheduleModule } from "@nestjs/schedule";
-import { AdminModule } from "src/admin/admin.module";
 import yamlConfigLoader from "../config/config.loader";
 import { ServiceKeyGuard } from "src/auth/service-key.guard";
 import { EnvVariables } from "src/config/config.validator";
 import { LoggerToDb } from "src/logging";
+import { EmailService } from "src/admin/email.service";
 
 /**
  * This module is responsible for replicating data between the primary and secondary PCs
@@ -38,6 +38,7 @@ import { LoggerToDb } from "src/logging";
          useClass: NodeFileSystemService,
       },
       ServiceKeyGuard,
+      EmailService,
    ],
 })
 export class ReplicationModule implements NestModule {

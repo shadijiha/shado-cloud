@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Req, Res, UseGuards } from "@nestjs/common";
 import { ReplicationService } from "./replication.service";
 import { ApiTags } from "@nestjs/swagger";
 import { ServiceKeyGuard } from "src/auth/service-key.guard";
-import { Response } from "express";
+import { Request, Response } from "express";
 
 @Controller("replication")
 @ApiTags("Replication")
@@ -11,7 +11,12 @@ export class ReplicationController {
 
    @Get("listall")
    @UseGuards(ServiceKeyGuard)
-   public async listall() {
+   public async listall(@Req() req: Request) {
+      // Record the replica that requested replication (master keeps this registry).
+      await this.replicationService.recordReplicaRequest(
+         (req.ip || req.socket.remoteAddress || "unknown").replace("::ffff:", ""),
+         req.headers["user-agent"],
+      );
       return this.replicationService.listCloudDir();
    }
 

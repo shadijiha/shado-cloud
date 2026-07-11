@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit, StreamableFile } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, StreamableFile, Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { EnvVariables, ReplicationRole } from "src/config/config.validator";
@@ -13,13 +13,33 @@ import {
 import { PassThrough, Readable } from "stream";
 import { Response } from "express";
 import { minimatch } from "minimatch";
+import type Redis from "ioredis";
+import { REDIS_CACHE } from "src/util";
+import { EmailService } from "src/admin/email.service";
+
+/** Metadata the master keeps (in Redis) about each replica that requests replication. */
+interface ReplicaRecord {
+   ip: string;
+   userAgent: string | null;
+   requestCount: number;
+   firstSeenAt: number; // epoch ms
+   lastSeenAt: number; // epoch ms
+}
 
 @Injectable()
 export class ReplicationService implements OnModuleInit {
    private readonly logger = new Logger(ReplicationService.name);
    private isReplicating = false; // lock flag
 
-   constructor(private readonly config: ConfigService<EnvVariables>, private readonly fs: AbstractFileSystem) { }
+   // Redis hash key: field = replica IP, value = JSON(ReplicaRecord)
+   private static readonly REPLICAS_KEY = "replication:replicas";
+
+   constructor(
+      private readonly config: ConfigService<EnvVariables>,
+      private readonly fs: AbstractFileSystem,
+      @Inject(REDIS_CACHE) private readonly redis: Redis,
+      private readonly email: EmailService,
+   ) { }
 
    public onModuleInit() {
       void this.replicate();
@@ -122,6 +142,77 @@ export class ReplicationService implements OnModuleInit {
 
    public async listCloudDir() {
       return this.listRecusively(this.cloudDir);
+   }
+
+   /**
+    * Records (on the master) that a replica requested replication, storing basic
+    * metadata and bumping its last-seen timestamp + request count in Redis. Also
+    * logs the request. No-op unless this instance is the master.
+    */
+   public async recordReplicaRequest(ip: string, userAgent?: string) {
+      if (!this.isMaster()) return;
+
+      const now = Date.now();
+      const existingRaw = await this.redis.hget(ReplicationService.REPLICAS_KEY, ip);
+      const existing = existingRaw ? (JSON.parse(existingRaw) as ReplicaRecord) : null;
+
+      const record: ReplicaRecord = {
+         ip,
+         userAgent: userAgent ?? existing?.userAgent ?? null,
+         requestCount: (existing?.requestCount ?? 0) + 1,
+         firstSeenAt: existing?.firstSeenAt ?? now,
+         lastSeenAt: now,
+      };
+      await this.redis.hset(ReplicationService.REPLICAS_KEY, ip, JSON.stringify(record));
+
+      this.logger.log(
+         `Replication request from replica ${ip} (agent: ${userAgent ?? "unknown"}), ` +
+         `request #${record.requestCount}, last seen ${new Date(now).toISOString()}`,
+      );
+   }
+
+   /**
+    * Master-only: any replica that has not requested replication in more than 24h
+    * is emailed about ONCE (to shadosite@gmail.com) and then removed from the
+    * Redis registry. Removal guarantees the alert fires only once per stale replica.
+    */
+   @Cron(CronExpression.EVERY_HOUR, { name: "replication:stale-replica-check" })
+   public async checkStaleReplicas() {
+      if (!this.isMaster()) return;
+
+      const all = await this.redis.hgetall(ReplicationService.REPLICAS_KEY);
+      const now = Date.now();
+      const staleCutoffMs = 24 * 60 * 60 * 1000;
+
+      for (const [ip, raw] of Object.entries(all)) {
+         let record: ReplicaRecord;
+         try {
+            record = JSON.parse(raw) as ReplicaRecord;
+         } catch {
+            // Corrupt entry — drop it.
+            await this.redis.hdel(ReplicationService.REPLICAS_KEY, ip);
+            continue;
+         }
+
+         const idleMs = now - record.lastSeenAt;
+         if (idleMs <= staleCutoffMs) continue;
+
+         const hoursIdle = Math.floor(idleMs / 3_600_000);
+         await this.email.sendEmail({
+            to: "shadosite@gmail.com",
+            subject: `Shado Cloud: replica ${ip} has stopped replicating`,
+            text:
+               `Replica ${ip} (agent: ${record.userAgent ?? "unknown"}) has not requested ` +
+               `replication for ${hoursIdle} hours.\n\n` +
+               `Last seen: ${new Date(record.lastSeenAt).toISOString()}\n` +
+               `First seen: ${new Date(record.firstSeenAt).toISOString()}\n` +
+               `Total replication requests recorded: ${record.requestCount}\n\n` +
+               `It has been removed from the master's replica registry and will be re-added ` +
+               `automatically the next time it requests replication.`,
+         });
+         await this.redis.hdel(ReplicationService.REPLICAS_KEY, ip);
+         this.logger.warn(`Removed stale replica ${ip} (idle ${hoursIdle}h) after notifying shadosite@gmail.com`);
+      }
    }
 
    public async getFile(path_: string, res: Response) {
