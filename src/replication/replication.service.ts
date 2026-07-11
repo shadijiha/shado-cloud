@@ -7,7 +7,8 @@ import * as path from "path";
 import {
     createCipheriv,
     randomBytes,
-    createDecipheriv
+    createDecipheriv,
+    createHash
 } from "crypto";
 import { PassThrough, Readable } from "stream";
 import { Response } from "express";
@@ -78,6 +79,7 @@ export class ReplicationService implements OnModuleInit {
 
                if (!response.ok) {
                   this.logger.error(`Failed to download file ${file.path}, status: ${response.status}, text: ${await response.text()}`);
+                  continue;
                }
                const filePath = path.join(this.cloudDir, file.path);
                const dest = this.fs.createWriteStream(filePath);
@@ -141,9 +143,9 @@ export class ReplicationService implements OnModuleInit {
       res.setHeader('Content-Disposition', `attachment; filename="${path.basename(path_)}.enc"`);
 
 
-      // 2. Generate a random 16-byte IV for this specific stream
-      const iv = randomBytes(12); 
-      const cipher = createCipheriv('aes-256-gcm', this.config.get("this-service.password-vault-salt", { infer: true }), iv);
+      // 2. Generate a random 16-byte IV for this specific stream (AES-CTR uses a 16-byte IV)
+      const iv = randomBytes(16);
+      const cipher = createCipheriv('aes-256-ctr', this.encryptionKey, iv);
 
       // 3. Send the raw IV to the client first so they can decrypt it later
       res.write(iv);
@@ -155,6 +157,7 @@ export class ReplicationService implements OnModuleInit {
 
       // 6. Handle errors cleanly to prevent memory leaks or hanging connections
       fileStream.on('error', (err) => {
+         this.logger.error(`File system read error while streaming ${path_}: ${err.message}`);
          if (!res.headersSent) {
             res.status(500).send('File system read error.');
          }
@@ -162,60 +165,81 @@ export class ReplicationService implements OnModuleInit {
       });
 
       cipher.on('error', (err) => {
+         this.logger.error(`Encryption error while streaming ${path_}: ${err.message}`);
          res.end();
       });
    }
 
    /************* Decryption functions ************/
-   async decryptResponseStream(fetchResponse: globalThis.Response,  outputStream: NodeJS.WritableStream) {
+   async decryptResponseStream(fetchResponse: globalThis.Response, outputStream: NodeJS.WritableStream) {
       const webStream = fetchResponse.body as any;
       const res = Readable.fromWeb(webStream);
-    
-      let decipher = null;
-      let ivBuffer = Buffer.alloc(0);
 
-      // Process the incoming network chunks
-      const key = this.config.get("this-service.password-vault-salt", { infer: true });
-      res.on('data', (chunk) => {
-         
-         // Extract the 16-byte IV from the absolute beginning of the stream
-         if (ivBuffer.length < 16) {
-            const bytesNeeded = 16 - ivBuffer.length;
-            
-            // Pull only what is needed for the IV out of this chunk
-            const ivSegment = chunk.slice(0, bytesNeeded);
-            ivBuffer = Buffer.concat([ivBuffer, ivSegment]);
-            
-            // Keep the rest of the chunk as the encrypted file content
-            chunk = chunk.slice(bytesNeeded);
+      const key = this.encryptionKey;
 
-            // Once we have exactly 16 bytes, spin up the decipher engine
-            if (ivBuffer.length === 16) {
-               decipher = createDecipheriv('aes-256-ctr', key, ivBuffer);
-               
-               // Directly pipe the decipher output to your local disk storage
-               decipher.pipe(outputStream);
+      return new Promise<void>((resolve, reject) => {
+         let decipher: ReturnType<typeof createDecipheriv> | null = null;
+         let ivBuffer = Buffer.alloc(0);
+
+         // Resolve/reject only once the output has been fully flushed to disk
+         outputStream.on('finish', () => resolve());
+         outputStream.on('error', (err) => reject(err));
+
+         // Process the incoming network chunks
+         res.on('data', (chunk: Buffer) => {
+            // Extract the 16-byte IV from the absolute beginning of the stream
+            if (ivBuffer.length < 16) {
+               const bytesNeeded = 16 - ivBuffer.length;
+
+               // Pull only what is needed for the IV out of this chunk
+               const ivSegment = chunk.slice(0, bytesNeeded);
+               ivBuffer = Buffer.concat([ivBuffer, ivSegment]);
+
+               // Keep the rest of the chunk as the encrypted file content
+               chunk = chunk.slice(bytesNeeded);
+
+               // Once we have exactly 16 bytes, spin up the decipher engine
+               if (ivBuffer.length === 16) {
+                  decipher = createDecipheriv('aes-256-ctr', key, ivBuffer);
+                  decipher.on('error', (err) => reject(err));
+
+                  // Directly pipe the decipher output to local disk storage
+                  decipher.pipe(outputStream);
+               }
             }
-         }
 
-         // Pass all subsequent ciphertext data directly to the active decipher
-         if (decipher && chunk.length > 0) {
-            decipher.write(chunk);
-         }
-      });
+            // Pass all subsequent ciphertext data directly to the active decipher
+            if (decipher && chunk.length > 0) {
+               decipher.write(chunk);
+            }
+         });
 
-      // 4. Close the streams properly when the network transfer completes
-      res.on('end', () => {
-         if (decipher) {
-            decipher.end();
-         }
-         console.log('Download and decryption completed successfully.');
-      });
+         // Close the streams properly when the network transfer completes
+         res.on('end', () => {
+            if (decipher) {
+               decipher.end();
+            } else {
+               // Stream ended before a full IV was received (e.g. empty file)
+               outputStream.end();
+            }
+         });
 
-      res.on('error', (err) => {
-         console.error('Network stream error:', err);
-         outputStream.end();
+         res.on('error', (err) => {
+            this.logger.error(`Network stream error during decryption: ${err.message}`);
+            outputStream.end();
+            reject(err);
+         });
       });
+   }
+
+   /**
+    * Derives a deterministic 32-byte key for AES-256 from the configured salt.
+    * AES-256 requires an exactly 32-byte key; the raw salt string is an arbitrary
+    * length, so hashing it with SHA-256 guarantees a valid key length.
+    */
+   private get encryptionKey(): Buffer {
+      const salt = this.config.get("this-service.password-vault-salt", { infer: true });
+      return createHash("sha256").update(salt).digest();
    }
 
    private async listRecusively(path_: string) {
