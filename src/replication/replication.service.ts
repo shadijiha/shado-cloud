@@ -65,6 +65,8 @@ export class ReplicationService implements OnModuleInit {
             );
             this.logger.log(`${replicaDoesNotHave.length} Files to replicate`);
 
+            const totalBytes = replicaDoesNotHave.reduce((sum, f) => sum + (f.size ?? 0), 0);
+            let bytesReplicated = 0;
             let filesReplicated = 0;
             for (const file of replicaDoesNotHave) {
                if (!this.fs.existsSync(path.join(this.cloudDir, file.path))) {
@@ -84,26 +86,10 @@ export class ReplicationService implements OnModuleInit {
                const filePath = path.join(this.cloudDir, file.path);
                const dest = this.fs.createWriteStream(filePath);
 
-               await this.decryptResponseStream(response, dest);
+               await this.decryptResponseStream(response, dest, file.size, path.basename(file.path));
 
-               // await new Promise<void>((resolve, reject) => {
-               //    dest.on("finish", resolve);
-               //    dest.on("error", reject);
-
-               //    void (async () => {
-               //       try {
-               //          // Stream chunks directly to file
-               //          for await (const chunk of response.body as any) {
-               //             dest.write(chunk);
-               //          }
-               //          dest.end();
-               //       } catch (err) {
-               //          reject(err);
-               //       }
-               //    })();
-               // });
-
-               this.logger.log(`Done ${filesReplicated + 1} of ${replicaDoesNotHave.length} files`);
+               bytesReplicated += file.size ?? 0;
+               this.logger.log(`Done ${filesReplicated + 1} of ${replicaDoesNotHave.length} (${path.basename(file.path)}) - ${this.humanSize(bytesReplicated)} / ${this.humanSize(totalBytes)}`);
                filesReplicated++;
             }
 
@@ -153,6 +139,17 @@ export class ReplicationService implements OnModuleInit {
       // 5. Create source stream and pipe: Source -> Encryption -> HTTP Response
       const fileStream = this.fs.createReadStream(path.join(this.cloudDir, path_));
 
+      let plainBytes = 0;
+      let encryptedBytes = 0;
+      fileStream.on('data', (c) => (plainBytes += c.length));
+      cipher.on('data', (c) => (encryptedBytes += c.length));
+      res.on('finish', () => {
+         this.logger.log(
+            `Encrypted ${path.basename(path_)} - ${this.humanSize(plainBytes)} plaintext -> ${this.humanSize(encryptedBytes)} ciphertext ` +
+            `(iv ${iv.toString("hex")}, key ${this.keyFingerprint})`,
+         );
+      });
+
       fileStream.pipe(cipher).pipe(res);
 
       // 6. Handle errors cleanly to prevent memory leaks or hanging connections
@@ -171,7 +168,7 @@ export class ReplicationService implements OnModuleInit {
    }
 
    /************* Decryption functions ************/
-   async decryptResponseStream(fetchResponse: globalThis.Response, outputStream: NodeJS.WritableStream) {
+   async decryptResponseStream(fetchResponse: globalThis.Response, outputStream: NodeJS.WritableStream, expectedSize?: number, label = "file") {
       const webStream = fetchResponse.body as any;
       const res = Readable.fromWeb(webStream);
 
@@ -180,9 +177,17 @@ export class ReplicationService implements OnModuleInit {
       return new Promise<void>((resolve, reject) => {
          let decipher: ReturnType<typeof createDecipheriv> | null = null;
          let ivBuffer = Buffer.alloc(0);
+         let decryptedBytes = 0;
 
          // Resolve/reject only once the output has been fully flushed to disk
-         outputStream.on('finish', () => resolve());
+         outputStream.on('finish', () => {
+            const sizeOk = expectedSize === undefined || decryptedBytes === expectedSize;
+            const status = sizeOk ? "OK" : `SIZE MISMATCH (expected ${this.humanSize(expectedSize)})`;
+            this.logger[sizeOk ? "log" : "warn"](
+               `Decrypted ${label} - ${this.humanSize(decryptedBytes)} plaintext (key ${this.keyFingerprint}) [${status}]`,
+            );
+            resolve();
+         });
          outputStream.on('error', (err) => reject(err));
 
          // Process the incoming network chunks
@@ -200,7 +205,9 @@ export class ReplicationService implements OnModuleInit {
 
                // Once we have exactly 16 bytes, spin up the decipher engine
                if (ivBuffer.length === 16) {
+                  this.logger.debug(`Decrypting ${label} (iv ${ivBuffer.toString("hex")}, key ${this.keyFingerprint})`);
                   decipher = createDecipheriv('aes-256-ctr', key, ivBuffer);
+                  decipher.on('data', (c: Buffer) => (decryptedBytes += c.length));
                   decipher.on('error', (err) => reject(err));
 
                   // Directly pipe the decipher output to local disk storage
@@ -242,13 +249,21 @@ export class ReplicationService implements OnModuleInit {
       return createHash("sha256").update(salt).digest();
    }
 
+   /**
+    * A short, non-sensitive identifier for the active key so logs on master and
+    * replica can be compared without ever exposing the key itself.
+    */
+   private get keyFingerprint(): string {
+      return createHash("sha256").update(this.encryptionKey).digest("hex").slice(0, 12);
+   }
+
    private async listRecusively(path_: string) {
       const entries = this.fs.readdirSync(path_);
 
       // Get files within the current directory and add a path key to the file objects
       const files = entries
          .filter((file) => !file.isDirectory())
-         .map((file) => ({ ...file, path: path.relative(this.config.get("this-service.cloud-dir", { infer: true }), path_ + "/" + file.name) }));
+         .map((file) => ({ ...file, path: path.relative(this.config.get("this-service.cloud-dir", { infer: true }), path_ + "/" + file.name), size: this.fs.statSync(path_ + "/" + file.name).size }));
 
       // Get folders within the current directory
       const folders = entries.filter((folder) => folder.isDirectory());
@@ -270,6 +285,16 @@ export class ReplicationService implements OnModuleInit {
 
    private isReplica() {
       return this.config.get("this-service.replication.role", { infer: true }) == ReplicationRole.Replica;
+   }
+
+   private humanSize(bytes: number) {
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let i = 0;
+      while (bytes >= 1024 && i < units.length - 1) {
+         bytes /= 1024;
+         i++;
+      }
+      return `${bytes.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
    }
 
    private pathEquals(path1: string, path2: string) {
