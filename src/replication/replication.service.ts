@@ -16,9 +16,9 @@ import { minimatch } from "minimatch";
 import type Redis from "ioredis";
 import { REDIS_CACHE } from "src/util";
 import { EmailService } from "src/admin/email.service";
-import { spawn, exec } from "child_process";
-import { promisify } from "util";
+import { createConnection } from "mysql2/promise";
 import * as os from "os";
+import * as readline from "readline";
 
 /** Metadata the master keeps (in Redis) about each replica that requests replication. */
 interface ReplicaRecord {
@@ -220,46 +220,118 @@ export class ReplicationService implements OnModuleInit {
    }
 
    /**
-    * Master: streams an encrypted `mysqldump` of the master's database (the source
-    * of truth). Uses the same AES-256-CTR + leading-IV wire format as file transfer,
-    * so the replica decrypts it with the existing `decryptResponseStream`.
+    * Master: generates a `mysqldump`-equivalent of the master's database (the source
+    * of truth) and streams it encrypted to the replica.
+    *
+    * Streaming & memory: the dump is produced by streaming each table's rows from the
+    * mysql2 driver to a temp .sql file (batched INSERTs, constant memory — no CLI, no
+    * whole-DB-in-RAM), then that file is streamed through the cipher to the response
+    * using the same leading-IV + AES-256-CTR scheme as file transfer. `DROP TABLE
+    * IF EXISTS` per table means each import is a clean replace, never a duplicate.
     */
-   public getDatabaseDump(res: Response) {
+   public async getDatabaseDump(res: Response) {
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Disposition", 'attachment; filename="db-dump.sql.enc"');
 
+      const { host, port, user, password, database } = this.dbConfig;
+      const tmpFile = path.join(os.tmpdir(), `shado-db-dump-${Date.now()}.sql`);
+      const cleanup = () => {
+         try {
+            if (this.fs.existsSync(tmpFile)) this.fs.unlinkSync(tmpFile);
+         } catch { /* best-effort */ }
+      };
+
+      // 1) Generate the dump to a temp file, streaming rows (bounded memory).
+      const conn = await createConnection({ host, port, user, password: password ?? "", database });
+      try {
+         await this.writeDumpToFile(conn, database, tmpFile);
+      } catch (e) {
+         this.logger.error(`Database dump generation failed: ${(e as Error).message}`);
+         cleanup();
+         if (!res.headersSent) res.status(500);
+         res.end();
+         return;
+      } finally {
+         await conn.end().catch(() => undefined);
+      }
+
+      // 2) Stream the temp file encrypted to the replica.
       const iv = randomBytes(16);
       const cipher = createCipheriv("aes-256-ctr", this.encryptionKey, iv);
       res.write(iv);
+      const fileStream = this.fs.createReadStream(tmpFile);
+      fileStream.pipe(cipher).pipe(res);
 
-      const { host, port, user, password, database } = this.dbConfig;
-      // Args passed as an array (no shell) and password via MYSQL_PWD to avoid
-      // shell injection and keep the secret out of the process argument list.
-      const child = spawn(
-         "mysqldump",
-         ["-h", host, "-P", String(port), "-u", user, "--protocol=tcp", "--single-transaction", "--no-tablespaces", database],
-         { env: { ...process.env, MYSQL_PWD: password ?? "" } },
-      );
-
-      child.stdout!.pipe(cipher).pipe(res);
-
-      let stderr = "";
-      child.stderr!.on("data", (d) => (stderr += d.toString()));
-      child.on("error", (err) => {
-         this.logger.error(`mysqldump failed to start: ${err.message}`);
-         if (!res.headersSent) res.status(500);
+      res.on("finish", () => {
+         this.logger.log(`Streamed encrypted database dump of "${database}"`);
+         cleanup();
+      });
+      res.on("close", cleanup);
+      fileStream.on("error", (err) => {
+         this.logger.error(`Database dump read error: ${err.message}`);
          res.end();
+         cleanup();
       });
-      child.on("close", (code) => {
-         if (code !== 0) this.logger.error(`mysqldump exited with code ${code}: ${stderr.trim()}`);
-         else this.logger.log(`Streamed encrypted database dump of "${database}" to replica`);
+      cipher.on("error", () => {
+         res.end();
+         cleanup();
       });
-      cipher.on("error", () => res.end());
    }
 
    /**
-    * Replica: fetches the master's encrypted DB dump, decrypts it, and imports it
-    * into the replica's OWN database connection. Master is the source of truth.
+    * Streams the master DB to `tmpFile` as SQL. Each statement is written on a single
+    * line terminated by "\n" (CREATE statements are flattened, and mysql2 escapes any
+    * newlines inside values), so the replica can import it by splitting on lines.
+    */
+   private async writeDumpToFile(conn: Awaited<ReturnType<typeof createConnection>>, database: string, tmpFile: string) {
+      const out = this.fs.createWriteStream(tmpFile);
+      const write = (s: string) =>
+         new Promise<void>((resolve, reject) => {
+            const ok = out.write(s, (err) => {
+               if (err) reject(err);
+            });
+            if (ok) resolve();
+            else out.once("drain", resolve);
+         });
+
+      await write("SET FOREIGN_KEY_CHECKS=0;\n");
+
+      const [tables] = await conn.query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'");
+      for (const tableRow of tables as Record<string, string>[]) {
+         const table = Object.values(tableRow)[0];
+
+         const [createRows] = await conn.query(`SHOW CREATE TABLE ${conn.escapeId(table)}`);
+         const createSql = ((createRows as Record<string, string>[])[0]["Create Table"]).replace(/\r?\n/g, " ");
+         await write(`DROP TABLE IF EXISTS ${conn.escapeId(table)};\n`);
+         await write(`${createSql};\n`);
+
+         // Stream rows so we never hold the whole table in memory.
+         const rowStream = (conn as any).connection.query(`SELECT * FROM ${conn.escapeId(table)}`).stream();
+         let columns: string[] | null = null;
+         let batch: string[] = [];
+         const flushBatch = async () => {
+            if (batch.length === 0) return;
+            const cols = columns!.map((c) => conn.escapeId(c)).join(",");
+            await write(`INSERT INTO ${conn.escapeId(table)} (${cols}) VALUES ${batch.join(",")};\n`);
+            batch = [];
+         };
+         for await (const row of rowStream as AsyncIterable<Record<string, unknown>>) {
+            if (!columns) columns = Object.keys(row);
+            batch.push(`(${columns.map((c) => conn.escape(row[c])).join(",")})`);
+            if (batch.length >= 500) await flushBatch();
+         }
+         await flushBatch();
+      }
+
+      await write("SET FOREIGN_KEY_CHECKS=1;\n");
+      await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
+   }
+
+   /**
+    * Replica: fetches the master's encrypted DB dump, decrypts it to a temp file
+    * (streamed, bounded memory — reuses the file decryptor), then imports it into the
+    * replica's OWN database by executing it statement-by-statement over the mysql2
+    * driver (no `mysql` CLI needed). Master is the source of truth.
     *
     * Runs hourly (separate from the per-minute file sync — a full dump/restore is
     * expensive). Adjust the Cron expression to change frequency.
@@ -274,6 +346,7 @@ export class ReplicationService implements OnModuleInit {
       this.isDbReplicating = true;
 
       const tmpFile = path.join(os.tmpdir(), `shado-db-replica-${Date.now()}.sql`);
+      let connection: Awaited<ReturnType<typeof createConnection>> | null = null;
       try {
          const masterUrl = this.config.get("this-service.replication.master-or-replica-ip", { infer: true });
          if (!masterUrl) {
@@ -292,21 +365,32 @@ export class ReplicationService implements OnModuleInit {
             return;
          }
 
-         // Decrypt the dump to a temp file
+         // Decrypt to a temp file (streamed, bounded memory).
          const dest = this.fs.createWriteStream(tmpFile);
          await this.decryptResponseStream(response, dest, undefined, "database dump");
 
-         // Import into the replica's OWN database connection
+         // Import statement-by-statement into the replica's OWN database.
          const { host, port, user, password, database } = this.dbConfig;
-         await promisify(exec)(
-            `mysql -h ${host} -P ${port} -u ${user} --protocol=tcp ${database} < ${tmpFile}`,
-            { env: { ...process.env, MYSQL_PWD: password ?? "" }, maxBuffer: 1024 * 1024 * 64 },
-         );
-         this.logger.log(`Database replicated from master into local database "${database}"`);
+         connection = await createConnection({ host, port, user, password: password ?? "", database });
+
+         const rl = readline.createInterface({ input: this.fs.createReadStream(tmpFile), crlfDelay: Infinity });
+         let statements = 0;
+         for await (const line of rl) {
+            const stmt = line.trim();
+            if (!stmt) continue;
+            await connection.query(stmt);
+            statements++;
+         }
+         this.logger.log(`Database replicated from master into local database "${database}" (${statements} statements)`);
       } catch (error) {
          const e = error as Error;
          this.logger.error(`Database replication failed: ${e.message}`, e.stack);
       } finally {
+         if (connection) {
+            try {
+               await connection.end();
+            } catch { /* best-effort close */ }
+         }
          try {
             if (this.fs.existsSync(tmpFile)) this.fs.unlinkSync(tmpFile);
          } catch { /* best-effort temp cleanup */ }
