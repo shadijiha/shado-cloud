@@ -1,0 +1,147 @@
+# Shado Cloud — Replica Failover Feature (Design & Decisions)
+
+Status: DESIGN ONLY (not yet implemented). Free-services constraint.
+
+## Goal
+If the replica cannot reach the master, the replica takes over and the public
+cloudflared-tunnel hostname flips to point at the replica. On takeover the replica
+becomes a **read-only master** (serves reads only, rejects writes) to avoid data
+divergence. When the original master returns, roles reconcile automatically.
+
+## Core principle
+Do NOT let a node self-declare master. An external arbiter decides, and each node
+DERIVES its role from "who does the public hostname currently point to." The
+cloudflared tunnel / DNS record is that arbiter — only one origin can be the live
+target of the hostname at a time. Role becomes dynamic (stored in Redis); the
+static `this-service.replication.role` config is only the initial preference.
+
+## Chosen approach: FREE, app-driven (no paid Cloudflare Load Balancer)
+Everything used is free: Cloudflare API, DNS, and cloudflared tunnels.
+(Rejected: Cloudflare Load Balancer — it is the cleanest independent arbiter, but
+it is a paid add-on. User requires free services only, self-hosted.)
+
+### The flip mechanism — two tunnels + DNS repoint
+- Each machine (master, replica) runs its OWN named cloudflared tunnel (own UUID).
+- Public hostname `cloud.<domain>` is a proxied CNAME → `<master-uuid>.cfargotunnel.com`.
+- Failover = update that single DNS record to `<replica-uuid>.cfargotunnel.com` via
+  the free Cloudflare API. Proxied record → edge switches within seconds (no TTL wait).
+- Do NOT use one shared tunnel on both boxes: Cloudflare would serve from both
+  connectors when both are up = split-brain. Two tunnels + DNS pointing at exactly
+  one origin is the clean free path.
+
+### Free substitute for independent health checks
+Without paid LB there is no edge health check. Instead of the replica judging
+"is the master down?" purely from its own reachability (split-brain trap), the
+replica ALSO asks Cloudflare (free tunnel-status API): "is the master's tunnel
+connector currently connected?" Cloudflare tracks connector health from its own
+edge, giving a semi-independent signal.
+
+### Role = "does the public DNS point to me?"
+Each node periodically checks the current CNAME target (Cloudflare API or DNS
+lookup): if it points to my tunnel UUID → I'm master; else → I'm replica. The DNS
+record is the lock; writing it (the flip) IS the promotion. Both nodes converge on
+exactly one master.
+
+## Read-only failover (KEY DECISION)
+When the replica takes over it becomes a **read-only master**: serves reads
+(browse, download, stream, cookie/session validation) but REJECTS writes.
+
+Why this is the right call:
+- Kills split-brain data corruption: only one node ever writes, so worst case is
+  "stale reads," never divergent/corrupted data — even if the old master is alive
+  but partitioned.
+- Makes failback trivial: the promoted replica never diverged, so when the master
+  returns there is nothing to reconcile/merge. Master stays source of truth; replica
+  reverts to background sync; DNS flips home.
+- Reframes the promoted node accurately: it is a read-replica temporarily exposed to
+  the public, not a true new master (simpler, less code).
+- Lets us be MORE relaxed about false-positive failovers: a wrong promotion only
+  causes a few minutes of read-only, not corruption — lowers the bar for the free arbiter.
+
+### "What is a write?" — must gate these
+Block user-facing writes AND make incidental/telemetry writes skip silently:
+- File mutations: upload, delete, rename, move, share / temp-URL creation.
+- Temp-URL request counters, file access stats, last-accessed timestamps.
+- `LoggerToDb` — must fall back to console logging (DB logging would fail).
+- Metrics pusher / heartbeat / replica registry writes.
+- Auth: cookie VALIDATION is a read (existing sessions keep working); LOGIN/REGISTER
+  are writes and will be down during failover (accepted degraded mode).
+
+### Enforcement layers
+- Primary: app-level read-only mode derived from role. Global guard rejects mutating
+  ops (POST/PUT/PATCH/DELETE + mutating GETs) with a clear 503 "read-only failover
+  mode" so the frontend can show a banner. Incidental/telemetry writes skip silently.
+- Defense-in-depth (optional, later): DB-level read-only (SELECT-only MySQL user or
+  read-only sessions) once all incidental writes are gated.
+
+## Failover sequence (replica → read-only master)
+1. Replica coordinator loop, over a sustained window (hysteresis, e.g. several minutes):
+   (a) cannot reach master, AND
+   (b) Cloudflare reports master's tunnel disconnected, AND
+   (c) replica itself has good internet (can reach Cloudflare API + neutral endpoints
+       — proves the replica is not the isolated one).
+2. Replica calls Cloudflare API to repoint the CNAME to its own tunnel.
+3. Replica flips internal role → (read-only) master: STOPS pull crons (so it won't
+   overwrite its now-authoritative data from a dead master), sets readOnly = true,
+   serves reads.
+4. Emails shadosite@gmail.com that failover happened.
+
+## Old master recovery (demotion / failback)
+- On boot and periodically, old master checks "does the DNS point to me?" If it lost
+  the record → demote to replica, stop acting as master, re-sync FROM the new active
+  node. Because role is derived from the DNS lock, this is automatic and split-brain-safe
+  (losing side voluntarily steps down).
+- Failback policy: MANUAL / sticky. Once the replica is active, keep it there until you
+  deliberately flip back during a quiet window (avoids flapping). With read-only failover
+  there is no data-loss surprise on failback anyway.
+
+## Fencing (free version's weak spot — must handle)
+The tunnel/DNS MUST be the ONLY ingress to either machine. No direct public IP, no
+alternate hostname, no LAN clients pointed at the origins — otherwise an alive-but-
+partitioned old master could still receive writes. The self-demote check ("do I still
+own the DNS record?") is the backstop. (Read-only failover already removes the
+corruption risk even if fencing is imperfect.)
+
+## Data consistency / RPO caveat (unchanged)
+Replication is ASYNC (files every minute, DB hourly). Failover RPO ≈ up to ~1 hour of
+DB writes / ~1 minute of file writes may be lost (writes accepted after the last
+successful replication and before failure). Read-only failover avoids ADDITIONAL
+divergence but does not recover this pre-existing async gap. To shrink it later:
+more frequent DB sync, or continuous replication (MySQL binlog/GTID) — larger change.
+
+## What to build (all free)
+- Cloudflare API token (scoped: edit the DNS zone + read tunnel status), stored in config.
+- Coordinator loop on each node: check DNS ownership + master tunnel status; apply
+  promote/demote; start/stop the pull crons; set/clear read-only mode.
+- Dynamic role in Redis (static config = initial preference only).
+- Replica-side guards: connectivity sanity check + hysteresis.
+- Read-only mode flag + global mutating-request guard (503 + frontend banner);
+  gate/skip incidental writes; LoggerToDb console fallback.
+- `/health` endpoint (useful for own monitoring even without LB).
+- Failover email alerts (reuse EmailService) + documented MANUAL failback procedure.
+
+## Optional free hardening
+Add an independent external witness the replica must also consult before promoting:
+free-tier uptime monitor (e.g. UptimeRobot), GitHub Actions cron, or a free-tier
+serverless function hitting the master. Reduces false-positive promotions further.
+
+## Open decisions to confirm before implementing
+1. Confirm degraded UX acceptable: during failover users can browse/download/stream but
+   cannot upload/delete/share, and cannot create NEW logins (existing sessions keep working).
+2. Exact read/write line: default = all GET reads allowed (except mutating ones),
+   everything else blocked, telemetry writes silently skipped.
+3. Frontend read-only banner when it receives the failover 503?
+4. RPO tolerance: is "up to ~1 hour of DB loss" acceptable, or do we need more frequent
+   DB sync / binlog replication first?
+5. Auto vs manual failback (recommended: manual/sticky).
+6. Is the tunnel the ONLY ingress, or are there direct/LAN paths to fence off?
+
+## Related existing code (context for implementation)
+- src/replication/replication.service.ts — file sync (per-minute cron) + DB replication
+  (hourly cron), replica registry in Redis, encryption helpers.
+- src/replication/trusted-ip.middleware.ts + client-ip.util.ts — replication endpoint
+  access control (allow-listed IPs; CF-Connecting-IP resolution behind the tunnel).
+- src/admin/feature-flag.service.ts — feature flags with JSON payloads (replication flag
+  holds allowedIps); good precedent for a dynamic mode/role stored + toggled.
+- src/admin/email.service.ts — EmailService (TCP proxy to auth-api) for failover alerts.
+- config: this-service.replication.role (master/primary/replica) + master-or-replica-ip.
