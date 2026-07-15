@@ -95,14 +95,17 @@ export class FilesService {
       const dir = await this.absolutePath(userId, relativePath);
       if (!this.fs.existsSync(dir)) throw new Error(dir + " does not exist");
 
-      this.updateStats(userId, dir, user_agent).catch((e) =>
-         this.logger.error("updateStats failed: " + (e as Error).message),
-      );
+      // Verify ownership BEFORE doing any work (including stat writes). Otherwise a denied
+      // traversal request would still persist a spurious UploadedFile + FileAccessStat row
+      // (under this user's id, with a "../..." path) via updateStats().
       const owns = await this.isOwner(userId, dir);
-
       if (!owns) {
          throw new Error("You don't have permission to access this file " + relativePath);
       }
+
+      this.updateStats(userId, dir, user_agent).catch((e) =>
+         this.logger.error("updateStats failed: " + (e as Error).message),
+      );
 
       return this.fs.createReadStream(dir, options);
    }
@@ -402,7 +405,7 @@ export class FilesService {
       }
 
       const file = await this.uploadedFileRepo.findOne({
-         where: { absolute_path: relative },
+         where: { absolute_path: relative, user: { id: userId } },
       });
 
       const fileMime = file ? file.mime : FilesService.detectFile(dir);

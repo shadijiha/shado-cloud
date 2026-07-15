@@ -79,22 +79,21 @@ export class DirectoriesService {
          });
       }
 
-      // Pagination at service level
-      // If no pagination, return everything
-      let files = dirList;
-      let paginationMetadata: { page: number, limit: number, total: number, totalPages: number, start: number } | undefined = undefined;
+      // Pagination at service level. Always produce metadata (defaulting to page 1,
+      // limit 50 — matching the documented API defaults) so the controller can safely
+      // build its `meta` block. Previously, calling /directory/list without page/limit
+      // left paginationMetadata undefined and crashed the controller with
+      // "Cannot read properties of undefined (reading 'limit')".
+      const page = Math.max(1, pagination?.page || 1);
+      const limit = Math.min(200, Math.max(1, pagination?.limit || 50));
+      const total = dirList.length;
+      const totalPages = Math.ceil(total / limit);
+      const start = (page - 1) * limit;
 
-      if (pagination && pagination.page && pagination.limit) {
-         const page = Math.max(1, pagination.page || 1);
-         const limit = Math.min(200, Math.max(1, pagination.limit || 50));
-         const total = dirList.length;
-         const totalPages = Math.ceil(total / limit);
-         const start = (page - 1) * limit;
+      const paginationMetadata: { page: number, limit: number, total: number, totalPages: number, start: number } =
+         { page, limit, total, totalPages, start };
 
-         paginationMetadata = { page, limit, total, totalPages, start };
-
-         files = dirList.slice(start, start + limit);
-      }
+      const files = dirList.slice(start, start + limit);
 
       const result: Array<DirectoryInfo | FileInfo> = [];
       for (const file of files) {

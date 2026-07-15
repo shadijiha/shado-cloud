@@ -30,6 +30,16 @@ export class TempUrlService {
       expires_at: Date,
       is_readonly: boolean,
    ): Promise<string> {
+      // A temp URL may only ever point at a file the generating user actually owns.
+      // Without this check, a user could pass a traversal path (e.g. "../<other-user>/file"
+      // or "../../../../etc/...") that absolutePath() would resolve OUTSIDE their own root,
+      // turning the (publicly reachable) /temp/:url/save endpoint into a cross-user /
+      // arbitrary file write primitive. Validate against the resolved absolute path.
+      const absolutePath = await this.fileService.absolutePath(userId, filepath);
+      if (!(await this.fileService.isOwner(userId, absolutePath))) {
+         throw new SoftException("You do not have permission to create a temporary URL for this file");
+      }
+
       const tempUrl = new TempUrl();
       tempUrl.user = await this.userService.getById(userId);
       tempUrl.url = this.makeUrl();
@@ -90,6 +100,13 @@ export class TempUrlService {
       temp.requests += 1;
       await this.tempUrlRepo.save(temp);
       const dir = await this.fileService.absolutePath(temp.user.id, temp.filepath);
+
+      // Defense-in-depth: even though generate() validates ownership, re-verify here so a
+      // stored traversal filepath can never write outside the owner's root (this endpoint
+      // is publicly reachable and has no auth guard of its own).
+      if (!(await this.fileService.isOwner(temp.user.id, dir))) {
+         throw new SoftException("Temporary URL references a file outside the owner's storage");
+      }
 
       // Check if file still exists
       if (!existsSync(dir)) {

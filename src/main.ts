@@ -15,6 +15,10 @@ import { ReplicationModule } from "./replication/replication.module";
 import { IoAdapter } from "@nestjs/platform-socket.io";
 import { MetricsPusherService } from "./metrics-pusher.service";
 import yamlConfigLoader from "./config/config.loader";
+import { AuthService } from "./auth/auth.service";
+import { AdminGuard } from "./admin/admin.strategy";
+import { ExecutionContext } from "@nestjs/common";
+import type { Request, Response, NextFunction } from "express";
 
 async function bootstrap() {
    const replicationRole =  yamlConfigLoader()["this-service"].replication.role;
@@ -51,6 +55,42 @@ async function bootstrap() {
       .build();
 
    const document = SwaggerModule.createDocument(app, config);
+
+   // Gate the Swagger UI (/api, /api/*) and spec (/api-json, /api-yaml) behind an
+   // authenticated admin session. Previously these were public and leaked the full
+   // API surface to anyone.
+   //
+   // Swagger registers its routes directly on the underlying Express instance rather
+   // than as Nest controllers, so `@UseGuards(AdminGuard)` can't be attached to them
+   // (there is no Nest ExecutionContext for a guard to hook into). Instead we reuse the
+   // real AdminGuard by instantiating it with AuthService and invoking canActivate()
+   // through a minimal ExecutionContext adapter — so the admin check stays in one place.
+   const adminGuard = new AdminGuard(app.get(AuthService, { strict: false }));
+
+   const swaggerAdminGuard = async (req: Request, res: Response, next: NextFunction) => {
+      // AdminGuard.canActivate only touches ctx.switchToHttp().getRequest(); build the
+      // smallest context that satisfies that. It reads req.headers.cookie and (on success)
+      // sets req.authUserId.
+      const ctx = {
+         switchToHttp: () => ({ getRequest: () => req, getResponse: () => res, getNext: () => next }),
+      } as unknown as ExecutionContext;
+
+      try {
+         if (await adminGuard.canActivate(ctx)) return next();
+      } catch {
+         // fall through to deny
+      }
+      // AdminGuard returns a single boolean, so disambiguate the response code here:
+      // no session cookie => 401, otherwise (authenticated non-admin) => 403.
+      return req.headers.cookie
+         ? res.status(403).send("Admin access required")
+         : res.status(401).send("Authentication required");
+   };
+
+   app.use("/api", swaggerAdminGuard);
+   app.use("/api-json", swaggerAdminGuard);
+   app.use("/api-yaml", swaggerAdminGuard);
+
    SwaggerModule.setup("api", app, document);
    // fs.writeFileSync("./swagger-spec.json", JSON.stringify(document));
    app.use(helmet());
