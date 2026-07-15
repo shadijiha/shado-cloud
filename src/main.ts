@@ -80,11 +80,11 @@ async function bootstrap() {
       } catch {
          // fall through to deny
       }
-      // AdminGuard returns a single boolean, so disambiguate the response code here:
-      // no session cookie => 401, otherwise (authenticated non-admin) => 403.
-      return req.headers.cookie
-         ? res.status(403).send("Admin access required")
-         : res.status(401).send("Authentication required");
+      // Non-admins are sent to a styled unauthorized page on the frontend instead of
+      // seeing a raw status message. Overridable via env for non-prod environments.
+      const unauthorizedUrl =
+         process.env.API_DOCS_UNAUTHORIZED_URL || "https://cloud.shadijiha.com/api-unauthorized";
+      return res.redirect(302, unauthorizedUrl);
    };
 
    app.use("/api", swaggerAdminGuard);
