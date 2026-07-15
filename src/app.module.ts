@@ -12,6 +12,7 @@ import { UserProfileModule } from "./user-profile/user-profile.module";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD, INQUIRER } from "@nestjs/core";
 import { CORPMiddleware } from "./corp.middleware";
+import { CsrfMiddleware } from "./csrf.middleware";
 import { TrafficMiddleware } from "./traffic.middleware";
 import { TrafficService } from "./traffic.service";
 import { LoggerToDb } from "./logging";
@@ -163,6 +164,6 @@ export class GlobalUtilityModule { }
 })
 export class AppModule {
    configure(consumer: MiddlewareConsumer) {
-      consumer.apply(CORPMiddleware, TrafficMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL });
+      consumer.apply(CORPMiddleware, CsrfMiddleware, TrafficMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL });
    }
 }

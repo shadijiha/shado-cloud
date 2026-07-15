@@ -11,6 +11,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ConfigServiceInterceptor } from "./config/config.interceptor";
 import { EnvVariables, ReplicationRole } from "./config/config.validator";
 import { isDev } from "./util";
+import { buildAllowedOrigins } from "./allowed-origins";
 import { ReplicationModule } from "./replication/replication.module";
 import { IoAdapter } from "@nestjs/platform-socket.io";
 import { MetricsPusherService } from "./metrics-pusher.service";
@@ -29,16 +30,7 @@ async function bootstrap() {
    const envConfig = app.get<ConfigService<EnvVariables>>(ConfigService);
 
    app.enableCors({
-      origin: [
-         ...(envConfig.get("this-service.frontend_url", { infer: true })?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
-         /\.shadijiha\.com$/,
-         "http://shadijiha.com",
-         "https://shadijiha.com",
-         /https?:\/\/(.+\.)?shadijiha\.com$/,
-         /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
-         /^http:\/\/localhost:\d+$/,
-         /^capacitor:\/\//,
-      ],
+      origin: buildAllowedOrigins(envConfig),
       credentials: true,
    });
    app.useWebSocketAdapter(new IoAdapter(app));
