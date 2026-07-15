@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { createReadStream, existsSync } from "fs";
+import { randomBytes } from "crypto";
 import path from "path";
 import { AuthService } from "src/auth/auth.service";
 import { FilesService } from "src/files/files.service";
@@ -158,11 +159,21 @@ export class TempUrlService {
    }
 
    private makeUrl(length = 32) {
-      let result = "";
+      // Security: this token is the ONLY secret protecting a temp URL (the /temp/:url
+      // endpoints have no auth guard). It must be unguessable, so use a CSPRNG
+      // (crypto.randomBytes) rather than Math.random(), which is not cryptographically
+      // secure and can be predicted from a few outputs.
       const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
       const charactersLength = characters.length;
-      for (let i = 0; i < length; i++) {
-         result += characters.charAt(Math.floor(Math.random() * charactersLength));
+      // Rejection sampling to avoid modulo bias across the 62-char alphabet.
+      const max = 256 - (256 % charactersLength);
+      let result = "";
+      while (result.length < length) {
+         for (const byte of randomBytes(length)) {
+            if (byte >= max) continue; // discard biased bytes
+            result += characters.charAt(byte % charactersLength);
+            if (result.length === length) break;
+         }
       }
       return result;
    }

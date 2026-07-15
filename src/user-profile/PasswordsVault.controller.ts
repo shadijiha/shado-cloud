@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Inject, Param, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "src/auth/auth.guard";
+import { Throttle } from "@nestjs/throttler";
 import { ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Paginate, type Paginated, PaginateQuery } from "nestjs-paginate";
 import { OperationStatus, OperationStatusResponse } from "src/files/filesApiTypes";
@@ -42,6 +43,8 @@ export class PasswordsVaultController {
    }
 
    @Get("get/:encryption_id")
+   // Returns a decrypted secret — cap per IP to limit bulk exfiltration / enumeration.
+   @Throttle({ default: { ttl: 60_000, limit: 60 } })
    @ApiResponse({ type: typeof { decrypted_password: "" } })
    public async get(@AuthUser() userId: number, @Param("encryption_id") encryption_id: number) {
       return await this.logger.errorWrapper(async () => {

@@ -9,7 +9,8 @@ import { TempUrlModule } from "./temp-url/temp-url.module";
 import { RequestContextModule } from "nestjs-request-context";
 import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { RealIpThrottlerGuard } from "./real-ip-throttler.guard";
 import { APP_GUARD, INQUIRER } from "@nestjs/core";
 import { CORPMiddleware } from "./corp.middleware";
 import { CsrfMiddleware } from "./csrf.middleware";
@@ -141,7 +142,11 @@ export class GlobalUtilityModule { }
          inject: [ConfigService],
       }),
       ThrottlerModule.forRoot([{
-         ttl: 30,
+         // ttl is in MILLISECONDS in @nestjs/throttler v5+. The previous value (30) meant a
+         // 30ms window, i.e. the limit reset ~33x/second and never actually throttled.
+         // 1000 requests / minute per real client IP is a generous global ceiling that still
+         // stops brute-force/scraping abuse; sensitive routes tighten this further via @Throttle.
+         ttl: 60_000,
          limit: 1000,
       }]),
       FilesModule,
@@ -158,7 +163,7 @@ export class GlobalUtilityModule { }
       AppService,
       {
          provide: APP_GUARD,
-         useClass: ThrottlerGuard,
+         useClass: RealIpThrottlerGuard,
       },
    ],
 })

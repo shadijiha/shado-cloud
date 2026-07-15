@@ -1,12 +1,17 @@
 import { Body, Controller, Get, Param, Req, Res, UseGuards } from "@nestjs/common";
 import { ReplicationService } from "./replication.service";
 import { ApiTags } from "@nestjs/swagger";
+import { SkipThrottle } from "@nestjs/throttler";
 import { ServiceKeyGuard } from "src/auth/service-key.guard";
 import { Request, Response } from "express";
 import { resolveClientIp } from "./client-ip.util";
 
 @Controller("replication")
 @ApiTags("Replication")
+// Trusted service-to-service traffic (authenticated by ServiceKeyGuard). A single sync can
+// pull thousands of files from one peer IP, so it must NOT be subject to the public per-IP
+// rate limit — that would throttle legitimate replication.
+@SkipThrottle()
 export class ReplicationController {
    constructor(private readonly replicationService: ReplicationService) {}
 

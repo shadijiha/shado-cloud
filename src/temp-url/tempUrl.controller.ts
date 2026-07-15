@@ -13,6 +13,7 @@ import {
    Inject,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "src/auth/auth.guard";
+import { Throttle } from "@nestjs/throttler";
 import { ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
@@ -30,6 +31,8 @@ export class TempUrlConstoller {
 
    @Post("generate")
    @UseGuards(JwtAuthGuard)
+   // Creating share links is a low-frequency action; cap it to curb abuse / accidental loops.
+   @Throttle({ default: { ttl: 60_000, limit: 20 } })
    @ApiResponse({ type: TempURLGenerateResponse })
    public async generate(
       @Req() request: Request,
@@ -73,6 +76,9 @@ export class TempUrlConstoller {
    }
 
    @Patch(":tempUrl/save")
+   // Public, unauthenticated write endpoint — throttle per IP to prevent it being used as an
+   // abusive write/DoS primitive while still allowing normal collaborative saves.
+   @Throttle({ default: { ttl: 60_000, limit: 60 } })
    @ApiResponse({ type: OperationStatusResponse })
    public async save(
       @Param("tempUrl") tempUrl: string,

@@ -5,6 +5,7 @@ import { EnvVariables } from "./config/config.validator";
 import { TrafficService } from "./traffic.service";
 import { isDev } from "./util";
 import { collectCronJobs } from "./admin/cron.service";
+import { signServiceHeaders } from "./auth/service-auth.util";
 
 @Injectable()
 export class HeartbeatService {
@@ -26,18 +27,19 @@ export class HeartbeatService {
       const fullUrl = `${protocol}://${host}${port ? ":" + port : ""}`
 
       try {
+         const body = JSON.stringify({
+            name: "shado-cloud-backend",
+            port: this.config.get("this-service.port.http", { infer: true }) ?? 9000,
+            traffic: this.traffic.getStats(),
+            crons: collectCronJobs(this.schedulerRegistry),
+         });
          await fetch(`${fullUrl}/microservices/heartbeat`, {
             method: "POST",
             headers: {
                "Content-Type": "application/json",
-               "x-service-key": this.config.get("cross-service.secret", { infer: true }),
+               ...signServiceHeaders(this.config.get("cross-service.secret", { infer: true }), body),
             },
-            body: JSON.stringify({
-               name: "shado-cloud-backend",
-               port: this.config.get("this-service.port.http", { infer: true }) ?? 9000,
-               traffic: this.traffic.getStats(),
-               crons: collectCronJobs(this.schedulerRegistry),
-            }),
+            body,
          });
       } catch(e) {
          this.logger.warn(`Heartbeat to shado-metrics (${fullUrl}) failed: ${(e as Error).message}`);

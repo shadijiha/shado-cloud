@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, StreamableFile, Inject } from "@nestj
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { EnvVariables, ReplicationRole } from "src/config/config.validator";
+import { signServiceHeaders } from "src/auth/service-auth.util";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import * as path from "path";
 import {
@@ -72,9 +73,7 @@ export class ReplicationService implements OnModuleInit {
             const replicaFiles = await this.listCloudDir();
 
             const listAllResponse = await fetch(`${masterIp}/replication/listall`, {
-               headers: {
-                  "x-service-key": this.config.get("cross-service.secret", { infer: true }),
-               }
+               headers: signServiceHeaders(this.config.get("cross-service.secret", { infer: true })),
             });
 
             if (!listAllResponse.ok) {
@@ -99,9 +98,7 @@ export class ReplicationService implements OnModuleInit {
                }
 
                const response = await fetch(`${masterIp}/replication/getfile/${encodeURIComponent(file.path)}`, {
-                  headers: {
-                     "x-service-key": this.config.get("cross-service.secret", { infer: true }),
-                  }
+                  headers: signServiceHeaders(this.config.get("cross-service.secret", { infer: true })),
                });
 
                if (!response.ok) {
@@ -407,7 +404,7 @@ export class ReplicationService implements OnModuleInit {
 
          this.logger.log("Replicating database from master...");
          const response = await fetch(`${masterIp}/replication/database`, {
-            headers: { "x-service-key": this.config.get("cross-service.secret", { infer: true }) },
+            headers: signServiceHeaders(this.config.get("cross-service.secret", { infer: true })),
          });
          if (!response.ok) {
             this.logger.error(`Failed to fetch database dump, status: ${response.status}, text: ${await response.text()}`);

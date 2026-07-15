@@ -99,6 +99,29 @@ describe("TempUrlService — filepath ownership", () => {
       });
    });
 
+   describe("token generation (CSPRNG)", () => {
+      const extractToken = (url: string) => url.match(/\/temp\/(.+)\/get$/)?.[1] ?? "";
+
+      it("produces a 32-char alphanumeric token", async () => {
+         fileService.isOwner.mockResolvedValue(true);
+         const url = await service.generate(makeRequest(), OWNER_ID, "a.txt", 100, new Date(), true);
+         const token = extractToken(url);
+         expect(token).toHaveLength(32);
+         expect(token).toMatch(/^[A-Za-z0-9]{32}$/);
+      });
+
+      it("produces unique, non-repeating tokens across many generations", async () => {
+         fileService.isOwner.mockResolvedValue(true);
+         const tokens = new Set<string>();
+         for (let i = 0; i < 200; i++) {
+            const url = await service.generate(makeRequest(), OWNER_ID, "a.txt", 100, new Date(), true);
+            tokens.add(extractToken(url));
+         }
+         // No collisions expected from a 32-char CSPRNG token over 200 samples.
+         expect(tokens.size).toBe(200);
+      });
+   });
+
    describe("save() — defense-in-depth for legacy rows", () => {
       const legacyTraversalUrl = {
          url: "abc",
