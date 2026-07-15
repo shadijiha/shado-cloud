@@ -11,6 +11,7 @@ import { AdminModule } from "./admin/admin.module";
 import { UserProfileModule } from "./user-profile/user-profile.module";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { RealIpThrottlerGuard } from "./real-ip-throttler.guard";
+import { SignedServiceSerializer } from "./auth/service-auth.util";
 import { APP_GUARD, INQUIRER } from "@nestjs/core";
 import { CORPMiddleware } from "./corp.middleware";
 import { CsrfMiddleware } from "./csrf.middleware";
@@ -49,6 +50,7 @@ import { GoogleBackupModule } from "./replication/google-backup.module";
                options: {
                   host: config.get("cross-service.metrics-api.host", { infer: true }) || "127.0.0.1",
                   port: config.get("cross-service.metrics-api.port.tcp", { infer: true }) ?? 14002,
+                  serializer: new SignedServiceSerializer(config.get("cross-service.secret", { infer: true })),
                },
             }),
             inject: [ConfigService],

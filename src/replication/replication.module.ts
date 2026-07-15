@@ -16,6 +16,7 @@ import { REDIS_CACHE } from "src/util";
 import Redis from "ioredis";
 import { ClientsModule, Transport } from "@nestjs/microservices";
 import { AUTH_SERVICE } from "src/auth/auth.constants";
+import { SignedServiceSerializer } from "src/auth/service-auth.util";
 
 /**
  * This module is responsible for replicating data between the primary and secondary PCs
@@ -41,6 +42,7 @@ import { AUTH_SERVICE } from "src/auth/auth.constants";
                options: {
                   host: config.get("cross-service.auth-api.host", { infer: true }),
                   port: config.get("cross-service.auth-api.port.tcp", { infer: true }) ?? 11002,
+                  serializer: new SignedServiceSerializer(config.get("cross-service.secret", { infer: true })),
                },
             }),
             inject: [ConfigService],

@@ -5,6 +5,7 @@ import { EnvVariables } from "src/config/config.validator";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "./auth.guard";
 import { AUTH_SERVICE } from "./auth.constants";
+import { SignedServiceSerializer } from "./service-auth.util";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "./../models/user";
 import { UploadedFile } from "./../models/uploadedFile";
@@ -24,6 +25,7 @@ import { AuthTrafficService } from "./auth-traffic.service";
                options: {
                   host: config.get("cross-service.auth-api.host", { infer: true }),
                   port: config.get("cross-service.auth-api.port.tcp", { infer: true }) ?? 11002,
+                  serializer: new SignedServiceSerializer(config.get("cross-service.secret", { infer: true })),
                },
             }),
             inject: [ConfigService],

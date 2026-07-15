@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import type { ReadPacket, Serializer } from "@nestjs/microservices";
 
 /**
  * HMAC signing/verification for service-to-service HTTP calls.
@@ -83,4 +84,57 @@ export function verifyServiceHmac(
    // timingSafeEqual throws on length mismatch; guard it (and reject empty/odd hex).
    if (provided.length === 0 || provided.length !== expectedBuf.length) return false;
    return timingSafeEqual(provided, expectedBuf);
+}
+
+// ─── TCP microservice signing ────────────────────────────────────────────────
+// The TCP transport carries auth as an `__svcAuth` envelope inside the message payload
+// (there are no headers). Signing is applied automatically by SignedServiceSerializer on the
+// client, and verified by the global RPC guard on the server. Same HMAC/timestamp/nonce scheme
+// and 5-minute window as the HTTP path.
+
+/**
+ * Deterministic JSON with recursively sorted keys, so the signer and verifier produce the same
+ * canonical string regardless of property order over the wire.
+ */
+export function stableStringify(value: any): string {
+   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+   const keys = Object.keys(value).sort();
+   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(",")}}`;
+}
+
+/** Attach an HMAC auth envelope (`__svcAuth`) to an outgoing TCP message payload. */
+export function signServicePayload<T extends Record<string, any>>(
+   secret: string,
+   payload: T,
+): T & { __svcAuth: { t: string; n: string; s: string } } {
+   const body = (payload ?? {}) as T;
+   const t = Date.now().toString();
+   const n = randomBytes(16).toString("hex");
+   const s = createHmac("sha256", secret).update(`v1.${t}.${n}.${sha256Hex(stableStringify(body))}`).digest("hex");
+   return { ...body, __svcAuth: { t, n, s } };
+}
+
+/** Verify the `__svcAuth` envelope on an incoming TCP message payload. */
+export function verifyServicePayload(secret: string, data: any, now: number = Date.now()): boolean {
+   if (!secret || !data || typeof data !== "object") return false;
+   const auth = data.__svcAuth;
+   if (!auth || typeof auth.t !== "string" || typeof auth.n !== "string" || typeof auth.s !== "string") return false;
+   const ts = Number(auth.t);
+   if (!Number.isFinite(ts) || Math.abs(now - ts) > SERVICE_AUTH_WINDOW_MS) return false;
+   const rest: Record<string, any> = { ...data };
+   delete rest.__svcAuth;
+   const expected = createHmac("sha256", secret).update(`v1.${auth.t}.${auth.n}.${sha256Hex(stableStringify(rest))}`).digest("hex");
+   const provided = Buffer.from(auth.s, "hex");
+   const expectedBuf = Buffer.from(expected, "hex");
+   if (provided.length === 0 || provided.length !== expectedBuf.length) return false;
+   return timingSafeEqual(provided, expectedBuf);
+}
+
+/** ClientProxy serializer that auto-signs every outgoing TCP message's payload. */
+export class SignedServiceSerializer implements Serializer {
+   constructor(private readonly secret: string) {}
+   serialize(value: ReadPacket): any {
+      return { ...value, data: signServicePayload(this.secret, (value?.data ?? {}) as Record<string, any>) };
+   }
 }
