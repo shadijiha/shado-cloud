@@ -10,10 +10,18 @@ import { TempUrl } from "src/models/tempUrl";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { SoftException } from "src/util";
 
+// Preserve the real `fs` module and only override existsSync. Replacing the whole
+// module breaks graceful-fs (used by jest/ts-jest) which reads fs.realpath.native.
 jest.mock("fs", () => ({
+   ...jest.requireActual("fs"),
    existsSync: jest.fn().mockReturnValue(true),
-   createReadStream: jest.fn(),
 }));
+
+// FilesService (imported as a DI token below) pulls in these native/heavy modules at
+// import time. Mock them so the test doesn't load native bindings.
+jest.mock("sharp", () => jest.fn());
+jest.mock("fs-thumbnail");
+jest.mock("pdf2pic", () => ({ fromBuffer: jest.fn() }));
 
 /**
  * Regression tests for the temp-URL ownership fix.
