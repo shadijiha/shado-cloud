@@ -76,6 +76,7 @@ export class UserProfileService {
          .createQueryBuilder("search")
          .select("search.text", "text")
          .addSelect("COUNT(search.text)", "Total")
+         .addSelect("MAX(search.created_at)", "created_at")
          .where(`search.${userTbMeta.name}Id = :id`, { id: userId })
          .groupBy("search.text")
          .orderBy("Total", "DESC")
@@ -89,7 +90,7 @@ export class UserProfileService {
          })),
          most_searched: most_search_raw.map((e) => ({
             search_count: e.Total,
-            search: { text: e.text } as any,
+            search: { text: e.text, created_at: e.created_at } as any,
          })),
          used_data: await this.fileService.getUsedData(userId),
          cold_storage: await this.fileService.getColdStorageStats(userId),
