@@ -226,7 +226,16 @@ export class AdminService {
          const dbHost = this.config.get("db.host", { infer: true }) || "localhost";
          const dbUser = this.config.get("db.username", { infer: true });
          const dbPass = this.config.get("db.password", { infer: true });
-         const dumpCmd = `mysqldump -h ${dbHost} -u ${dbUser} -p'${dbPass}' --protocol=tcp --all-databases > ${tmpDir}/mysql-dump.sql`;
+         const dumpFile = `${tmpDir}/mysql-dump.sql`;
+         const baseArgs = `-h ${dbHost} -u ${dbUser} -p'${dbPass}' --protocol=tcp`;
+         // Dump everything EXCEPT the data of the huge shado_metrics.metric_datapoint
+         // table (6M+ rows). Its structure is still dumped (--no-data, second pass) so a
+         // restore recreates the empty table — the metrics service migrations run
+         // `ALTER TABLE metric_datapoint ...` on startup and would fail otherwise.
+         const dumpCmd =
+            `mysqldump ${baseArgs} --all-databases --ignore-table=shado_metrics.metric_datapoint > ${dumpFile} && ` +
+            `echo 'USE \`shado_metrics\`;' >> ${dumpFile} && ` +
+            `mysqldump ${baseArgs} --no-data shado_metrics metric_datapoint >> ${dumpFile}`;
          await this.execSync(dumpCmd);
       } catch (e) {
          errors.push(`MySQL dump failed: ${(e as Error).message}`);
@@ -383,37 +392,45 @@ export class AdminService {
          const dbPass = this.config.get("db.password", { infer: true });
          const dumpPath = `${tmpDir}/mysql-dump.sql`;
          const output = this.fs.createWriteStream(dumpPath);
-         await new Promise<void>((resolve, reject) => {
-            const child = require("child_process").spawn("mysqldump", [
-               "-h", dbHost,
-               "-u", dbUser,
-               `-p${dbPass}`,
-               "--protocol=tcp",
-               "--all-databases"
-            ]);
+         const { spawn } = require("child_process");
+         const commonArgs = ["-h", dbHost, "-u", dbUser, `-p${dbPass}`, "--protocol=tcp"];
+         let bytesWritten = 0;
 
-            let bytesWritten = 0;
-            child.stdout.on("data", (chunk: Buffer) => {
-               bytesWritten += chunk.length;
-               output.write(chunk);
-               subject.next({
-                  data: {
-                     type: "progress",
-                     step: "Dumping MySQL databases...",
-                     processedBytes: bytesWritten,
-                     phase: "mysql"
-                  }
+         // Stream one mysqldump invocation into the shared (still-open) output file.
+         const runDump = (args: string[]) =>
+            new Promise<void>((resolve, reject) => {
+               const child = spawn("mysqldump", [...commonArgs, ...args]);
+
+               child.stdout.on("data", (chunk: Buffer) => {
+                  bytesWritten += chunk.length;
+                  output.write(chunk);
+                  subject.next({
+                     data: {
+                        type: "progress",
+                        step: "Dumping MySQL databases...",
+                        processedBytes: bytesWritten,
+                        phase: "mysql"
+                     }
+                  });
                });
+
+               child.stderr.on("data", () => { }); // Ignore warnings
+               child.on("close", (code: number) => {
+                  if (code === 0) resolve();
+                  else reject(new Error(`mysqldump exited with code ${code}`));
+               });
+               child.on("error", reject);
             });
 
-            child.stderr.on("data", () => { }); // Ignore warnings
-            child.on("close", (code: number) => {
-               output.end();
-               if (code === 0) resolve();
-               else reject(new Error(`mysqldump exited with code ${code}`));
-            });
-            child.on("error", reject);
-         });
+         // Full dump, but skip the DATA of the huge shado_metrics.metric_datapoint table
+         // (6M+ rows); the second pass dumps its structure only so a restore recreates the
+         // empty table (the metrics migrations run `ALTER TABLE metric_datapoint ...`).
+         await runDump(["--all-databases", "--ignore-table=shado_metrics.metric_datapoint"]);
+         await new Promise<void>((resolve, reject) =>
+            output.write("USE `shado_metrics`;\n", (err) => (err ? reject(err) : resolve())),
+         );
+         await runDump(["--no-data", "shado_metrics", "metric_datapoint"]);
+         output.end();
       } catch (e) {
          this.fs.writeFileSync(`${tmpDir}/mysql-error.txt`, (e as Error).message);
          subject.next({ data: { type: "progress", step: "MySQL dump failed", phase: "mysql" } });

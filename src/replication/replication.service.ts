@@ -284,6 +284,12 @@ export class ReplicationService implements OnModuleInit {
    // would clobber the replica's own users/grants).
    private static readonly SYSTEM_SCHEMAS = new Set(["information_schema", "mysql", "performance_schema", "sys"]);
 
+   // Tables whose ROW DATA is excluded from replication/backup (structure is still
+   // replicated so the replica has a valid, empty table). Keyed as `db.table`,
+   // lower-cased. shado_metrics.metric_datapoint holds 6M+ rows of time-series metrics
+   // that are not worth the dump/transfer/import cost on every replication cycle.
+   private static readonly DATA_EXCLUDED_TABLES = new Set(["shado_metrics.metric_datapoint"]);
+
    // Max byte size of a single multi-row INSERT statement. Kept well under MySQL's
    // default max_allowed_packet (64MB) so imports never exceed the server limit.
    private static readonly MAX_INSERT_BYTES = 4 * 1024 * 1024;
@@ -336,6 +342,13 @@ export class ReplicationService implements OnModuleInit {
             const createSql = ((createRows as Record<string, string>[])[0]["Create Table"]).replace(/\r?\n/g, " ");
             await write(`DROP TABLE IF EXISTS ${conn.escapeId(table)};\n`);
             await write(`${createSql};\n`);
+
+            // Some tables (e.g. shado_metrics.metric_datapoint, 6M+ rows) replicate their
+            // structure only — skip streaming their row data entirely.
+            if (ReplicationService.DATA_EXCLUDED_TABLES.has(`${database}.${table}`.toLowerCase())) {
+               this.logger.log(`  skipping data for ${database}.${table} (data-excluded table)`);
+               continue;
+            }
 
             // Stream rows so we never hold the whole table in memory. Batches are
             // bounded by BYTE size (not just row count) so no single INSERT exceeds
