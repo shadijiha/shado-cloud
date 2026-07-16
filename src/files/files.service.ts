@@ -28,6 +28,10 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { MetricsPusherService, MetricUnit } from "../metrics-pusher.service";
 import { User } from "src/models/user";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -398,10 +402,15 @@ export class FilesService {
       // For directories, summarise how many files (recursively) are in cold storage.
       let file_count: number | undefined;
       let cold_file_count: number | undefined;
+      // A directory inode has no content size — statSync(dir).size is just the size of
+      // the directory entry itself (~4 KB block on ext4), which is why every folder
+      // showed "4 KB". Delegate to the OS `du` for the real total (a single native call).
+      let size = stats.size;
       if (stats.isDirectory()) {
          const s = this.tieredStorage.coldStats(dir);
          file_count = s.total;
          cold_file_count = s.cold;
+         size = await this.getDirectorySize(dir);
       }
 
       const file = await this.uploadedFileRepo.findOne({
@@ -440,7 +449,7 @@ export class FilesService {
          is_video: fileMime.includes("video"),
          is_audio: fileMime.includes("audio"),
          is_pdf: fileMime.includes("pdf"),
-         size: stats.size,
+         size: size,
          lastModified: stats.mtime.toISOString(),
          is_cold_storage: this.tieredStorage.isColdFile(dir),
          file_count,
@@ -451,6 +460,30 @@ export class FilesService {
          thumbails,
          is_dir: stats.isDirectory(),
       };
+   }
+
+   /**
+    * Total byte size of a directory's contents. A directory has no content size in its
+    * inode (statSync returns the ~4 KB block of the dir entry itself), so we ask the OS
+    * `du` — one native call that walks the tree far faster than a JS recursion. Falls
+    * back to the inode size if `du` is unavailable (e.g. non-disk fs) or errors.
+    */
+   private async getDirectorySize(absPath: string): Promise<number> {
+      try {
+         if (process.platform === "darwin") {
+            // BSD `du` (macOS) has no -b; -sk reports total in 1024-byte blocks.
+            const { stdout } = await execFileAsync("du", ["-sk", absPath]);
+            const kb = parseInt(stdout.trim().split(/\s+/)[0], 10);
+            return Number.isFinite(kb) ? kb * 1024 : this.fs.statSync(absPath).size;
+         }
+         // GNU `du` (Linux): -s summary, -b apparent size in bytes (matches the logical
+         // file sizes shown for individual files).
+         const { stdout } = await execFileAsync("du", ["-sb", absPath]);
+         const bytes = parseInt(stdout.trim().split(/\s+/)[0], 10);
+         return Number.isFinite(bytes) ? bytes : this.fs.statSync(absPath).size;
+      } catch {
+         return this.fs.statSync(absPath).size;
+      }
    }
 
    public async exists(userId: number, relativePath: string) {
