@@ -31,8 +31,6 @@ import { User } from "src/models/user";
 import { execFile } from "child_process";
 import { promisify } from "util";
 
-const execFileAsync = promisify(execFile);
-
 type FileServiceResult = Promise<[boolean, string]>;
 
 @Injectable()
@@ -470,6 +468,9 @@ export class FilesService {
     */
    private async getDirectorySize(absPath: string): Promise<number> {
       try {
+         // Promisified lazily (not at module load) so an incomplete `child_process`
+         // mock in tests can't crash the import; any failure falls back to statSync.
+         const execFileAsync = promisify(execFile);
          if (process.platform === "darwin") {
             // BSD `du` (macOS) has no -b; -sk reports total in 1024-byte blocks.
             const { stdout } = await execFileAsync("du", ["-sk", absPath]);
