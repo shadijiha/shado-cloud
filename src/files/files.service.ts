@@ -19,8 +19,10 @@ import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { ConfigService } from "@nestjs/config";
-import { EnvVariables } from "src/config/config.validator";
+import { EnvVariables, ReplicationRole } from "src/config/config.validator";
 import type Redis from "ioredis";
+import { minimatch } from "minimatch";
+import { BackupLocation, FileBackups } from "./filesApiTypes";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { fromBuffer as pdfToImage } from "pdf2pic";
@@ -37,6 +39,9 @@ type FileServiceResult = Promise<[boolean, string]>;
 export class FilesService {
    public static readonly METADATA_FOLDER_NAME = ".metadata";
    public static readonly THUMBNAILS_FOLDER_NAME = ".thumbnails";
+   // Redis hash written by ReplicationService: field = replica IP, value = JSON(ReplicaRecord).
+   // Kept in sync with ReplicationService.REPLICAS_KEY.
+   public static readonly REPLICAS_KEY = "replication:replicas";
    private readonly dirService: DirectoriesService; // Not injected, because it would cause a circular dependency
 
    constructor(
@@ -712,6 +717,123 @@ export class FilesService {
 
    public async absolutePath(userId: number, relativePath: string) {
       return path.join(await this.getUserRootPath(userId), relativePath);
+   }
+
+   /**
+    * Backup / redundancy report for a single file. Answers "how many copies of this
+    * file exist and where":
+    *  1. the primary copy in cloud-dir (this node),
+    *  2. any locally configured mirror disks (this-service.mirror-dirs) — full copies
+    *     of the cloud-dir tree on other disks, so the file's mirror copy lives at
+    *     <mirror-dir>/<path-relative-to-cloud-dir>,
+    *  3. each replica registered with the master (from the Redis registry) — presence
+    *     is inferred from the replica's last sync time vs the file's mtime plus the
+    *     replication ignore rules (the master never verifies a replica's disk directly).
+    */
+   public async getBackups(userId: number, relativePath: string): Promise<FileBackups> {
+      const absolute = await this.absolutePath(userId, relativePath);
+      if (!(await this.isOwner(userId, absolute))) {
+         throw new SoftException("You don't have access to this file");
+      }
+
+      const cloudDir = this.config.get("this-service.cloud-dir", { infer: true });
+      // Path relative to the cloud-dir root — the key shared by mirror disks and replicas,
+      // which all mirror the entire cloud-dir tree.
+      const relToCloud = path.relative(cloudDir, absolute);
+
+      const locations: BackupLocation[] = [];
+
+      // 1) Primary copy (cloud-dir on this node)
+      const primaryExists = this.fs.existsSync(absolute);
+      let mtimeMs = 0;
+      try {
+         mtimeMs = this.fs.statSync(absolute).mtimeMs;
+      } catch {
+         /* file may have just been removed */
+      }
+      locations.push({
+         kind: "primary",
+         label: "Cloud storage",
+         present: primaryExists,
+         detail: primaryExists ? "Primary copy" : "Missing from primary storage",
+      });
+
+      // 2) Local mirror disks (this node's config)
+      const mirrorDirs = this.config.get("this-service.mirror-dirs", { infer: true }) ?? [];
+      for (const dir of mirrorDirs) {
+         // If the mirror root is missing the disk is almost certainly unmounted.
+         if (!this.fs.existsSync(dir)) {
+            locations.push({ kind: "mirror", label: `Mirror disk (${dir})`, present: null, detail: "Disk not mounted / unavailable" });
+            continue;
+         }
+         const mirrorFile = path.join(dir, relToCloud);
+         const exists = this.fs.existsSync(mirrorFile);
+         locations.push({
+            kind: "mirror",
+            label: `Mirror disk (${dir})`,
+            present: exists,
+            detail: exists ? "Mirrored copy present" : "Not yet mirrored",
+         });
+      }
+
+      // 3) Replicas — only the master keeps the registry.
+      const ignored = this.isReplicationIgnored(relToCloud);
+      const role = this.config.get("this-service.replication.role", { infer: true });
+      const isMaster = role === ReplicationRole.Master || role === ReplicationRole.Primary;
+
+      if (isMaster) {
+         let registry: Record<string, string> = {};
+         try {
+            registry = await this.cache.hgetall(FilesService.REPLICAS_KEY);
+         } catch {
+            /* redis unavailable — skip replica reporting */
+         }
+         for (const raw of Object.values(registry ?? {})) {
+            let rec: { ip: string; userAgent: string | null; lastSeenAt: number; mirrorDirs?: number };
+            try {
+               rec = JSON.parse(raw);
+            } catch {
+               continue;
+            }
+
+            let present: boolean | null;
+            let detail: string;
+            const lastSync = new Date(rec.lastSeenAt).toISOString();
+            if (ignored) {
+               present = false;
+               detail = "Excluded from replication (ignore rules)";
+            } else if (rec.lastSeenAt >= mtimeMs) {
+               present = true;
+               detail = `Synced (last sync ${lastSync})`;
+            } else {
+               present = false;
+               detail = `Pending — will replicate on next sync (last sync ${lastSync})`;
+            }
+            if (rec.mirrorDirs) detail += ` · ${rec.mirrorDirs} mirror disk(s) configured`;
+
+            locations.push({ kind: "replica", label: `Replica ${rec.ip}`, present, detail });
+         }
+      } else if (role === ReplicationRole.Replica) {
+         // This node is itself a replica; its local copy is a backup of the master.
+         locations.push({
+            kind: "replica",
+            label: "Master (source of truth)",
+            present: true,
+            detail: "This node is a replica of the master",
+         });
+      }
+
+      const confirmedCopies = locations.filter((l) => l.present === true).length;
+
+      return { path: relToCloud, role: String(role), ignored, confirmedCopies, locations };
+   }
+
+   /** True if a cloud-dir-relative path matches any configured replication ignore glob. */
+   private isReplicationIgnored(relToCloudPath: string): boolean {
+      const patterns = this.config.get("this-service.replication.ignore-patterns", { infer: true });
+      if (!patterns || patterns.length === 0) return false;
+      const normalized = relToCloudPath.split(path.sep).join("/");
+      return patterns.some((p) => minimatch(normalized, p, { dot: true }));
    }
 
    public static detectFile(filename: string): string {

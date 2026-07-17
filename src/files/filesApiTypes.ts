@@ -98,3 +98,52 @@ export class OpResWithData extends OperationStatusResponse {
    @ApiProperty()
    data: boolean;
 }
+
+/**
+ * A single place a copy of a file may live: the primary cloud-dir, a locally
+ * configured mirror disk, or a replica node.
+ */
+export class BackupLocation {
+   @ApiProperty({ enum: ["primary", "mirror", "replica"] })
+   kind: "primary" | "mirror" | "replica";
+
+   @ApiProperty({ description: "Human-readable name of this backup location." })
+   label: string;
+
+   @ApiProperty({
+      nullable: true,
+      description:
+         "true = copy confirmed present, false = absent/pending, null = unknown (e.g. mirror disk unmounted, or replica reachability not verified).",
+   })
+   present: boolean | null;
+
+   @ApiProperty({ required: false, description: "Extra context (path, last sync time, ignore-rule note, etc.)." })
+   detail?: string;
+}
+
+export class FileBackups {
+   @ApiProperty({ description: "File path relative to cloud-dir." })
+   path: string;
+
+   @ApiProperty({ description: "Replication role of the node that answered (master/primary/replica)." })
+   role: string;
+
+   @ApiProperty({ description: "True if the file matches a replication ignore pattern (replicas will not hold it)." })
+   ignored: boolean;
+
+   @ApiProperty({ description: "Number of locations where a copy is confirmed present." })
+   confirmedCopies: number;
+
+   @ApiProperty({ type: [BackupLocation] })
+   locations: BackupLocation[];
+}
+
+export class FileBackupsResponse extends ErrorProne {
+   @ApiProperty({
+      enum: enumToArray(OperationStatus),
+   })
+   status: string;
+
+   @ApiProperty({ nullable: true })
+   data: FileBackups | null;
+}

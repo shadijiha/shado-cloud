@@ -28,6 +28,7 @@ interface ReplicaRecord {
    requestCount: number;
    firstSeenAt: number; // epoch ms
    lastSeenAt: number; // epoch ms
+   mirrorDirs?: number; // number of mirror disks the replica itself has configured (self-reported)
 }
 
 @Injectable()
@@ -73,7 +74,12 @@ export class ReplicationService implements OnModuleInit {
             const replicaFiles = await this.listCloudDir();
 
             const listAllResponse = await fetch(`${masterIp}/replication/listall`, {
-               headers: signServiceHeaders(this.config.get("cross-service.secret", { infer: true })),
+               headers: {
+                  ...signServiceHeaders(this.config.get("cross-service.secret", { infer: true })),
+                  // Self-report how many mirror disks this replica has configured so the
+                  // master can surface it in file backup reports.
+                  "x-replica-mirrors": String((this.config.get("this-service.mirror-dirs", { infer: true }) ?? []).length),
+               },
             });
 
             if (!listAllResponse.ok) {
@@ -150,7 +156,7 @@ export class ReplicationService implements OnModuleInit {
     * metadata and bumping its last-seen timestamp + request count in Redis. Also
     * logs the request. No-op unless this instance is the master.
     */
-   public async recordReplicaRequest(ip: string, userAgent?: string) {
+   public async recordReplicaRequest(ip: string, userAgent?: string, mirrorDirs?: number) {
       if (!this.isMaster()) return;
 
       const now = Date.now();
@@ -163,6 +169,7 @@ export class ReplicationService implements OnModuleInit {
          requestCount: (existing?.requestCount ?? 0) + 1,
          firstSeenAt: existing?.firstSeenAt ?? now,
          lastSeenAt: now,
+         mirrorDirs: mirrorDirs ?? existing?.mirrorDirs,
       };
       await this.redis.hset(ReplicationService.REPLICAS_KEY, ip, JSON.stringify(record));
 

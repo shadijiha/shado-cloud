@@ -32,6 +32,7 @@ import {
    OpResWithData,
    RenameFileRequest,
    SaveFileRequest,
+   FileBackupsResponse,
 } from "./filesApiTypes";
 import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 
@@ -197,6 +198,28 @@ export class FilesConstoller {
             status: OperationStatus[OperationStatus.FAILED],
             data: null,
             errors: [],
+         };
+      }
+   }
+
+   @Get("backups/:path")
+   @ApiOperation({ summary: "List backup copies of a file", description: "Reports where copies of a file exist: the primary cloud-dir copy, any configured local mirror disks, and each replica (presence inferred from last sync time and replication ignore rules)." })
+   @ApiParam({ name: "path", description: "File relative path + file name + extension" })
+   @ApiResponse({ type: FileBackupsResponse })
+   public async backups(@Param("path") path: string, @AuthUser() userId: number): Promise<FileBackupsResponse> {
+      try {
+         const data = await this.fileService.getBackups(userId, path);
+         return {
+            status: OperationStatus[OperationStatus.SUCCESS],
+            data,
+            errors: [],
+         };
+      } catch (e) {
+         this.logger.logException(e);
+         return {
+            status: OperationStatus[OperationStatus.FAILED],
+            data: null,
+            errors: [{ field: "path", message: (e as Error).message }],
          };
       }
    }

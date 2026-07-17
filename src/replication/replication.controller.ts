@@ -20,7 +20,14 @@ export class ReplicationController {
    public async listall(@Req() req: Request) {
       // Record the replica that requested replication (master keeps this registry).
       // Resolves the real client IP (honors CF-Connecting-IP behind a cloudflared tunnel).
-      await this.replicationService.recordReplicaRequest(resolveClientIp(req), req.headers["user-agent"]);
+      const mirrorsHeader = req.headers["x-replica-mirrors"];
+      const rawMirrors = Array.isArray(mirrorsHeader) ? mirrorsHeader[0] : mirrorsHeader;
+      const mirrorDirs = rawMirrors !== undefined ? parseInt(rawMirrors, 10) : undefined;
+      await this.replicationService.recordReplicaRequest(
+         resolveClientIp(req),
+         req.headers["user-agent"],
+         Number.isFinite(mirrorDirs) ? mirrorDirs : undefined,
+      );
       return this.replicationService.listCloudDir();
    }
 
