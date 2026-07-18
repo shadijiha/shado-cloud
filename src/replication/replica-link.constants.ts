@@ -8,7 +8,7 @@
  * by the file-backups API instead of inferring presence from sync timestamps.
  */
 
-export const REPLICA_LINK_NAMESPACE = "/replica-link";
+export const REPLICA_LINK_NAMESPACE = "/replication/replica-link";
 
 /** Master → replica: "do you currently have this file?" (ack-based request/response). */
 export const HAS_FILE_EVENT = "has-file";
