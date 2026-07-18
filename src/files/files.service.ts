@@ -23,6 +23,7 @@ import { EnvVariables, ReplicationRole } from "src/config/config.validator";
 import type Redis from "ioredis";
 import { minimatch } from "minimatch";
 import { BackupLocation, FileBackups } from "./filesApiTypes";
+import { ReplicaLinkRegistry, type ReplicaFileResult } from "src/replication/replica-link.registry";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { fromBuffer as pdfToImage } from "pdf2pic";
@@ -56,6 +57,7 @@ export class FilesService {
       @Inject() private readonly featureFlagService: FeatureFlagService,
       @Inject() private readonly tieredStorage: TieredStorageService,
       @Optional() @Inject(MetricsPusherService) private readonly metrics?: MetricsPusherService,
+      @Optional() @Inject(ReplicaLinkRegistry) private readonly replicaLink?: ReplicaLinkRegistry,
    ) {
       this.dirService = new DirectoriesService(
          userService,
@@ -734,6 +736,16 @@ export class FilesService {
          throw new SoftException("You don't have access to this file");
       }
 
+      // Replica IPs are infrastructure detail — only expose them to admins. Fail closed
+      // (redact) if the admin check is unavailable.
+      let isAdminUser = false;
+      try {
+         const user = await this.userService.getById(userId);
+         if (user) isAdminUser = await this.userService.isAdmin(user.shadoUserId);
+      } catch {
+         isAdminUser = false;
+      }
+
       const cloudDir = this.config.get("this-service.cloud-dir", { infer: true });
       // Path relative to the cloud-dir root — the key shared by mirror disks and replicas,
       // which all mirror the entire cloud-dir tree.
@@ -743,12 +755,6 @@ export class FilesService {
 
       // 1) Primary copy (cloud-dir on this node)
       const primaryExists = this.fs.existsSync(absolute);
-      let mtimeMs = 0;
-      try {
-         mtimeMs = this.fs.statSync(absolute).mtimeMs;
-      } catch {
-         /* file may have just been removed */
-      }
       locations.push({
          kind: "primary",
          label: "Cloud storage",
@@ -774,42 +780,78 @@ export class FilesService {
          });
       }
 
-      // 3) Replicas — only the master keeps the registry.
+      // 3) Replicas — the master queries each connected replica live over the
+      // replica-link socket (replicas dial out to the master, so this works even though
+      // they're not reachable from the internet). Connected replicas give an
+      // authoritative answer for their cloud-dir AND their own mirror disks; replicas
+      // that are registered but currently offline can't be verified.
       const ignored = this.isReplicationIgnored(relToCloud);
       const role = this.config.get("this-service.replication.role", { infer: true });
       const isMaster = role === ReplicationRole.Master || role === ReplicationRole.Primary;
 
       if (isMaster) {
+         // Known replicas (Redis registry) — used to surface replicas that are offline.
          let registry: Record<string, string> = {};
          try {
             registry = await this.cache.hgetall(ReplicationService.REPLICAS_KEY);
          } catch {
-            /* redis unavailable — skip replica reporting */
+            /* redis unavailable — skip offline listing */
          }
+         const known: { ip: string; lastSeenAt: number }[] = [];
          for (const raw of Object.values(registry ?? {})) {
-            let rec: { ip: string; userAgent: string | null; lastSeenAt: number; mirrorDirs?: number };
             try {
-               rec = JSON.parse(raw);
+               const r = JSON.parse(raw) as { ip: string; lastSeenAt: number };
+               known.push({ ip: r.ip, lastSeenAt: r.lastSeenAt });
             } catch {
+               /* skip corrupt entry */
+            }
+         }
+
+         // Live per-file check of every currently-connected replica.
+         let live: ReplicaFileResult[] = [];
+         try {
+            live = (await this.replicaLink?.queryFile(relToCloud)) ?? [];
+         } catch {
+            live = [];
+         }
+         const connectedIps = new Set(live.map((l) => l.ip));
+
+         let replicaIndex = 0;
+         for (const res of live) {
+            replicaIndex++;
+            const label = isAdminUser ? `Replica ${res.ip}` : `Replica ${replicaIndex}`;
+
+            if (!res.report) {
+               // Connected but didn't answer the file check in time.
+               locations.push({ kind: "replica", label, present: null, detail: "Online, but did not respond to the file check in time" });
                continue;
             }
 
-            let present: boolean | null;
-            let detail: string;
-            const lastSync = new Date(rec.lastSeenAt).toISOString();
-            if (ignored) {
-               present = false;
-               detail = "Excluded from replication (ignore rules)";
-            } else if (rec.lastSeenAt >= mtimeMs) {
-               present = true;
-               detail = `Synced (last sync ${lastSync})`;
-            } else {
-               present = false;
-               detail = `Pending — will replicate on next sync (last sync ${lastSync})`;
-            }
-            if (rec.mirrorDirs) detail += ` · ${rec.mirrorDirs} mirror disk(s) configured`;
+            locations.push({
+               kind: "replica",
+               label,
+               present: res.report.cloudDir,
+               detail: res.report.cloudDir ? "Verified present on replica (live)" : "Not present on replica (verified live)",
+            });
 
-            locations.push({ kind: "replica", label: `Replica ${rec.ip}`, present, detail });
+            // The replica's own mirror disks (also verified live).
+            for (const m of res.report.mirrors) {
+               locations.push({
+                  kind: "mirror",
+                  label: isAdminUser ? `${label} mirror (${m.dir})` : `${label} mirror`,
+                  present: m.present,
+                  detail: m.present ? "Mirrored copy present on replica" : "Not on replica mirror disk",
+               });
+            }
+         }
+
+         // Registered replicas that aren't currently connected — cannot verify.
+         for (const k of known) {
+            if (connectedIps.has(k.ip)) continue;
+            replicaIndex++;
+            const label = isAdminUser ? `Replica ${k.ip}` : `Replica ${replicaIndex}`;
+            const lastSeen = new Date(k.lastSeenAt).toISOString();
+            locations.push({ kind: "replica", label, present: null, detail: `Offline — cannot verify (last seen ${lastSeen})` });
          }
       } else if (role === ReplicationRole.Replica) {
          // This node is itself a replica; its local copy is a backup of the master.

@@ -35,6 +35,8 @@ import Redis from "ioredis";
 import { FeatureFlagService } from "./admin/feature-flag.service";
 import { FeatureFlag } from "./models/admin/featureFlag";
 import { ReplicationModule } from "./replication/replication.module";
+import { ReplicaLinkRegistry } from "./replication/replica-link.registry";
+import { ReplicationGateway } from "./replication/replication.gateway";
 import yamlConfigLoader from "./config/config.loader";
 import { GoogleBackupModule } from "./replication/google-backup.module";
 
@@ -98,8 +100,10 @@ import { GoogleBackupModule } from "./replication/google-backup.module";
       },
       FeatureFlagService,
       TrafficService,
+      ReplicaLinkRegistry,
+      ReplicationGateway,
    ],
-   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, TieredStorageService, ClientsModule],
+   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, TieredStorageService, ClientsModule, ReplicaLinkRegistry],
 })
 export class GlobalUtilityModule { }
 
