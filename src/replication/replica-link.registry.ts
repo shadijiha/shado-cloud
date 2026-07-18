@@ -52,8 +52,12 @@ export class ReplicaLinkRegistry {
     * Ask every connected replica whether it currently has `path` (cloud-dir-relative),
     * in parallel, each bounded by `timeoutMs`. A replica that doesn't answer in time
     * yields `{ report: null }` so the caller can render it as "could not verify".
+    *
+    * Default is generous (15s): the replica's per-minute sync cron can block its event
+    * loop with synchronous filesystem work, delaying the ack even though the check itself
+    * (a few existsSync calls) is trivial.
     */
-   async queryFile(path: string, timeoutMs = 3000): Promise<ReplicaFileResult[]> {
+   async queryFile(path: string, timeoutMs = 15000): Promise<ReplicaFileResult[]> {
       const entries = [...this.replicas.values()];
       return Promise.all(
          entries.map(

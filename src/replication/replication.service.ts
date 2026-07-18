@@ -31,11 +31,25 @@ interface ReplicaRecord {
    mirrorDirs?: number; // number of mirror disks the replica itself has configured (self-reported)
 }
 
+/**
+ * The sync engine behind the replication module. One class, two roles (decided by
+ * `this-service.replication.role`):
+ *
+ *  - As a REPLICA: on a cron it pulls the master's file list and downloads anything it's
+ *    missing (deleting anything the master no longer has), and separately pulls+imports
+ *    the master's database dump. It also answers the master's live file queries via the
+ *    replica-link socket (see ReplicaLinkClient).
+ *  - As the MASTER: it serves those files/dumps (see ReplicationController) and keeps a
+ *    small Redis registry of which replicas have been calling in.
+ *
+ * All file/DB bytes are encrypted in transit with AES-256-CTR (leading-IV scheme); see
+ * the "Encrypted transfer" section.
+ */
 @Injectable()
 export class ReplicationService implements OnModuleInit {
    private readonly logger = new Logger(ReplicationService.name);
-   private isReplicating = false; // lock flag
-   private isDbReplicating = false; // lock flag for database replication
+   private isReplicating = false; // guards the file-sync cron against overlapping runs
+   private isDbReplicating = false; // same, for the database-sync cron
 
    // Redis hash key: field = replica IP, value = JSON(ReplicaRecord)
    public static readonly REPLICAS_KEY = "replication:replicas";
@@ -50,6 +64,8 @@ export class ReplicationService implements OnModuleInit {
    public onModuleInit() {
       void this.replicate().then(e => this.replicateDatabase());
    }
+
+   // ───────────────────────────── File replication ─────────────────────────────
 
    @Cron(CronExpression.EVERY_5_MINUTES, { name: "replication:replicate" })
    public async replicate() {
@@ -151,6 +167,8 @@ export class ReplicationService implements OnModuleInit {
       return this.listRecusively(this.cloudDir);
    }
 
+   // ───────────────────────── Replica registry (master) ─────────────────────────
+
    /**
     * Records (on the master) that a replica requested replication, storing basic
     * metadata and bumping its last-seen timestamp + request count in Redis. Also
@@ -222,6 +240,8 @@ export class ReplicationService implements OnModuleInit {
          this.logger.warn(`Removed stale replica ${ip} (idle ${hoursIdle}h) after notifying shadosite@gmail.com`);
       }
    }
+
+   // ─────────────────────────── Database replication ───────────────────────────
 
    /**
     * Master: generates a `mysqldump`-equivalent of ALL application databases (a full
@@ -502,6 +522,9 @@ export class ReplicationService implements OnModuleInit {
       };
    }
 
+   // ──────────────── Encrypted transfer (AES-256-CTR, leading IV) ────────────────
+
+   /** Master: stream one cloud-dir file to the replica, encrypted (IV prepended). */
    public async getFile(path_: string, res: Response) {
       // 1. Set explicit streaming headers
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -634,6 +657,8 @@ export class ReplicationService implements OnModuleInit {
    private get keyFingerprint(): string {
       return createHash("sha256").update(this.encryptionKey).digest("hex").slice(0, 12);
    }
+
+   // ─────────────────────────────────  Helpers  ─────────────────────────────────
 
    private async listRecusively(path_: string) {
       const entries = this.fs.readdirSync(path_);

@@ -10,6 +10,12 @@ import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 
 const GOOGLE_DRIVE_FOLDER_ID = "1cZIPqmwJkh9gP4DvavzwwJMQ9bBpKWvU";
 
+/**
+ * Off-site safety net for the server-setup backup: once a day, zips the server setup
+ * (via AdminService) and uploads it to a fixed Google Drive folder, overwriting the
+ * previous stage-specific file. Skipped when the feature flag is off or Google OAuth
+ * credentials aren't configured. Independent of node-to-node replication.
+ */
 @Injectable()
 export class GoogleDriveBackupService {
     constructor(

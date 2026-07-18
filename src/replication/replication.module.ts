@@ -20,12 +20,27 @@ import { AUTH_SERVICE } from "src/auth/auth.constants";
 import { SignedServiceSerializer } from "src/auth/service-auth.util";
 
 /**
- * This module is responsible for replicating data between the primary and secondary PCs
- * Used to ensure that the primary and secondary PCs are in sync
+ * Replication module — keeps a secondary "replica" node in sync with the primary
+ * "master" node, and exposes the endpoints that make it work.
  *
- * ------------------------                                     -----------------------------
- * | Rasberry Pi (Master) |  -------- Local Network -------->   | Shadi's big PC (replica)  |
- * ------------------------                                     -----------------------------
+ *   ┌──────────────────────┐     pull over HTTPS (replica-initiated)     ┌──────────────────────────┐
+ *   │  Master (source of   │  ◀──────────────────────────────────────    │  Replica (behind NAT /    │
+ *   │  truth, public URL)  │     files + DB dump, encrypted in transit    │  Cloudflare tunnel)       │
+ *   │                      │  ────────────────────────────────────────▶  │                           │
+ *   └──────────────────────┘     has-file queries over the replica-link   └──────────────────────────┘
+ *                                socket (master-initiated, replica-answered)
+ *
+ * Pieces:
+ *  - {@link ReplicationService}  the sync engine: the replica pulls the master's files
+ *                                and database on a cron; the master serves them.
+ *  - {@link ReplicationController} the HTTP endpoints the replica pulls from.
+ *  - {@link ReplicaLinkClient}   replica-side socket that answers live "do you have this
+ *                                file?" queries from the master (used by the backups API).
+ *  - {@link TrustedIpMiddleware} restricts the HTTP endpoints to allow-listed IPs.
+ *
+ * This module is also booted STANDALONE as the whole app when the node's role is
+ * `replica` (see main.ts) — hence it declares its own ConfigModule / Redis / filesystem
+ * providers rather than relying on the master's global module.
  */
 @Module({
    imports: [
