@@ -1,6 +1,7 @@
 import { Logger } from "@nestjs/common";
 import { plainToInstance, Type } from "class-transformer";
 import {
+   IsBoolean,
    IsEmail,
    IsEnum,
    IsInt,
@@ -128,6 +129,13 @@ class ReplicationConfig {
    @IsString({ each: true })
    @IsOptional()
    "ignore-patterns"?: string[]
+
+   // Replica only. When false, the replica skips database replication entirely
+   // (the hourly DB dump/restore cycle) and only mirrors files. Defaults to true
+   // (databases are replicated) when omitted.
+   @IsBoolean()
+   @IsOptional()
+   "replicate-database"?: boolean
 }
 
 class GoogleConfig {

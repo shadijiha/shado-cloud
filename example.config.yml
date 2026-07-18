@@ -21,6 +21,10 @@ this-service:
     #   - "cache/**"
     #   - "user1/private/**"
     ignore-patterns: []
+    # Optional (replica only). Set to false to skip database replication entirely
+    # (the hourly DB dump/restore cycle); only files will be mirrored. Defaults to
+    # true (databases are replicated) when omitted.
+    replicate-database: true
   
   # CORS allowed origin(s). Supports a comma-separated list; each entry is trimmed,
   # e.g. "http://localhost:3000,https://localhost" (https://localhost is the Android

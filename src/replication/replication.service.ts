@@ -405,6 +405,10 @@ export class ReplicationService implements OnModuleInit {
    @Cron(CronExpression.EVERY_HOUR, { name: "replication:replicate-database" })
    public async replicateDatabase() {
       if (!this.isReplica()) return;
+      if (!this.isDatabaseReplicationEnabled()) {
+         this.logger.log("Database replication is disabled by config (this-service.replication.replicate-database=false). Skipping");
+         return;
+      }
       if (this.isDbReplicating) {
          this.logger.warn("A database replication job is already running. Skipping this iteration");
          return;
@@ -659,6 +663,15 @@ export class ReplicationService implements OnModuleInit {
 
    private isReplica() {
       return this.config.get("this-service.replication.role", { infer: true }) == ReplicationRole.Replica;
+   }
+
+   /**
+    * Whether this replica should replicate databases. Controlled by
+    * `this-service.replication.replicate-database`; defaults to true (enabled)
+    * when the config value is omitted.
+    */
+   private isDatabaseReplicationEnabled() {
+      return this.config.get("this-service.replication.replicate-database", { infer: true }) !== false;
    }
 
    private humanSize(bytes: number) {
