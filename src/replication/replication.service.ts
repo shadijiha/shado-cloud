@@ -48,7 +48,7 @@ export class ReplicationService implements OnModuleInit {
    ) { }
 
    public onModuleInit() {
-      //void this.replicate().then(e => this.replicateDatabase());
+      void this.replicate().then(e => this.replicateDatabase());
    }
 
    @Cron(CronExpression.EVERY_5_MINUTES, { name: "replication:replicate" })
