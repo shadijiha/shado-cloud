@@ -136,6 +136,16 @@ class ReplicationConfig {
    @IsBoolean()
    @IsOptional()
    "replicate-database"?: boolean
+
+   // Full copies of cloud-dir mounted on other disks (e.g. "/mnt/disk2/cloud-dir").
+   // Each entry mirrors the entire cloud-dir tree, so a file's mirror copy lives at
+   // <mirror-dir>/<path-relative-to-cloud-dir>. Empty/omitted = no mirror disks.
+   // NOT validated as an existing path: a mirror disk may be temporarily unmounted,
+   // and that must not stop the service from booting.
+   @IsArray()
+   @IsString({ each: true })
+   @IsOptional()
+   "mirror-dirs"?: string[];
 }
 
 class GoogleConfig {
@@ -185,16 +195,6 @@ class ThisServiceConfig {
    @Validate(DoesNotEndWithConstraint, ["/"])
    @Validate(DoesNotEndWithConstraint, ["\\"])
    "cloud-dir": string;
-
-   // Full copies of cloud-dir mounted on other disks (e.g. "/mnt/disk2/cloud-dir").
-   // Each entry mirrors the entire cloud-dir tree, so a file's mirror copy lives at
-   // <mirror-dir>/<path-relative-to-cloud-dir>. Empty/omitted = no mirror disks.
-   // NOT validated as an existing path: a mirror disk may be temporarily unmounted,
-   // and that must not stop the service from booting.
-   @IsArray()
-   @IsString({ each: true })
-   @IsOptional()
-   "mirror-dirs"?: string[];
 
    @MinLength(3)
    @IsString()

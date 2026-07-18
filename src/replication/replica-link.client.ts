@@ -41,7 +41,7 @@ export class ReplicaLinkClient implements OnModuleInit, OnModuleDestroy {
 
       const protocol = masterHost.includes("shadijiha.com") ? "https" : "http";
       const url = `${protocol}://${masterHost}`;
-      const mirrorDirs = (this.config.get("this-service.mirror-dirs", { infer: true }) ?? []).length;
+      const mirrorDirs = (this.config.get("this-service.replication.mirror-dirs", { infer: true }) ?? []).length;
       const secret = this.config.get("cross-service.secret", { infer: true });
 
       this.logger.log(`Replica-link: connecting to master at ${url}${REPLICA_LINK_NAMESPACE}`);
@@ -82,8 +82,9 @@ export class ReplicaLinkClient implements OnModuleInit, OnModuleDestroy {
       };
 
       const cloudDir = this.config.get("this-service.cloud-dir", { infer: true });
-      const mirrorDirs = this.config.get("this-service.mirror-dirs", { infer: true }) ?? [];
+      const mirrorDirs = this.config.get("this-service.replication.mirror-dirs", { infer: true }) ?? [];
 
+      console.log(mirrorDirs);
       const mirrors: ReplicaMirrorReport[] = mirrorDirs.map((dir) => ({
          dir,
          // Only count the file as mirrored if the disk itself is mounted (root exists).

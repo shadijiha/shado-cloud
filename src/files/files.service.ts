@@ -723,7 +723,7 @@ export class FilesService {
     * Backup / redundancy report for a single file. Answers "how many copies of this
     * file exist and where":
     *  1. the primary copy in cloud-dir (this node),
-    *  2. any locally configured mirror disks (this-service.mirror-dirs) — full copies
+    *  2. any locally configured mirror disks (this-service.replication.mirror-dirs) — full copies
     *     of the cloud-dir tree on other disks, so the file's mirror copy lives at
     *     <mirror-dir>/<path-relative-to-cloud-dir>,
     *  3. each replica registered with the master (from the Redis registry) — presence
@@ -763,7 +763,7 @@ export class FilesService {
       });
 
       // 2) Local mirror disks (this node's config)
-      const mirrorDirs = this.config.get("this-service.mirror-dirs", { infer: true }) ?? [];
+      const mirrorDirs = this.config.get("this-service.replication.mirror-dirs", { infer: true }) ?? [];
       for (const dir of mirrorDirs) {
          // If the mirror root is missing the disk is almost certainly unmounted.
          if (!this.fs.existsSync(dir)) {

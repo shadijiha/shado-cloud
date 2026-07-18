@@ -21,6 +21,9 @@ this-service:
     #   - "cache/**"
     #   - "user1/private/**"
     ignore-patterns: []
+
+    mirror-dirs: []
+
     # Optional (replica only). Set to false to skip database replication entirely
     # (the hourly DB dump/restore cycle); only files will be mirrored. Defaults to
     # true (databases are replicated) when omitted.

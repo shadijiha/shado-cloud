@@ -48,7 +48,7 @@ export class ReplicationService implements OnModuleInit {
    ) { }
 
    public onModuleInit() {
-      void this.replicate().then(e => this.replicateDatabase());
+      //void this.replicate().then(e => this.replicateDatabase());
    }
 
    @Cron(CronExpression.EVERY_5_MINUTES, { name: "replication:replicate" })
@@ -78,7 +78,7 @@ export class ReplicationService implements OnModuleInit {
                   ...signServiceHeaders(this.config.get("cross-service.secret", { infer: true })),
                   // Self-report how many mirror disks this replica has configured so the
                   // master can surface it in file backup reports.
-                  "x-replica-mirrors": String((this.config.get("this-service.mirror-dirs", { infer: true }) ?? []).length),
+                  "x-replica-mirrors": String((this.config.get("this-service.replication.mirror-dirs", { infer: true }) ?? []).length),
                },
             });
 
