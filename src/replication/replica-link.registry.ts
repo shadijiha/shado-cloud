@@ -5,6 +5,7 @@ import { HAS_FILE_EVENT, type HasFileReply, type HasFileRequest } from "./replic
 interface ConnectedReplica {
    socket: Socket;
    ip: string;
+   deviceName: string;
    mirrorDirs: number;
    connectedAt: number;
 }
@@ -12,6 +13,7 @@ interface ConnectedReplica {
 /** One live replica's answer to a file query (null report = timed out / errored). */
 export interface ReplicaFileResult {
    ip: string;
+   deviceName: string;
    mirrorDirs: number;
    report: HasFileReply | null;
 }
@@ -27,15 +29,15 @@ export class ReplicaLinkRegistry {
    private readonly logger = new Logger(ReplicaLinkRegistry.name);
    private readonly replicas = new Map<string, ConnectedReplica>();
 
-   register(socket: Socket, ip: string, mirrorDirs: number): void {
-      this.replicas.set(socket.id, { socket, ip, mirrorDirs, connectedAt: Date.now() });
-      this.logger.log(`Replica connected: ${ip} (socket ${socket.id}, ${mirrorDirs} mirror disk(s)); ${this.replicas.size} online`);
+   register(socket: Socket, ip: string, deviceName: string, mirrorDirs: number): void {
+      this.replicas.set(socket.id, { socket, ip, deviceName, mirrorDirs, connectedAt: Date.now() });
+      this.logger.log(`Replica connected: ${deviceName} @ ${ip} (socket ${socket.id}, ${mirrorDirs} mirror disk(s)); ${this.replicas.size} online`);
    }
 
    unregister(socketId: string): void {
       const existing = this.replicas.get(socketId);
       if (this.replicas.delete(socketId)) {
-         this.logger.log(`Replica disconnected: ${existing?.ip ?? "?"} (socket ${socketId}); ${this.replicas.size} online`);
+         this.logger.log(`Replica disconnected: ${existing?.deviceName ?? "?"} @ ${existing?.ip ?? "?"} (socket ${socketId}); ${this.replicas.size} online`);
       }
    }
 
@@ -67,11 +69,11 @@ export class ReplicaLinkRegistry {
                      entry.socket
                         .timeout(timeoutMs)
                         .emit(HAS_FILE_EVENT, { path } as HasFileRequest, (err: Error | null, reply: HasFileReply) => {
-                           resolve({ ip: entry.ip, mirrorDirs: entry.mirrorDirs, report: err ? null : reply });
+                           resolve({ ip: entry.ip, deviceName: entry.deviceName, mirrorDirs: entry.mirrorDirs, report: err ? null : reply });
                         });
                   } catch (e) {
-                     this.logger.debug(`queryFile emit failed for ${entry.ip}: ${(e as Error).message}`);
-                     resolve({ ip: entry.ip, mirrorDirs: entry.mirrorDirs, report: null });
+                     this.logger.debug(`queryFile emit failed for ${entry.deviceName} @ ${entry.ip}: ${(e as Error).message}`);
+                     resolve({ ip: entry.ip, deviceName: entry.deviceName, mirrorDirs: entry.mirrorDirs, report: null });
                   }
                }),
          ),

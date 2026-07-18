@@ -790,18 +790,19 @@ export class FilesService {
       const isMaster = role === ReplicationRole.Master || role === ReplicationRole.Primary;
 
       if (isMaster) {
-         // Known replicas (Redis registry) — used to surface replicas that are offline.
+         // Known replicas (Redis registry, keyed by IP + device name) — used to surface
+         // replicas that are currently offline.
          let registry: Record<string, string> = {};
          try {
             registry = await this.cache.hgetall(ReplicationService.REPLICAS_KEY);
          } catch {
             /* redis unavailable — skip offline listing */
          }
-         const known: { ip: string; lastSeenAt: number }[] = [];
+         const known: { key: string; ip: string; deviceName?: string; lastSeenAt: number }[] = [];
          for (const raw of Object.values(registry ?? {})) {
             try {
-               const r = JSON.parse(raw) as { ip: string; lastSeenAt: number };
-               known.push({ ip: r.ip, lastSeenAt: r.lastSeenAt });
+               const r = JSON.parse(raw) as { ip: string; deviceName?: string; lastSeenAt: number };
+               known.push({ key: `${r.ip}|${r.deviceName ?? ""}`, ip: r.ip, deviceName: r.deviceName, lastSeenAt: r.lastSeenAt });
             } catch {
                /* skip corrupt entry */
             }
@@ -814,12 +815,21 @@ export class FilesService {
          } catch {
             live = [];
          }
-         const connectedIps = new Set(live.map((l) => l.ip));
+         // Correlate connected vs offline by IP + device name (not IP alone, since two
+         // replicas can share one public IP behind NAT).
+         const connectedKeys = new Set(live.map((l) => `${l.ip}|${l.deviceName ?? ""}`));
 
+         // Label: device name for everyone; the IP is admin-only. Falls back to an index
+         // when the device name is unknown.
          let replicaIndex = 0;
-         for (const res of live) {
+         const replicaLabel = (deviceName?: string, ip?: string): string => {
             replicaIndex++;
-            const label = isAdminUser ? `Replica ${res.ip}` : `Replica ${replicaIndex}`;
+            const base = deviceName && deviceName.trim() ? deviceName : `Replica ${replicaIndex}`;
+            return isAdminUser && ip ? `${base} (${ip})` : base;
+         };
+
+         for (const res of live) {
+            const label = replicaLabel(res.deviceName, res.ip);
 
             if (!res.report) {
                // Connected but didn't answer the file check in time.
@@ -838,7 +848,7 @@ export class FilesService {
             for (const m of res.report.mirrors) {
                locations.push({
                   kind: "mirror",
-                  label: isAdminUser ? `${label} mirror (${m.dir})` : `${label} mirror`,
+                  label: isAdminUser ? `${label} · mirror (${m.dir})` : `${label} · mirror`,
                   present: m.present,
                   detail: m.present ? "Mirrored copy present on replica" : "Not on replica mirror disk",
                });
@@ -847,9 +857,8 @@ export class FilesService {
 
          // Registered replicas that aren't currently connected — cannot verify.
          for (const k of known) {
-            if (connectedIps.has(k.ip)) continue;
-            replicaIndex++;
-            const label = isAdminUser ? `Replica ${k.ip}` : `Replica ${replicaIndex}`;
+            if (connectedKeys.has(k.key)) continue;
+            const label = replicaLabel(k.deviceName, k.ip);
             const lastSeen = new Date(k.lastSeenAt).toISOString();
             locations.push({ kind: "replica", label, present: null, detail: `Offline — cannot verify (last seen ${lastSeen})` });
          }

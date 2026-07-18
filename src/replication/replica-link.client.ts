@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nest
 import { ConfigService } from "@nestjs/config";
 import { io, type Socket as ClientSocket } from "socket.io-client";
 import * as path from "path";
+import * as os from "os";
 import { EnvVariables, ReplicationRole } from "src/config/config.validator";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { signServiceHeaders } from "src/auth/service-auth.util";
@@ -56,7 +57,7 @@ export class ReplicaLinkClient implements OnModuleInit, OnModuleDestroy {
          auth: (cb: (data: Record<string, unknown>) => void) => {
             const headers = signServiceHeaders(secret) as Record<string, string>;
             delete headers["x-service-key"];
-            cb({ ...headers, mirrorDirs });
+            cb({ ...headers, deviceName: os.hostname(), mirrorDirs });
          },
       });
 

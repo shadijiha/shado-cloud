@@ -38,6 +38,8 @@ export interface ReplicaLinkAuth {
    "x-service-timestamp": string;
    "x-service-nonce": string;
    "x-service-signature": string;
+   /** The replica's device name (os.hostname()) — combined with its IP to identify it. */
+   deviceName: string;
    /** Number of mirror disks configured on the replica (informational). */
    mirrorDirs: number;
 }

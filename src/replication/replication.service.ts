@@ -24,11 +24,17 @@ import * as readline from "readline";
 /** Metadata the master keeps (in Redis) about each replica that requests replication. */
 interface ReplicaRecord {
    ip: string;
+   deviceName?: string; // os.hostname() reported by the replica; disambiguates same-IP replicas
    userAgent: string | null;
    requestCount: number;
    firstSeenAt: number; // epoch ms
    lastSeenAt: number; // epoch ms
    mirrorDirs?: number; // number of mirror disks the replica itself has configured (self-reported)
+}
+
+/** Registry key for a replica: IP + device name, so two replicas behind one IP stay distinct. */
+export function replicaKey(ip: string, deviceName?: string): string {
+   return `${ip}|${deviceName ?? ""}`;
 }
 
 /**
@@ -92,8 +98,9 @@ export class ReplicationService implements OnModuleInit {
             const listAllResponse = await fetch(`${masterIp}/replication/listall`, {
                headers: {
                   ...signServiceHeaders(this.config.get("cross-service.secret", { infer: true })),
-                  // Self-report how many mirror disks this replica has configured so the
-                  // master can surface it in file backup reports.
+                  // Self-report identity (IP + device name) + mirror-disk count so the master
+                  // can distinguish replicas and surface them in file backup reports.
+                  "x-replica-device": os.hostname(),
                   "x-replica-mirrors": String((this.config.get("this-service.replication.mirror-dirs", { infer: true }) ?? []).length),
                },
             });
@@ -174,25 +181,27 @@ export class ReplicationService implements OnModuleInit {
     * metadata and bumping its last-seen timestamp + request count in Redis. Also
     * logs the request. No-op unless this instance is the master.
     */
-   public async recordReplicaRequest(ip: string, userAgent?: string, mirrorDirs?: number) {
+   public async recordReplicaRequest(ip: string, userAgent?: string, mirrorDirs?: number, deviceName?: string) {
       if (!this.isMaster()) return;
 
       const now = Date.now();
-      const existingRaw = await this.redis.hget(ReplicationService.REPLICAS_KEY, ip);
+      const key = replicaKey(ip, deviceName);
+      const existingRaw = await this.redis.hget(ReplicationService.REPLICAS_KEY, key);
       const existing = existingRaw ? (JSON.parse(existingRaw) as ReplicaRecord) : null;
 
       const record: ReplicaRecord = {
          ip,
+         deviceName: deviceName ?? existing?.deviceName,
          userAgent: userAgent ?? existing?.userAgent ?? null,
          requestCount: (existing?.requestCount ?? 0) + 1,
          firstSeenAt: existing?.firstSeenAt ?? now,
          lastSeenAt: now,
          mirrorDirs: mirrorDirs ?? existing?.mirrorDirs,
       };
-      await this.redis.hset(ReplicationService.REPLICAS_KEY, ip, JSON.stringify(record));
+      await this.redis.hset(ReplicationService.REPLICAS_KEY, key, JSON.stringify(record));
 
       this.logger.log(
-         `Replication request from replica ${ip} (agent: ${userAgent ?? "unknown"}), ` +
+         `Replication request from replica ${deviceName ?? "?"} @ ${ip} (agent: ${userAgent ?? "unknown"}), ` +
          `request #${record.requestCount}, last seen ${new Date(now).toISOString()}`,
       );
    }
@@ -210,25 +219,26 @@ export class ReplicationService implements OnModuleInit {
       const now = Date.now();
       const staleCutoffMs = 24 * 60 * 60 * 1000;
 
-      for (const [ip, raw] of Object.entries(all)) {
+      for (const [key, raw] of Object.entries(all)) {
          let record: ReplicaRecord;
          try {
             record = JSON.parse(raw) as ReplicaRecord;
          } catch {
             // Corrupt entry — drop it.
-            await this.redis.hdel(ReplicationService.REPLICAS_KEY, ip);
+            await this.redis.hdel(ReplicationService.REPLICAS_KEY, key);
             continue;
          }
 
          const idleMs = now - record.lastSeenAt;
          if (idleMs <= staleCutoffMs) continue;
 
+         const who = `${record.deviceName ?? "?"} @ ${record.ip}`;
          const hoursIdle = Math.floor(idleMs / 3_600_000);
          await this.email.sendEmail({
             to: "shadosite@gmail.com",
-            subject: `Shado Cloud: replica ${ip} has stopped replicating`,
+            subject: `Shado Cloud: replica ${who} has stopped replicating`,
             text:
-               `Replica ${ip} (agent: ${record.userAgent ?? "unknown"}) has not requested ` +
+               `Replica ${who} (agent: ${record.userAgent ?? "unknown"}) has not requested ` +
                `replication for ${hoursIdle} hours.\n\n` +
                `Last seen: ${new Date(record.lastSeenAt).toISOString()}\n` +
                `First seen: ${new Date(record.firstSeenAt).toISOString()}\n` +
@@ -236,8 +246,8 @@ export class ReplicationService implements OnModuleInit {
                `It has been removed from the master's replica registry and will be re-added ` +
                `automatically the next time it requests replication.`,
          });
-         await this.redis.hdel(ReplicationService.REPLICAS_KEY, ip);
-         this.logger.warn(`Removed stale replica ${ip} (idle ${hoursIdle}h) after notifying shadosite@gmail.com`);
+         await this.redis.hdel(ReplicationService.REPLICAS_KEY, key);
+         this.logger.warn(`Removed stale replica ${who} (idle ${hoursIdle}h) after notifying shadosite@gmail.com`);
       }
    }
 

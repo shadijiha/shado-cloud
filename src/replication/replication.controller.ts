@@ -23,15 +23,21 @@ export class ReplicationController {
    @Get("listall")
    @UseGuards(ServiceKeyGuard)
    public async listall(@Req() req: Request) {
-      // The replica self-reports how many mirror disks it has via a header; store it
-      // alongside the resolved client IP (honors CF-Connecting-IP behind a tunnel).
-      const mirrorsHeader = req.headers["x-replica-mirrors"];
-      const rawMirrors = Array.isArray(mirrorsHeader) ? mirrorsHeader[0] : mirrorsHeader;
+      // The replica self-reports its device name and mirror-disk count via headers; the
+      // master combines device name + resolved client IP to identify it (handles two
+      // replicas behind one IP). IP honors CF-Connecting-IP behind a tunnel.
+      const header = (name: string): string | undefined => {
+         const v = req.headers[name];
+         return Array.isArray(v) ? v[0] : v;
+      };
+      const deviceName = header("x-replica-device");
+      const rawMirrors = header("x-replica-mirrors");
       const mirrorDirs = rawMirrors !== undefined ? parseInt(rawMirrors, 10) : undefined;
       await this.replicationService.recordReplicaRequest(
          resolveClientIp(req),
          req.headers["user-agent"],
          Number.isFinite(mirrorDirs) ? mirrorDirs : undefined,
+         deviceName,
       );
       return this.replicationService.listCloudDir();
    }

@@ -45,9 +45,10 @@ export class ReplicationGateway implements OnGatewayConnection, OnGatewayDisconn
          (client.handshake.headers["cf-connecting-ip"] as string) ||
          (client.handshake.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
          client.handshake.address;
+      const deviceName = typeof auth.deviceName === "string" && auth.deviceName.trim() ? auth.deviceName.trim() : "unknown";
       const mirrorDirs = Number.isFinite(Number(auth.mirrorDirs)) ? Number(auth.mirrorDirs) : 0;
 
-      this.registry.register(client, ip, mirrorDirs);
+      this.registry.register(client, ip, deviceName, mirrorDirs);
    }
 
    handleDisconnect(client: Socket): void {
