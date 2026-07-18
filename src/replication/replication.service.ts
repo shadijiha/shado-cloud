@@ -38,7 +38,7 @@ export class ReplicationService implements OnModuleInit {
    private isDbReplicating = false; // lock flag for database replication
 
    // Redis hash key: field = replica IP, value = JSON(ReplicaRecord)
-   private static readonly REPLICAS_KEY = "replication:replicas";
+   public static readonly REPLICAS_KEY = "replication:replicas";
 
    constructor(
       private readonly config: ConfigService<EnvVariables>,
@@ -48,10 +48,10 @@ export class ReplicationService implements OnModuleInit {
    ) { }
 
    public onModuleInit() {
-      void this.replicate();
+      void this.replicate().then(e => this.replicateDatabase());
    }
 
-   @Cron(CronExpression.EVERY_MINUTE, { name: "replication:replicate" })
+   @Cron(CronExpression.EVERY_5_MINUTES, { name: "replication:replicate" })
    public async replicate() {
       if (this.isReplicating) {
          this.logger.warn("A replication job is currently running. Skipping this Cron iteration");

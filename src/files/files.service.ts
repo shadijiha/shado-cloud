@@ -32,6 +32,7 @@ import { MetricsPusherService, MetricUnit } from "../metrics-pusher.service";
 import { User } from "src/models/user";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { ReplicationService } from "src/replication/replication.service";
 
 type FileServiceResult = Promise<[boolean, string]>;
 
@@ -39,9 +40,6 @@ type FileServiceResult = Promise<[boolean, string]>;
 export class FilesService {
    public static readonly METADATA_FOLDER_NAME = ".metadata";
    public static readonly THUMBNAILS_FOLDER_NAME = ".thumbnails";
-   // Redis hash written by ReplicationService: field = replica IP, value = JSON(ReplicaRecord).
-   // Kept in sync with ReplicationService.REPLICAS_KEY.
-   public static readonly REPLICAS_KEY = "replication:replicas";
    private readonly dirService: DirectoriesService; // Not injected, because it would cause a circular dependency
 
    constructor(
@@ -784,7 +782,7 @@ export class FilesService {
       if (isMaster) {
          let registry: Record<string, string> = {};
          try {
-            registry = await this.cache.hgetall(FilesService.REPLICAS_KEY);
+            registry = await this.cache.hgetall(ReplicationService.REPLICAS_KEY);
          } catch {
             /* redis unavailable — skip replica reporting */
          }

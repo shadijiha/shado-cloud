@@ -57,34 +57,37 @@ async function bootstrap() {
    // (there is no Nest ExecutionContext for a guard to hook into). Instead we reuse the
    // real AdminGuard by instantiating it with AuthService and invoking canActivate()
    // through a minimal ExecutionContext adapter — so the admin check stays in one place.
-   const adminGuard = new AdminGuard(app.get(AuthService, { strict: false }));
+   // Only add admin guard if the AuthService is available (it won't be in the replication module).
+   if (replicationRole != ReplicationRole.Replica) {
+      const adminGuard = new AdminGuard(app.get(AuthService, { strict: false }));
 
-   const swaggerAdminGuard = async (req: Request, res: Response, next: NextFunction) => {
-      // AdminGuard.canActivate only touches ctx.switchToHttp().getRequest(); build the
-      // smallest context that satisfies that. It reads req.headers.cookie and (on success)
-      // sets req.authUserId.
-      const ctx = {
-         switchToHttp: () => ({ getRequest: () => req, getResponse: () => res, getNext: () => next }),
-      } as unknown as ExecutionContext;
+      const swaggerAdminGuard = async (req: Request, res: Response, next: NextFunction) => {
+         // AdminGuard.canActivate only touches ctx.switchToHttp().getRequest(); build the
+         // smallest context that satisfies that. It reads req.headers.cookie and (on success)
+         // sets req.authUserId.
+         const ctx = {
+            switchToHttp: () => ({ getRequest: () => req, getResponse: () => res, getNext: () => next }),
+         } as unknown as ExecutionContext;
 
-      try {
-         if (await adminGuard.canActivate(ctx)) return next();
-      } catch {
-         // fall through to deny
-      }
-      // Non-admins are sent to a styled unauthorized page on the frontend instead of
-      // seeing a raw status message. Overridable via env for non-prod environments.
-      const unauthorizedUrl =
-         process.env.API_DOCS_UNAUTHORIZED_URL || "https://cloud.shadijiha.com/api-unauthorized";
-      return res.redirect(302, unauthorizedUrl);
-   };
+         try {
+            if (await adminGuard.canActivate(ctx)) return next();
+         } catch {
+            // fall through to deny
+         }
+         // Non-admins are sent to a styled unauthorized page on the frontend instead of
+         // seeing a raw status message. Overridable via env for non-prod environments.
+         const unauthorizedUrl =
+            process.env.API_DOCS_UNAUTHORIZED_URL || "https://cloud.shadijiha.com/api-unauthorized";
+         return res.redirect(302, unauthorizedUrl);
+      };
 
-   app.use("/api", swaggerAdminGuard);
-   app.use("/api-json", swaggerAdminGuard);
-   app.use("/api-yaml", swaggerAdminGuard);
+      app.use("/api", swaggerAdminGuard);
+      app.use("/api-json", swaggerAdminGuard);
+      app.use("/api-yaml", swaggerAdminGuard);
 
-   SwaggerModule.setup("api", app, document);
-   // fs.writeFileSync("./swagger-spec.json", JSON.stringify(document));
+      SwaggerModule.setup("api", app, document);
+   }
+
    app.use(helmet());
    app.use(cookieParser());
    app.use(json({ limit: "100mb" }));
