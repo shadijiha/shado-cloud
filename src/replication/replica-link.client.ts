@@ -4,6 +4,7 @@ import { io, type Socket as ClientSocket } from "socket.io-client";
 import * as path from "path";
 import { EnvVariables, ReplicationRole } from "src/config/config.validator";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
+import { signServiceHeaders } from "src/auth/service-auth.util";
 import {
    HAS_FILE_EVENT,
    REPLICA_LINK_NAMESPACE,
@@ -41,6 +42,7 @@ export class ReplicaLinkClient implements OnModuleInit, OnModuleDestroy {
       const protocol = masterHost.includes("shadijiha.com") ? "https" : "http";
       const url = `${protocol}://${masterHost}`;
       const mirrorDirs = (this.config.get("this-service.mirror-dirs", { infer: true }) ?? []).length;
+      const secret = this.config.get("cross-service.secret", { infer: true });
 
       this.logger.log(`Replica-link: connecting to master at ${url}${REPLICA_LINK_NAMESPACE}`);
 
@@ -48,9 +50,13 @@ export class ReplicaLinkClient implements OnModuleInit, OnModuleDestroy {
          transports: ["websocket"],
          reconnection: true,
          reconnectionDelay: 5000,
-         auth: {
-            token: this.config.get("cross-service.secret", { infer: true }),
-            mirrorDirs,
+         // `auth` is a function so a FRESH, time-bound HMAC is generated on every
+         // (re)connection attempt — a stale signature would fail the 5-minute window.
+         // The raw secret is never sent: signServiceHeaders' legacy x-service-key is stripped.
+         auth: (cb: (data: Record<string, unknown>) => void) => {
+            const headers = signServiceHeaders(secret) as Record<string, string>;
+            delete headers["x-service-key"];
+            cb({ ...headers, mirrorDirs });
          },
       });
 

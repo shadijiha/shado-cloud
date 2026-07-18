@@ -34,8 +34,10 @@ export interface HasFileReply {
 
 /** Handshake auth the replica presents when connecting to the master. */
 export interface ReplicaLinkAuth {
-   /** Shared cross-service secret (must equal the master's cross-service.secret). */
-   token: string;
+   /** Per-connection HMAC headers (same scheme as ServiceKeyGuard/signServiceHeaders). */
+   "x-service-timestamp": string;
+   "x-service-nonce": string;
+   "x-service-signature": string;
    /** Number of mirror disks configured on the replica (informational). */
    mirrorDirs: number;
 }

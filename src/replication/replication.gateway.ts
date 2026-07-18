@@ -4,7 +4,8 @@ import type { Socket } from "socket.io";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { ReplicaLinkRegistry } from "./replica-link.registry";
-import { REPLICA_LINK_NAMESPACE, type ReplicaLinkAuth } from "./replica-link.constants";
+import { REPLICA_LINK_NAMESPACE } from "./replica-link.constants";
+import { verifyServiceHmac } from "src/auth/service-auth.util";
 
 /**
  * Master-side endpoint of the replica-link. Replicas connect here (outbound from their
@@ -28,11 +29,14 @@ export class ReplicationGateway implements OnGatewayConnection, OnGatewayDisconn
    ) {}
 
    handleConnection(client: Socket): void {
-      const auth = (client.handshake.auth ?? {}) as Partial<ReplicaLinkAuth>;
+      const auth = (client.handshake.auth ?? {}) as Record<string, unknown>;
       const expected = this.config.get("cross-service.secret", { infer: true });
 
-      if (!auth.token || auth.token !== expected) {
-         this.logger.warn(`Rejected replica-link connection ${client.id}: bad or missing token`);
+      // Same HMAC scheme as ServiceKeyGuard: a time-bound (5 min), nonce'd signature over
+      // an empty body. The raw secret is never transmitted — a captured handshake can't be
+      // replayed beyond the window.
+      if (!verifyServiceHmac(expected, auth as Record<string, any>, "")) {
+         this.logger.warn(`Rejected replica-link connection ${client.id}: invalid service signature`);
          client.disconnect();
          return;
       }
