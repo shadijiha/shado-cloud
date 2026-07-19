@@ -209,7 +209,8 @@ export class ReplicationService implements OnModuleInit {
    /**
     * Master-only: any replica that has not requested replication in more than 24h
     * is emailed about ONCE (to shadosite@gmail.com) and then removed from the
-    * Redis registry. Removal guarantees the alert fires only once per stale replica.
+    * Redis registry. The entry is claimed atomically (HDEL before send), so the
+    * alert fires exactly once per stale replica even if this cron runs concurrently.
     */
    @Cron(CronExpression.EVERY_HOUR, { name: "replication:stale-replica-check" })
    public async checkStaleReplicas() {
@@ -232,6 +233,15 @@ export class ReplicationService implements OnModuleInit {
          const idleMs = now - record.lastSeenAt;
          if (idleMs <= staleCutoffMs) continue;
 
+         // Atomically CLAIM this stale entry before doing anything slow. HDEL returns the
+         // number of fields it actually removed, so if this cron happens to run more than
+         // once concurrently (e.g. multiple scheduler instances in the same process), only
+         // the first caller gets 1 — the rest get 0 and skip. This guarantees the alert
+         // email is sent exactly once per stale replica even under that race, because the
+         // claim happens before the (slow) sendEmail rather than after it.
+         const claimed = await this.redis.hdel(ReplicationService.REPLICAS_KEY, key);
+         if (claimed === 0) continue;
+
          const who = `${record.deviceName ?? "?"} @ ${record.ip}`;
          const hoursIdle = Math.floor(idleMs / 3_600_000);
          await this.email.sendEmail({
@@ -246,7 +256,6 @@ export class ReplicationService implements OnModuleInit {
                `It has been removed from the master's replica registry and will be re-added ` +
                `automatically the next time it requests replication.`,
          });
-         await this.redis.hdel(ReplicationService.REPLICAS_KEY, key);
          this.logger.warn(`Removed stale replica ${who} (idle ${hoursIdle}h) after notifying shadosite@gmail.com`);
       }
    }
