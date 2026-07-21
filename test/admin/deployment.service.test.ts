@@ -7,6 +7,8 @@ import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { REDIS_CACHE } from "src/util";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { DeploymentProject } from "src/models/admin/deploymentProject";
+import { ReplicaLinkRegistry } from "src/replication/replica-link.registry";
+import { ReplicaDeployHub } from "src/replication/replica-deploy-hub.service";
 import * as childProcess from "child_process";
 import { EventEmitter } from "events";
 
@@ -119,6 +121,14 @@ describe("DeploymentService", () => {
             {
                provide: getRepositoryToken(DeploymentProject),
                useValue: projectRepo,
+            },
+            {
+               provide: ReplicaLinkRegistry,
+               useValue: { broadcastDeploy: jest.fn().mockReturnValue([]), list: jest.fn().mockReturnValue([]) },
+            },
+            {
+               provide: ReplicaDeployHub,
+               useValue: { begin: jest.fn(), getStates: jest.fn().mockReturnValue([]), stream: jest.fn() },
             },
          ],
       }).compile();

@@ -8,11 +8,25 @@ import { AbstractFileSystem } from "src/file-system/abstract-file-system.interfa
 import { signServiceHeaders } from "src/auth/service-auth.util";
 import {
    HAS_FILE_EVENT,
+   DEPLOY_EVENT,
+   DEPLOY_OUTPUT_EVENT,
+   DEPLOY_STEP_EVENT,
+   DEPLOY_COMPLETE_EVENT,
+   READ_CONFIG_EVENT,
+   WRITE_CONFIG_EVENT,
    REPLICA_LINK_NAMESPACE,
    type HasFileReply,
    type HasFileRequest,
    type ReplicaMirrorReport,
+   type DeployRequest,
+   type DeployOutputMsg,
+   type DeployStepMsg,
+   type DeployCompleteMsg,
+   type ReadConfigReply,
+   type WriteConfigRequest,
+   type WriteConfigReply,
 } from "./replica-link.constants";
+import { ReplicaDeployService } from "./replica-deploy.service";
 
 /**
  * Replica-side endpoint of the replica-link. Only active when this node's replication
@@ -28,6 +42,7 @@ export class ReplicaLinkClient implements OnModuleInit, OnModuleDestroy {
    constructor(
       private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly fs: AbstractFileSystem,
+      @Inject() private readonly deployService: ReplicaDeployService,
    ) {}
 
    onModuleInit(): void {
@@ -68,6 +83,35 @@ export class ReplicaLinkClient implements OnModuleInit, OnModuleDestroy {
       // Master asks whether we currently have a file; reply with a live filesystem check.
       this.socket.on(HAS_FILE_EVENT, (req: HasFileRequest, ack?: (reply: HasFileReply) => void) => {
          const reply = this.checkFile(req?.path ?? "");
+         if (typeof ack === "function") ack(reply);
+      });
+
+      // Master pushes a deploy (after its own succeeded). Run the commands locally and
+      // stream console output / step transitions / completion back over this same socket.
+      this.socket.on(DEPLOY_EVENT, (req: DeployRequest) => {
+         if (!req || !Array.isArray(req.steps)) return;
+         void this.deployService.runDeploy(req, {
+            output: (step, output) =>
+               this.socket?.emit(DEPLOY_OUTPUT_EVENT, { deployId: req.deployId, step, output } as DeployOutputMsg),
+            step: (step, name, status, error) =>
+               this.socket?.emit(DEPLOY_STEP_EVENT, { deployId: req.deployId, step, name, status, error } as DeployStepMsg),
+            complete: (status, error) =>
+               this.socket?.emit(DEPLOY_COMPLETE_EVENT, {
+                  deployId: req.deployId,
+                  project: req.project,
+                  status,
+                  error,
+               } as DeployCompleteMsg),
+         });
+      });
+
+      // Master reads/edits this replica's own .env / config.yml (ack-based).
+      this.socket.on(READ_CONFIG_EVENT, (_req: unknown, ack?: (reply: ReadConfigReply) => void) => {
+         const reply = this.deployService.readLocalConfig();
+         if (typeof ack === "function") ack(reply);
+      });
+      this.socket.on(WRITE_CONFIG_EVENT, (req: WriteConfigRequest, ack?: (reply: WriteConfigReply) => void) => {
+         const reply = this.deployService.writeLocalConfig(req?.content ?? "");
          if (typeof ack === "function") ack(reply);
       });
    }

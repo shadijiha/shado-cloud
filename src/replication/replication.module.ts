@@ -4,6 +4,7 @@ import { GoogleDriveBackupService } from "./google-drive-backup.service";
 import { TrustedIpMiddleware } from "./trusted-ip.middleware";
 import { ReplicationController } from "./replication.controller";
 import { ReplicaLinkClient } from "./replica-link.client";
+import { ReplicaDeployService } from "./replica-deploy.service";
 import { ConditionalModule, ConfigModule, ConfigService } from "@nestjs/config";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "src/file-system/file-system.service";
@@ -69,6 +70,7 @@ import { SignedServiceSerializer } from "src/auth/service-auth.util";
    providers: [
       ReplicationService,
       ReplicaLinkClient,
+      ReplicaDeployService,
       {
          provide: AbstractFileSystem,
          useClass: NodeFileSystemService,
