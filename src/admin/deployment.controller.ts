@@ -26,6 +26,8 @@ import crypto from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { DeploymentService } from "./deployment.service";
+import { ReplicaLinkRegistry } from "src/replication/replica-link.registry";
+import { ReplicaDeployHub } from "src/replication/replica-deploy-hub.service";
 import * as path from "path";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { CONFIG_FILE_NAME } from "src/config/config.loader";
@@ -39,6 +41,8 @@ export class DeploymentController {
       private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly abstractFs: AbstractFileSystem,
+      @Inject() private readonly replicaLinkRegistry: ReplicaLinkRegistry,
+      @Inject() private readonly replicaDeployHub: ReplicaDeployHub,
    ) {}
 
    @Post("redeploy/:slug")
@@ -102,7 +106,7 @@ export class DeploymentController {
 
    @Post("deployment/projects")
    @UseGuards(JwtAuthGuard, AdminGuard)
-   public async createDeploymentProject(@Body() body: { slug: string; name: string; workDir: string; pm2ProcessName?: string; branch?: string; steps: any[] }) {
+   public async createDeploymentProject(@Body() body: { slug: string; name: string; workDir: string; pm2ProcessName?: string; branch?: string; steps: any[]; propagateToReplicas?: boolean }) {
       const { DeploymentProject } = await import("../models/admin/deploymentProject");
       const project = new DeploymentProject();
       project.slug = body.slug;
@@ -110,13 +114,14 @@ export class DeploymentController {
       project.workDir = body.workDir;
       project.pm2ProcessName = body.pm2ProcessName || null;
       project.branch = body.branch || "master";
+      project.propagateToReplicas = body.propagateToReplicas ?? false;
       project.setSteps(body.steps);
       return this.deploymentService.saveProject(project);
    }
 
    @Put("deployment/projects/:slug")
    @UseGuards(JwtAuthGuard, AdminGuard)
-   public async updateDeploymentProject(@Param("slug") slug: string, @Body() body: Partial<{ name: string; workDir: string; pm2ProcessName: string; branch: string; steps: any[]; enabled: boolean }>) {
+   public async updateDeploymentProject(@Param("slug") slug: string, @Body() body: Partial<{ name: string; workDir: string; pm2ProcessName: string; branch: string; steps: any[]; enabled: boolean; propagateToReplicas: boolean }>) {
       const project = await this.deploymentService.getProject(slug);
       if (!project) throw new HttpException("Project not found", HttpStatus.NOT_FOUND);
       if (body.name !== undefined) project.name = body.name;
@@ -125,6 +130,7 @@ export class DeploymentController {
       if (body.branch !== undefined) project.branch = body.branch;
       if (body.steps !== undefined) project.setSteps(body.steps);
       if (body.enabled !== undefined) project.enabled = body.enabled;
+      if (body.propagateToReplicas !== undefined) project.propagateToReplicas = body.propagateToReplicas;
       return this.deploymentService.saveProject(project);
    }
 
@@ -198,6 +204,54 @@ export class DeploymentController {
    public async retryStep(@Param("step") step: string): Promise<Observable<MessageEvent>> {
       const subject = await this.deploymentService.retryStep(step);
       return subject.asObservable();
+   }
+
+   // ─────────────────────────── Replica propagation ───────────────────────────
+
+   /** List replicas currently connected over the replica-link socket, plus their latest deploy state. */
+   @Get("deployment/replicas")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public getReplicas() {
+      return {
+         connected: this.replicaLinkRegistry.list(),
+         deployments: this.replicaDeployHub.getStates(),
+      };
+   }
+
+   /** Live SSE stream of replica deploy progress (output / step / complete) across all replicas. */
+   @Get("deployment/replicas/stream")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   @Sse()
+   public streamReplicaDeployments(): Observable<MessageEvent> {
+      return this.replicaDeployHub.stream();
+   }
+
+   /** Read a specific replica's own .env / config.yml over the socket. */
+   @Get("deployment/replicas/:id/config")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public async getReplicaConfig(@Param("id") id: string) {
+      try {
+         return await this.replicaLinkRegistry.readConfig(id);
+      } catch (e) {
+         throw new HttpException((e as Error).message, HttpStatus.BAD_GATEWAY);
+      }
+   }
+
+   /** Overwrite a specific replica's own .env / config.yml over the socket. */
+   @Put("deployment/replicas/:id/config")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   public async saveReplicaConfig(@Param("id") id: string, @Body("content") content: string) {
+      try {
+         const reply = await this.replicaLinkRegistry.writeConfig(id, content ?? "");
+         if (!reply.success) {
+            throw new HttpException(reply.message || "Replica failed to write config", HttpStatus.BAD_REQUEST);
+         }
+         this.logger.log(`Updated config on replica ${id} (${reply.filename})`);
+         return reply;
+      } catch (e) {
+         if (e instanceof HttpException) throw e;
+         throw new HttpException((e as Error).message, HttpStatus.BAD_GATEWAY);
+      }
    }
 
    @Get("env/:project")
