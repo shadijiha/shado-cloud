@@ -12,11 +12,6 @@ import { REDIS_CACHE } from "src/util";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { DeploymentProject, DeploymentStepConfig } from "src/models/admin/deploymentProject";
-import { ReplicationRole } from "src/config/config.validator";
-import { ReplicaLinkRegistry } from "src/replication/replica-link.registry";
-import { ReplicaDeployHub } from "src/replication/replica-deploy-hub.service";
-import { randomUUID } from "crypto";
-import type { DeployStep } from "src/replication/replica-link.constants";
 
 export type StepStatus = "pending" | "running" | "success" | "failed" | "skipped";
 
@@ -67,12 +62,12 @@ const DEFAULT_PROJECTS: Partial<DeploymentProject>[] = [
       pm2ProcessName: "shado-cloud-backend",
       branch: "master",
       steps: JSON.stringify([
-         { step: "git_pull", name: "Git Pull", cmd: "git", args: ["pull"], runOnReplica: true },
-         { step: "npm_install", name: "NPM Install", cmd: "npm", args: ["install"], runOnReplica: true },
+         { step: "git_pull", name: "Git Pull", cmd: "git", args: ["pull"] },
+         { step: "npm_install", name: "NPM Install", cmd: "npm", args: ["install"] },
          { step: "test", name: "Run Tests", cmd: "npm", args: ["test", "--", "--runInBand", "--no-colors"] },
-         { step: "build", name: "Build", cmd: "npm", args: ["run", "build"], runOnReplica: true },
+         { step: "build", name: "Build", cmd: "npm", args: ["run", "build"] },
          { step: "migrate", name: "Run Migrations", cmd: "npx", args: ["typeorm", "migration:run", "-d", "ormconfig.js"] },
-         { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend"], triggersRestart: true, runOnReplica: true },
+         { step: "restart", name: "Restart Service", cmd: "pm2", args: ["restart", "shado-cloud-backend"], triggersRestart: true },
          { step: "verify", name: "Verify Deployment", cmd: "pm2", args: ["jlist"], runsOnModuleInit: true },
       ] as DeploymentStepConfig[]),
    },
@@ -103,8 +98,6 @@ export class DeploymentService implements OnModuleInit {
       @Inject() private readonly featureFlagService: FeatureFlagService,
       @Inject(REDIS_CACHE) private readonly redis: Redis,
       @InjectRepository(DeploymentProject) private readonly projectRepo: Repository<DeploymentProject>,
-      @Inject() private readonly replicaLinkRegistry: ReplicaLinkRegistry,
-      @Inject() private readonly replicaDeployHub: ReplicaDeployHub,
    ) {}
 
    private async sendDeploymentEmail(options: Parameters<EmailService["sendEmail"]>[0]) {
@@ -462,9 +455,6 @@ export class DeploymentService implements OnModuleInit {
       this.deploymentSubject?.complete();
       this.logger.log(`Deployment completed successfully`);
 
-      // Propagate to replicas over the replica-link socket (master only, if enabled).
-      await this.maybePropagateToReplicas(projectSlug);
-
       const duration = Math.round((new Date(deployment.finishedAt).getTime() - new Date(deployment.startedAt).getTime()) / 1000);
       void this.sendDeploymentEmail({
          subject: `Shado Cloud - ${projectSlug} deployment SUCCESS`,
@@ -574,47 +564,6 @@ export class DeploymentService implements OnModuleInit {
    private emit(event: DeploymentEvent) {
       if (this.deploymentSubject) {
          this.deploymentSubject.next({ data: JSON.stringify(event) } as MessageEvent);
-      }
-   }
-
-   private isMaster(): boolean {
-      const role = this.config.get("this-service.replication.role", { infer: true });
-      return role === ReplicationRole.Master || role === ReplicationRole.Primary;
-   }
-
-   /**
-    * After a successful master deploy, push the deploy to every connected replica over the
-    * replica-link socket — but only if this node is the master and the project has
-    * `propagateToReplicas` enabled. Sends the subset of steps flagged `runOnReplica`
-    * (dropping skipped ones). Replicas run them locally and stream progress back, which the
-    * master surfaces via the ReplicaDeployHub / SSE. Best-effort: never fails the deploy.
-    */
-   private async maybePropagateToReplicas(projectSlug: string): Promise<void> {
-      try {
-         if (!this.isMaster()) return;
-         const project = await this.projectRepo.findOneBy({ slug: projectSlug });
-         if (!project || !project.propagateToReplicas) return;
-
-         const steps: DeployStep[] = project
-            .getSteps()
-            .filter((s) => s.runOnReplica && !s.skip)
-            .map((s) => ({ step: s.step, name: s.name, cmd: s.cmd, args: s.args, triggersRestart: s.triggersRestart }));
-
-         if (steps.length === 0) {
-            this.logger.warn(`propagateToReplicas is enabled for "${projectSlug}" but no steps are flagged runOnReplica`);
-            return;
-         }
-
-         const deployId = randomUUID();
-         const targets = this.replicaLinkRegistry.broadcastDeploy({ deployId, project: projectSlug, steps });
-         if (targets.length === 0) {
-            this.logger.log(`propagateToReplicas: no replicas currently connected for "${projectSlug}"`);
-            return;
-         }
-         this.replicaDeployHub.begin(deployId, projectSlug, targets);
-         this.logger.log(`Propagated deploy "${projectSlug}" (${steps.length} step(s)) to ${targets.length} replica(s)`);
-      } catch (e) {
-         this.logger.error(`Failed to propagate deploy to replicas: ${(e as Error).message}`);
       }
    }
 

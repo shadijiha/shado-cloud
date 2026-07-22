@@ -44,19 +44,6 @@ this-service:
   # Used for deployment pipelines
   deployment:
     github-webhook-secret: 
-    # ── Propagate-to-replicas ──────────────────────────────────────────────
-    # A deployment project can be flagged "propagate to replicas" in the admin
-    # Deploy tab. When such a project deploys successfully on the MASTER, the master
-    # pushes the steps marked "Run on replicas" to every connected replica over the
-    # replica-link socket, and each replica runs them locally (typically `git pull`).
-    #
-    # NOTE: the git credential for that pull is NOT configured here. Replicas run in
-    # Docker and the repo is cloned over HTTPS, so a PRIVATE repo needs a GitHub token
-    # supplied as the `GIT_DEPLOY_TOKEN` ENVIRONMENT VARIABLE (see docker-compose.yml /
-    # your .env), never in this file — it's written only to the container's ephemeral
-    # filesystem at startup so it can't leak into image layers. Leave it unset for a
-    # public repo. Create the token as a fine-grained PAT scoped to this repo with
-    # Contents: Read-only (org owner approval may be required).
 
   # Secondary "cold storage" drives for the tiered_storage feature.
   # Each name maps to a mount point at /mnt/<name>; cold files live under /mnt/<name>/cloud-dir.

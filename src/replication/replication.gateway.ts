@@ -4,16 +4,7 @@ import type { Socket } from "socket.io";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
 import { ReplicaLinkRegistry } from "./replica-link.registry";
-import { ReplicaDeployHub } from "./replica-deploy-hub.service";
-import {
-   REPLICA_LINK_NAMESPACE,
-   DEPLOY_OUTPUT_EVENT,
-   DEPLOY_STEP_EVENT,
-   DEPLOY_COMPLETE_EVENT,
-   type DeployOutputMsg,
-   type DeployStepMsg,
-   type DeployCompleteMsg,
-} from "./replica-link.constants";
+import { REPLICA_LINK_NAMESPACE } from "./replica-link.constants";
 import { verifyServiceHmac } from "src/auth/service-auth.util";
 
 /**
@@ -35,7 +26,6 @@ export class ReplicationGateway implements OnGatewayConnection, OnGatewayDisconn
    constructor(
       private readonly config: ConfigService<EnvVariables>,
       private readonly registry: ReplicaLinkRegistry,
-      private readonly deployHub: ReplicaDeployHub,
    ) {}
 
    handleConnection(client: Socket): void {
@@ -59,22 +49,6 @@ export class ReplicationGateway implements OnGatewayConnection, OnGatewayDisconn
       const mirrorDirs = Number.isFinite(Number(auth.mirrorDirs)) ? Number(auth.mirrorDirs) : 0;
 
       this.registry.register(client, ip, deviceName, mirrorDirs);
-
-      // Relay this replica's deploy progress into the master-side hub (which the admin UI
-      // streams over SSE). The replica only sends its deployId/step/output; we enrich each
-      // event with the master-known identity (socket id + resolved IP + device name).
-      client.on(DEPLOY_OUTPUT_EVENT, (msg: DeployOutputMsg) => {
-         if (!msg) return;
-         this.deployHub.output(client.id, ip, deviceName, msg.deployId, msg.step, msg.output ?? "");
-      });
-      client.on(DEPLOY_STEP_EVENT, (msg: DeployStepMsg) => {
-         if (!msg) return;
-         this.deployHub.step(client.id, ip, deviceName, msg.deployId, msg.step, msg.name, msg.status, msg.error);
-      });
-      client.on(DEPLOY_COMPLETE_EVENT, (msg: DeployCompleteMsg) => {
-         if (!msg) return;
-         this.deployHub.complete(client.id, ip, deviceName, msg.deployId, msg.project, msg.status, msg.error);
-      });
    }
 
    handleDisconnect(client: Socket): void {
