@@ -16,7 +16,7 @@ export const connection = new DataSource({
     username: config.db.username,
     password: config.db.password,
     database: config.db.name,
-    entities: ["dist/src/models/*{.ts,.js}"],
+    entities: ["dist/src/models/**/*{.ts,.js}"],
     migrations: ["dist/migrations/*{.ts,.js}"],
     cli: {
         migrationsDir: "src/migrations",
