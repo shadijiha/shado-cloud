@@ -10,6 +10,19 @@ import {
 } from "typeorm";
 import { User } from "./user";
 
+/**
+ * Who is allowed to open a temp-URL share.
+ *  - PUBLIC        : anybody with the link (token-only access).
+ *  - AUTHENTICATED : any signed-in Shado user (a valid session cookie is required).
+ *  - RESTRICTED    : only a specific allow-list of users (FUTURE — not yet selectable
+ *                    or enforceable; creating a restricted share is rejected for now).
+ */
+export enum TempUrlAccessLevel {
+   PUBLIC = "public",
+   AUTHENTICATED = "authenticated",
+   RESTRICTED = "restricted",
+}
+
 @Entity()
 export class TempUrl extends BaseEntity {
    @PrimaryGeneratedColumn()
@@ -39,6 +52,19 @@ export class TempUrl extends BaseEntity {
    @Column({ default: true })
    @ApiProperty()
    is_readonly: boolean;
+
+   // Whether this share points at a directory (browsable in the frontend explorer)
+   // rather than a single file. Determined server-side at generation time from the
+   // actual filesystem entry, never trusted from the client.
+   @Column({ default: false })
+   @ApiProperty()
+   is_dir: boolean;
+
+   // When true, the share is only accessible to *any* authenticated Shado user
+   // (a valid session cookie is required). When false, the token alone grants access.
+   @Column({ default: TempUrlAccessLevel.PUBLIC })
+   @ApiProperty({ enum: TempUrlAccessLevel })
+   access_level: TempUrlAccessLevel;
 
    @Column()
    @ApiProperty()
