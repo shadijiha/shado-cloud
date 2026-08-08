@@ -270,7 +270,7 @@ export class FilesConstoller {
       @Req() req: Request,
    ) {
       try {
-         const fileInto = await this.fileService.info(userId, path, false, false);
+         const fileInto = await this.fileService.streamInfo(userId, path);
 
          // Tear the file stream down if the client disconnects before the transfer
          // finishes. Without this, an aborted download/seek orphans the underlying

@@ -79,12 +79,18 @@ export class AuthService {
 
    /** Get email for a local user (fetched from auth-api via shadoUserId) */
    async getEmail(userId: number): Promise<string | null> {
+      const key = `email_by_id_${userId}__cache`;
+      const cached = await this.cache.get(key);
+      if (cached != null) return cached || null;
+
       const user = await this.getById(userId);
       if (!user) return null;
       const remote = await this.send<{ email: string } | null>(
          "get_user", { userId: user.shadoUserId, serviceKey: this.serviceKey },
       );
-      return remote?.email ?? null;
+      const email = remote?.email ?? null;
+      if (email) await this.cache.set(key, email, "EX", 3600);
+      return email;
    }
 
    /** Check if shadoUserId is an admin */

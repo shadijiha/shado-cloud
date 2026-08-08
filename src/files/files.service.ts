@@ -43,6 +43,14 @@ export class FilesService {
    public static readonly THUMBNAILS_FOLDER_NAME = ".thumbnails";
    private readonly dirService: DirectoriesService; // Not injected, because it would cause a circular dependency
 
+   // Short-lived cache of resolved user root paths. getUserRootPath() is called several
+   // times per file request (via info/absolutePath/isOwner/updateStats), and each call
+   // otherwise costs a DB lookup + a cross-service RPC to auth-api (see getEmail). A
+   // user's email→root mapping is effectively immutable, so memoize it briefly to
+   // collapse those repeated round-trips on hot paths like audio streaming.
+   private readonly rootPathCache = new Map<number, { path: string; expires: number }>();
+   private static readonly ROOT_PATH_TTL_MS = 5 * 60 * 1000;
+
    constructor(
       private readonly userService: AuthService,
       @InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
@@ -502,6 +510,35 @@ export class FilesService {
       return this.fs.existsSync(dir);
    }
 
+   /**
+    * Minimal file metadata needed to serve a byte stream: size + mime and the
+    * video/audio flags used to decide Range handling. Deliberately leaner than
+    * info() — it skips the temp-url lookup, thumbnail enumeration and redis-key
+    * expansion that the streaming hot path never uses, shaving a DB query off
+    * every song start/skip.
+    */
+   public async streamInfo(userId: number, relativePath: string): Promise<{ mime: string; size: number; is_video: boolean; is_audio: boolean }> {
+      const root = await this.getUserRootPath(userId);
+      const dir = await this.absolutePath(userId, relativePath);
+      if (!(await this.isOwner(userId, dir))) {
+         throw new Error("You don't have permission to access this file");
+      }
+
+      const stats = this.fs.statSync(dir);
+      const relative = path.relative(root, dir);
+      const file = await this.uploadedFileRepo.findOne({
+         where: { absolute_path: relative, user: { id: userId } },
+      });
+      const mime = file ? file.mime : FilesService.detectFile(dir);
+
+      return {
+         mime,
+         size: stats.size,
+         is_video: mime.includes("video"),
+         is_audio: mime.includes("audio"),
+      };
+   }
+
    public async toThumbnail(
       path_: string,
       userId: number,
@@ -697,6 +734,9 @@ export class FilesService {
    }
 
    public async getUserRootPath(userId: number): Promise<string> {
+      const cached = this.rootPathCache.get(userId);
+      if (cached && cached.expires > Date.now()) return cached.path;
+
       const email = await this.userService.getEmail(userId);
       if (!email) {
          throw new HttpException(
@@ -712,6 +752,7 @@ export class FilesService {
       if (!this.fs.existsSync(dir)) {
          this.fs.mkdirSync(dir, { recursive: true });
       }
+      this.rootPathCache.set(userId, { path: dir, expires: Date.now() + FilesService.ROOT_PATH_TTL_MS });
       return dir;
    }
 
