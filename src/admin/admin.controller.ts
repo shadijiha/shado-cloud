@@ -18,13 +18,11 @@ import {
    Query,
    UseInterceptors,
    UploadedFile,
-   All,
-   Req,
    Sse,
    MessageEvent,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import type { Request, Response } from "express";
+import type { Response } from "express";
 import { Observable } from "rxjs";
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ServiceKeyGuard } from "src/auth/service-key.guard";
@@ -36,7 +34,6 @@ import { EnvVariables } from "src/config/config.validator";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { FeatureFlagService } from "./feature-flag.service";
 import { CreateFeatureFlagRequest, DatabaseGetTableRequest, UpdateFeatureFlagRequest } from "./adminApiTypes";
-import { REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY } from "./remote.constants";
 import { ValidationPipeline } from "src/auth/ValidationPipeline";
 import { isDev, AuthUser } from "src/util";
 import { AuthService } from "src/auth/auth.service";
@@ -409,46 +406,5 @@ export class AdminController {
 
       await this.authService.grantStepUp(user.shadoUserId, scope);
       return { success: true, expiresInSeconds: STEP_UP_TTL_SECONDS };
-   }
-
-   @All("whep/*")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   async whepProxy(@Req() req: Request, @Res() res: Response) {
-      // Same feature flag that gates the remote desktop/terminal gateways.
-      if (await this.featureFlagService.isFeatureFlagDisabled(REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY)) {
-         res.status(403).send("Remote access is disabled by a feature flag");
-         return;
-      }
-
-      // Require a valid 2FA remote-access grant.
-      const grantUser = await this.authService.getById((req as any).authUserId);
-      if (!grantUser || !(await this.authService.hasStepUp(grantUser.shadoUserId, "remote"))) {
-         res.status(403).send("Remote access requires 2FA verification");
-         return;
-      }
-
-      const subPath = req.url.replace(/^\/admin\/whep/, "");
-      const url = `http://127.0.0.1:8889${subPath}`;
-
-      // Read raw body since SDP is not JSON
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const body = Buffer.concat(chunks);
-
-      const resp = await fetch(url, {
-         method: req.method,
-         headers: { "Content-Type": req.headers["content-type"] || "application/sdp" },
-         body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
-      });
-      resp.headers.forEach((v, k) => {
-         if (k.toLowerCase() === "access-control-allow-origin") return;
-         res.setHeader(k, v);
-      });
-      const origin = req.headers.origin;
-      if (origin) {
-         res.setHeader("Access-Control-Allow-Origin", origin);
-         res.setHeader("Access-Control-Allow-Credentials", "true");
-      }
-      res.status(resp.status).send(Buffer.from(await resp.arrayBuffer()));
    }
 }

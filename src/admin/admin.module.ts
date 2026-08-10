@@ -10,7 +10,6 @@ import { ServiceFunction } from "../models/admin/serviceFunction";
 import { FilesModule } from "../files/files.module";
 import { EmailService } from "./email.service";
 import { DirectoriesModule } from "../directories/directories.module";
-import { RemoteDesktopGateway } from "./remote-desktop.gateway";
 import { RemoteTerminalGateway } from "./remote-terminal.gateway";
 import { DeploymentController } from "./deployment.controller";
 import { DeploymentService } from "./deployment.service";
@@ -24,7 +23,7 @@ import { CronAdminService } from "./cron.service";
       FilesModule,
       DirectoriesModule
    ],
-   providers: [AdminService, FeatureFlagService, EmailService, RemoteDesktopGateway, RemoteTerminalGateway, DeploymentService, TwoFactorGuard, CronAdminService],
+   providers: [AdminService, FeatureFlagService, EmailService, RemoteTerminalGateway, DeploymentService, TwoFactorGuard, CronAdminService],
    exports: [AdminService],
 })
 export class AdminModule { }
