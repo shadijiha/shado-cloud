@@ -4,7 +4,7 @@ import { Throttle } from "@nestjs/throttler";
 import { ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Paginate, type Paginated, PaginateQuery } from "nestjs-paginate";
 import { OperationStatus, OperationStatusResponse } from "src/files/filesApiTypes";
-import { LoggerToDb } from "src/logging";
+import { AppLogger } from "src/logging";
 import { type EncryptedPassword } from "src/models/EncryptedPassword";
 import { AuthUser } from "src/util";
 import { PasswordsVaultService } from "./PasswordsVaultService.service";
@@ -16,7 +16,7 @@ import { AddToVaultRequest, AddToVaultResponse, AllPasswordsResponse } from "./u
 export class PasswordsVaultController {
    constructor(
       private readonly passwordVaultService: PasswordsVaultService,
-      @Inject() private readonly logger: LoggerToDb,
+      @Inject() private readonly logger: AppLogger,
    ) {}
 
    @Get("all")

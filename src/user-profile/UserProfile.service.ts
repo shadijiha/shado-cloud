@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import path from "path";
 import { AuthService } from "../auth/auth.service";
 import { FilesService } from "../files/files.service";
-import { LoggerToDb } from "../logging";
 import { User } from "../models/user";
 import { SoftException } from "../util";
 import { UploadedFile } from "../models/uploadedFile";
@@ -25,7 +24,6 @@ export class UserProfileService {
       @InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
       @InjectRepository(SearchStat) private readonly searchStatRepo: Repository<SearchStat>,
       @InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
-      @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly fs: AbstractFileSystem,
    ) {}
 

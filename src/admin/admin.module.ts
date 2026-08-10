@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { Log } from "./../models/log";
 import { User } from "./../models/user";
 import { FeatureFlagService } from "./feature-flag.service";
 import { FeatureFlag } from "src/models/admin/featureFlag";
@@ -21,7 +20,7 @@ import { CronAdminService } from "./cron.service";
 
 @Module({
    controllers: [AdminController, ServiceFunctionsController, DeploymentController],
-   imports: [TypeOrmModule.forFeature([Log, User, FeatureFlag, ServiceFunction, DeploymentProject]),
+   imports: [TypeOrmModule.forFeature([User, FeatureFlag, ServiceFunction, DeploymentProject]),
       FilesModule,
       DirectoriesModule
    ],

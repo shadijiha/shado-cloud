@@ -1,41 +1,40 @@
 import "reflect-metadata";
-import { ConsoleLogger, Inject, Injectable } from "@nestjs/common";
-import { Log } from "./models/log";
-import { User } from "./models/user";
+import { ConsoleLogger, Injectable } from "@nestjs/common";
 import { RequestContext } from "nestjs-request-context";
 import { type Request } from "express";
 import { getUserIdFromRequest, SoftException } from "./util";
 import { OperationStatus, type OperationStatusResponse } from "./files/filesApiTypes";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, LessThan } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables, ReplicationRole } from "./config/config.validator";
-import { FeatureFlagNamespace } from "./models/admin/featureFlag";
-import { FeatureFlagService } from "./admin/feature-flag.service";
-import { Cron, CronExpression } from "@nestjs/schedule";
 
+type StructuredLevel = "error" | "warn" | "info" | "debug" | "verbose";
+
+/**
+ * Application logger. Replaces the old `AppLogger` (which persisted every log line to MySQL).
+ *
+ * Instead of writing to a database, this emits a single structured JSON line per log to stdout,
+ * enriched with the same request-scoped context the old logger captured (route, userId, client
+ * IP, user-agent, controller/context, stack, replica role). The Vector collector tails stdout,
+ * parses the JSON, and ships it to VictoriaLogs — so logs are queried in Grafana (LogsQL) rather
+ * than in a MySQL table.
+ *
+ * It extends {@link ConsoleLogger} and is registered as the global Nest logger (see main.ts), so
+ * framework logs get the same JSON treatment. `logException` / `errorWrapper` are kept because
+ * they're used across many controllers/services.
+ */
 @Injectable()
-export class LoggerToDb extends ConsoleLogger {
+export class AppLogger extends ConsoleLogger {
    constructor(
       context: string,
-      @InjectRepository(Log) private readonly logRepo: Repository<Log>,
-      @Inject() private readonly featureFlagService: FeatureFlagService,
-      private readonly configService: ConfigService<EnvVariables>,
+      private readonly configService?: ConfigService<EnvVariables>,
    ) {
       super(context);
    }
 
-   @Cron("0 4 * * *", { name: "logs:cleanup-debug" })
-   async cleanupDebugLogs() {
-      const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
-      await this.logRepo.delete({ type: "debug", created_at: LessThan(cutoff) });
-   }
-
    public logException(e: Error): void {
-      if (e instanceof SoftException) {
-      } else {
-         this.error(e.message, e.stack);
-      }
+      // SoftExceptions are expected/handled control-flow and intentionally not logged.
+      if (e instanceof SoftException) return;
+      this.error(e.message, e.stack);
    }
 
    public async errorWrapper(func: () => any): Promise<any | OperationStatusResponse> {
@@ -56,103 +55,91 @@ export class LoggerToDb extends ConsoleLogger {
       }
    }
 
-   public error(message: any, stack?: string): void {
-      message = this.alterMessage(message);
-      super.error(message, stack);
-      void this.logToDb(message, "error", stack);
+   // Nest's LoggerService signatures pass an optional trailing `context` string; app code calls
+   // these with just a message (and, for error, a stack). Both are supported.
+   public log(message: any, context?: string): void {
+      this.emit("info", message, { context });
    }
 
-   public log(message: any): void {
-      message = this.alterMessage(message);
-      super.log(message, this.context);
-      void this.logToDb(message, "info", undefined);
+   public warn(message: any, context?: string): void {
+      this.emit("warn", message, { context });
    }
 
-   public warn(message: any): void {
-      message = this.alterMessage(message);
-      super.warn(message, this.context);
-      void this.logToDb(message, "warn", undefined);
+   public error(message: any, stack?: string, context?: string): void {
+      this.emit("error", message, { stack, context });
    }
 
-   public debug(message: any): void {
-      // Fire-and-forget: debug logging must never block or throw at call sites.
-      void (async () => {
+   public debug(message: any, context?: string): void {
+      this.emit("debug", message, { context });
+   }
+
+   public verbose(message: any, context?: string): void {
+      this.emit("verbose", message, { context });
+   }
+
+   /**
+    * Builds the structured record and writes exactly one JSON line to stdout. Never throws —
+    * logging must not break request handling.
+    */
+   private emit(level: StructuredLevel, message: any, opts?: { stack?: string; context?: string }): void {
+      try {
+         const req: Request | undefined = RequestContext.currentContext?.req;
+
+         const record: Record<string, any> = {
+            timestamp: new Date().toISOString(),
+            level,
+            service: "shado-cloud",
+            context: opts?.context ?? this.context,
+            message: typeof message === "string" ? message : this.safeStringify(message),
+         };
+
+         if (this.configService?.get("this-service.replication.role", { infer: true }) === ReplicationRole.Replica) {
+            record.role = "replica";
+         }
+
+         if (req) {
+            record.route = req.originalUrl;
+            const ip = this.getIp(req);
+            if (ip) record.ip = ip;
+            const ua = req.headers?.["user-agent"];
+            if (ua) record.userAgent = Array.isArray(ua) ? ua.join(",") : ua;
+            const userId = getUserIdFromRequest(req);
+            if (userId !== -1) record.userId = userId;
+         }
+
+         if (opts?.stack) record.stack = opts.stack;
+
+         process.stdout.write(JSON.stringify(record) + "\n");
+      } catch (e) {
+         // Last-resort fallback: logging must never throw.
          try {
-            if (await this.loggingDisabled()) {
-               return;
-            }
-            message = this.alterMessage(message);
-            super.debug(message, this.context);
-            await this.logToDb(message, "debug", undefined);
+            process.stdout.write(
+               JSON.stringify({ level, service: "shado-cloud", message: String(message), loggerError: (e as Error).message }) + "\n",
+            );
          } catch {
-            // Swallow — logging is best-effort.
-         }
-      })();
-   }
-
-   private async logToDb(message: any, logType: Log["type"], stack?: string): Promise<void> {
-      try {
-         const ctx = RequestContext.currentContext;
-         const req: (Request & { configService: ConfigService<EnvVariables> }) | undefined = ctx?.req;
-
-         const log = new Log();
-         log.message = message;
-         log.controller = this.context;
-         log.route = req?.originalUrl;
-         log.type = logType;
-         log.userAgent = req && "user-agent" in req.headers ? req.headers["user-agent"] : "unknown";
-         log.ipAddress = this.getIp() || "localhost";
-         log.stack = stack?.substring(0, 512);
-
-         // Get user
-         const userId = getUserIdFromRequest(req);
-         if (userId != -1) {
-            log.user = await User.findOne({ where: { id: userId } });
-         }
-
-         await this.logRepo.save(log);
-      } catch (e) {
-         // Logging must never throw — fall back to console only.
-         super.error(`Failed to persist log to DB: ${(e as Error).message}`);
-      }
-   }
-
-   private async loggingDisabled(): Promise<boolean> {
-      // Check if logging is enabled for this context and this log level
-      const featureFlag = await this.featureFlagService.getFeatureFlag(
-         FeatureFlagNamespace.Log,
-         "disabled_log_context",
-      );
-      if (featureFlag && featureFlag.enabled) {
-         try {
-            if (JSON.parse(featureFlag.payload).includes(this.context)) {
-               return true;
-            }
-         } catch (e) {
-            super.error(`Error parsing feature flag payload: ${(e as Error).message}`);
-            return false;
+            /* give up silently */
          }
       }
-      return false;
    }
 
-   private getIp(): string {
+   private getIp(req: Request): string | undefined {
       try {
-         const req: Request = RequestContext.currentContext?.req;
-         if (!req) return undefined;
-
-         if (req.ip.includes("127.0.0.1") || req.ip.includes("localhost") || req.ip == "::1") {
+         if (!req?.ip) return undefined;
+         if (req.ip.includes("127.0.0.1") || req.ip.includes("localhost") || req.ip === "::1") {
             const ips = req.headers["x-forwarded-for"];
-            return ips instanceof Array ? ips.join(",") : ips;
-         } else {
-            return req.ip;
+            return Array.isArray(ips) ? ips.join(",") : ips;
          }
-      } catch (e) {
-         super.debug((e as Error).message);
+         return req.ip;
+      } catch {
+         return undefined;
       }
    }
 
-   private alterMessage(message: string): string {
-      return `${this.configService.get("this-service.replication.role", { infer: true }) == ReplicationRole.Replica ? "[REPLICA]" : ""} ${message}`;
+   private safeStringify(v: any): string {
+      try {
+         return typeof v === "object" ? JSON.stringify(v) : String(v);
+      } catch {
+         return String(v);
+      }
    }
 }

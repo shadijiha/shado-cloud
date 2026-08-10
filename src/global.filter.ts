@@ -7,14 +7,14 @@ import {
    Inject,
 } from "@nestjs/common";
 import { type Request, type Response } from "express";
-import { LoggerToDb } from "./logging";
+import { AppLogger } from "./logging";
 import { SoftException } from "./util";
 import { MetricsPusherService } from "./metrics-pusher.service";
 
 @Catch(Error)
 export class GlobalExceptionFilter implements ExceptionFilter {
    public constructor(
-      @Inject() private readonly logger: LoggerToDb,
+      @Inject() private readonly logger: AppLogger,
       private readonly metricsPusher?: MetricsPusherService,
    ) {}
 

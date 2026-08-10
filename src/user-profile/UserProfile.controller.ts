@@ -20,7 +20,7 @@ import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Response } from "express";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { OperationStatusResponse } from "src/files/filesApiTypes";
-import { LoggerToDb } from "./../logging";
+import { AppLogger } from "./../logging";
 import { AuthUser } from "src/util";
 import { ProfileStats } from "./user-profile-types";
 import { UserProfileService } from "./UserProfile.service";
@@ -32,7 +32,7 @@ import { Observable, Subject } from "rxjs";
 export class UserProfileController {
    /** Maximum accepted profile picture size (bytes). */
    static readonly MAX_PROFILE_PIC_BYTES = 5 * 1024 * 1024; // 5 MB
-   constructor(private readonly profileService: UserProfileService, @Inject() private readonly logger: LoggerToDb, @Inject() private readonly fs: AbstractFileSystem) {}
+   constructor(private readonly profileService: UserProfileService, @Inject() private readonly logger: AppLogger, @Inject() private readonly fs: AbstractFileSystem) {}
 
    /** Serve any user's avatar by their auth (shado) UUID — any logged-in user may view it (for friends, search, etc.). */
    @Get("picture/:shadoUserId")

@@ -9,7 +9,7 @@ import { AuthService } from "src/auth/auth.service";
 import { SearchStat } from "src/models/stats/searchStat";
 import { FileAccessStat } from "src/models/stats/fileAccessStat";
 import { TempUrl } from "src/models/tempUrl";
-import { LoggerToDb } from "src/logging";
+import { AppLogger } from "src/logging";
 import { User } from "src/models/user";
 import type Redis from "ioredis";
 import { ThumbnailCacheInterceptor } from "src/files/thumbnail-cache.interceptor";
@@ -50,7 +50,7 @@ describe("FilesService", () => {
    let uploadedFileRepo: Repository<UploadedFile>;
    let fileAccessStatRepo: Repository<FileAccessStat>;
    let userService: AuthService;
-   let logger: LoggerToDb;
+   let logger: AppLogger;
    let cache: Redis;
    let fs: AbstractFileSystem;
    let config: ConfigService;
@@ -95,7 +95,7 @@ describe("FilesService", () => {
                },
             },
             {
-               provide: LoggerToDb,
+               provide: AppLogger,
                useValue: {
                   logException: jest.fn(),
                   log: jest.fn(),
@@ -163,7 +163,7 @@ describe("FilesService", () => {
       userService = module.get<AuthService>(AuthService);
       uploadedFileRepo = module.get<Repository<UploadedFile>>(getRepositoryToken(UploadedFile));
       fileAccessStatRepo = module.get<Repository<FileAccessStat>>(getRepositoryToken(FileAccessStat));
-      logger = module.get<LoggerToDb>(LoggerToDb);
+      logger = module.get<AppLogger>(AppLogger);
       cache = module.get<Redis>(REDIS_CACHE) as any;
       fs = module.get<AbstractFileSystem>(AbstractFileSystem);
       config = module.get<ConfigService>(ConfigService);

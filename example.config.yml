@@ -87,3 +87,11 @@ redis:
   port: 6379
   password: redispass
 
+# Open-source, CloudWatch-Logs-style log store. When the `log:victoria_logs` feature flag is
+# enabled (admin ▸ Flags), LoggerToDb pushes JSON-line logs here IN ADDITION to MySQL, so you
+# can query them in Grafana (Explore ▸ VictoriaLogs, LogsQL). Optional — omit this whole block
+# to keep logging to MySQL only. In docker the host is the service name; on a bare-metal prod
+# host point it at wherever VictoriaLogs listens (default :9428).
+victoria-logs:
+  url: http://victoria-logs:9428
+

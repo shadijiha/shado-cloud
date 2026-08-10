@@ -6,7 +6,7 @@ import cookieParser from "cookie-parser";
 import { json, urlencoded } from "express";
 import { GlobalExceptionFilter } from "./global.filter";
 import helmet from "helmet";
-import { LoggerToDb } from "./logging";
+import { AppLogger } from "./logging";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ConfigServiceInterceptor } from "./config/config.interceptor";
 import { EnvVariables, ReplicationRole } from "./config/config.validator";
@@ -34,7 +34,11 @@ async function bootstrap() {
       credentials: true,
    });
    app.useWebSocketAdapter(new IoAdapter(app));
-   app.useLogger(isDev(envConfig) ? ["log", "debug", "error", "verbose", "warn"] : ["error", "warn", "log", "debug"]);
+   // Override Nest's default logger so ALL logs (framework + application) are emitted as a single
+   // structured JSON line to stdout, which Vector tails and ships to VictoriaLogs. Application
+   // code additionally injects AppLogger via DI (which carries the per-class context); this
+   // standalone instance handles framework-level logs and doesn't depend on the DI container.
+   app.useLogger(new AppLogger("Nest", envConfig));
 
    const config = new DocumentBuilder()
       .setTitle("Shado Cloud")
@@ -94,7 +98,7 @@ async function bootstrap() {
    app.use(urlencoded({ extended: true, limit: "100mb" }));
    app.useGlobalInterceptors(new ConfigServiceInterceptor(envConfig));
    if (replicationRole != ReplicationRole.Replica) {
-      app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(LoggerToDb), app.get(MetricsPusherService)));
+      app.useGlobalFilters(new GlobalExceptionFilter(await app.resolve(AppLogger), app.get(MetricsPusherService)));
    }
    await app.listen(envConfig.get("this-service.port.http", { infer: true }) ?? 9000, "0.0.0.0");
 }

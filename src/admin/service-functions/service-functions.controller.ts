@@ -16,7 +16,7 @@ import { FeatureFlagService } from "../feature-flag.service";
 import { FeatureFlagNamespace } from "../../models/admin/featureFlag";
 import { DirectoriesService } from "../../directories/directories.service";
 import { basename, dirname } from "path";
-import { LoggerToDb } from "src/logging";
+import { AppLogger } from "src/logging";
 
 puppeteer.use(StealthPlugin());
 
@@ -31,7 +31,7 @@ export class ServiceFunctionsController {
         @Inject() private readonly emailService: EmailService,
         @Inject() private readonly featureFlag: FeatureFlagService,
         @Inject() private readonly directoriesService: DirectoriesService,
-        @Inject() private readonly logger: LoggerToDb,
+        @Inject() private readonly logger: AppLogger,
     ) { }
 
     @Get("all")

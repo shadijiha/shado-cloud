@@ -19,7 +19,7 @@ import { Throttle } from "@nestjs/throttler";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
-import { LoggerToDb } from "./../logging";
+import { AppLogger } from "./../logging";
 import { TempUrl, TempUrlAccessLevel } from "./../models/tempUrl";
 import { AuthUser } from "./../util";
 import { TempUrlService } from "./tempUrl.service";
@@ -34,7 +34,7 @@ import {
 @Controller("temp")
 @ApiTags("Temporary URLs")
 export class TempUrlConstoller {
-   constructor(private readonly tempUrlService: TempUrlService, @Inject() private readonly logger: LoggerToDb) {}
+   constructor(private readonly tempUrlService: TempUrlService, @Inject() private readonly logger: AppLogger) {}
 
    @Post("generate")
    @UseGuards(JwtAuthGuard)

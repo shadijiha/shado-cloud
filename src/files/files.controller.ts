@@ -21,7 +21,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiOperation, ApiParam, ApiProduces, ApiProperty, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { pipeline } from "stream";
-import { LoggerToDb } from "./../logging";
+import { AppLogger } from "./../logging";
 import { ApiFile, AuthUser } from "src/util";
 import { FilesService } from "./files.service";
 import {
@@ -40,7 +40,7 @@ import { ThumbnailCacheInterceptor } from "./thumbnail-cache.interceptor";
 @UseGuards(JwtAuthGuard)
 @ApiTags("Files")
 export class FilesConstoller {
-   constructor(private readonly fileService: FilesService, @Inject() private readonly logger: LoggerToDb) {}
+   constructor(private readonly fileService: FilesService, @Inject() private readonly logger: AppLogger) {}
 
    @Get("profile-picture-info")
    @ApiResponse({ description: "Returns profile picture metadata for the authenticated user" })

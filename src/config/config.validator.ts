@@ -293,6 +293,19 @@ class RedisConfig {
    password: string;
 }
 
+/* ---------------- VICTORIA LOGS ---------------- */
+
+class VictoriaLogsConfig {
+   /**
+    * Base URL of the VictoriaLogs instance, e.g. http://victoria-logs:9428. AppLogger pushes
+    * JSON-line logs to `${url}/insert/jsonline` when the `log:victoria_logs` feature flag is on.
+    * Optional — when omitted, the flag is a no-op and logging stays MySQL-only.
+    */
+   @IsString()
+   @Validate(DoesNotEndWithConstraint, ["/"])
+   url: string;
+}
+
 export class EnvVariables {
    
    @ValidateNested()
@@ -310,6 +323,11 @@ export class EnvVariables {
    @ValidateNested()
    @Type(() => RedisConfig)
    redis: RedisConfig;
+
+   @ValidateNested()
+   @Type(() => VictoriaLogsConfig)
+   @IsOptional()
+   "victoria-logs"?: VictoriaLogsConfig;
 }
 
 export function validate(config: Record<string, unknown>) {

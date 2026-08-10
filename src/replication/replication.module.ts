@@ -11,7 +11,6 @@ import { ScheduleModule } from "@nestjs/schedule";
 import yamlConfigLoader from "../config/config.loader";
 import { ServiceKeyGuard } from "src/auth/service-key.guard";
 import { EnvVariables } from "src/config/config.validator";
-import { LoggerToDb } from "src/logging";
 import { EmailService } from "src/admin/email.service";
 import { REDIS_CACHE } from "src/util";
 import Redis from "ioredis";

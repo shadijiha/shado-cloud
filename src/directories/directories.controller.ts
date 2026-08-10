@@ -15,7 +15,7 @@ import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Paginate, type Paginated, PaginateQuery } from "nestjs-paginate";
 import { OperationStatus, OperationStatusResponse } from "./../files/filesApiTypes";
-import { LoggerToDb } from "./../logging";
+import { AppLogger } from "./../logging";
 import { UploadedFile } from "./../models/uploadedFile";
 import { AuthUser } from "./../util";
 import { DirectoriesService } from "./directories.service";
@@ -27,7 +27,7 @@ import { DirListResponse, NewDirRequest, RenameDirRequest } from "./directoriesA
 export class DirectoriesController {
    constructor(
       private readonly directoriesService: DirectoriesService,
-      @Inject() private readonly logger: LoggerToDb,
+      @Inject() private readonly logger: AppLogger,
    ) { }
 
    @Get("root")

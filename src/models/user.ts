@@ -8,7 +8,6 @@ import {
    PrimaryGeneratedColumn,
    UpdateDateColumn,
 } from "typeorm";
-import { Log } from "./log";
 import { EncryptedPassword } from "./EncryptedPassword";
 import { TempUrl } from "./tempUrl";
 import { UploadedFile } from "./uploadedFile";
@@ -31,9 +30,6 @@ export class User extends BaseEntity {
 
    @OneToMany(() => TempUrl, (url) => url.user)
    temp_urls: TempUrl[];
-
-   @OneToMany(() => Log, (log) => log.user)
-   logs: Log[];
 
    @OneToMany(() => EncryptedPassword, (pass) => pass.user)
    encrypted_passwords: EncryptedPassword[];

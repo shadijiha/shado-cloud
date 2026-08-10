@@ -10,7 +10,7 @@ import { REDIS_CACHE, SoftException } from "./../util";
 import { FileAccessStat } from "./../models/stats/fileAccessStat";
 import { UsedData } from "./../user-profile/user-profile-types";
 import { DirectoriesService } from "./../directories/directories.service";
-import { LoggerToDb } from "../logging";
+import { AppLogger } from "../logging";
 import mime from "mime-types";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -58,7 +58,7 @@ export class FilesService {
       @InjectRepository(FileAccessStat) private readonly fileAccessStatRepo: Repository<FileAccessStat>,
       @InjectRepository(TempUrl) private readonly tempUrlRepo: Repository<TempUrl>,
       @InjectRepository(User) private readonly userRepo: Repository<User>,
-      @Inject() private readonly logger: LoggerToDb,
+      @Inject() private readonly logger: AppLogger,
       @Inject(REDIS_CACHE) private readonly cache: Redis,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,

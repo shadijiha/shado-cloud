@@ -1,7 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { DeploymentService } from "src/admin/deployment.service";
-import { LoggerToDb } from "src/logging";
+import { AppLogger } from "src/logging";
 import { EmailService } from "src/admin/email.service";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { REDIS_CACHE } from "src/util";
@@ -60,7 +60,7 @@ describe("DeploymentService", () => {
    let service: DeploymentService;
    let emailService: EmailService;
    let featureFlagService: FeatureFlagService;
-   let logger: LoggerToDb;
+   let logger: AppLogger;
    const redisStore: Record<string, string> = {};
    let projectRepo: any;
 
@@ -97,7 +97,7 @@ describe("DeploymentService", () => {
                },
             },
             {
-               provide: LoggerToDb,
+               provide: AppLogger,
                useValue: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
             },
             {
@@ -126,7 +126,12 @@ describe("DeploymentService", () => {
       service = module.get<DeploymentService>(DeploymentService);
       emailService = module.get<EmailService>(EmailService);
       featureFlagService = module.get<FeatureFlagService>(FeatureFlagService);
-      logger = module.get<LoggerToDb>(LoggerToDb);
+      // DeploymentService now uses a private `new Logger()`; spy on that instance.
+      logger = (service as any).logger;
+      jest.spyOn(logger, "error").mockImplementation();
+      jest.spyOn(logger, "log").mockImplementation();
+      jest.spyOn(logger, "warn").mockImplementation();
+      jest.spyOn(logger, "debug").mockImplementation();
    });
 
    afterEach(() => {

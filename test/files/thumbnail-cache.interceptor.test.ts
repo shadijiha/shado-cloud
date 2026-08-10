@@ -1,7 +1,7 @@
 import { StreamableFile } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ThumbnailCacheInterceptor } from "src/files/thumbnail-cache.interceptor";
-import { LoggerToDb } from "src/logging";
+import { AppLogger } from "src/logging";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { REDIS_CACHE } from "src/util";
 import { of } from "rxjs";
@@ -34,7 +34,7 @@ describe("ThumbnailCacheInterceptor", () => {
          providers: [
             ThumbnailCacheInterceptor,
             { provide: REDIS_CACHE, useValue: mockCache },
-            { provide: LoggerToDb, useValue: { debug: jest.fn(), error: jest.fn() } },
+            { provide: AppLogger, useValue: { debug: jest.fn(), error: jest.fn() } },
             { provide: FeatureFlagService, useValue: mockFeatureFlagService },
          ],
       }).compile();

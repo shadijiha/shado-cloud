@@ -7,7 +7,7 @@ import path from "path";
 import { type User } from "./../models/user";
 import archiver from "archiver";
 import extract from "extract-zip";
-import { LoggerToDb } from "./../logging";
+import { AppLogger } from "./../logging";
 import { UploadedFile } from "./../models/uploadedFile";
 import { In, Like, Repository } from "typeorm";
 import { SearchStat } from "./../models/stats/searchStat";
@@ -24,7 +24,7 @@ export class DirectoriesService {
       @Inject(forwardRef(() => FilesService)) private readonly fileService: FilesService,
       @InjectRepository(UploadedFile) private readonly uploadedFileRepo: Repository<UploadedFile>,
       @InjectRepository(SearchStat) private readonly searchStatRepo: Repository<SearchStat>,
-      @Inject() private readonly logger: LoggerToDb,
+      @Inject() private readonly logger: AppLogger,
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly tieredStorage: TieredStorageService,

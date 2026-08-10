@@ -14,7 +14,7 @@ import { getUserIdFromRequest, REDIS_CACHE } from "src/util";
 import { FilesService } from "./files.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "src/config/config.validator";
-import { LoggerToDb } from "src/logging";
+import { Logger } from "@nestjs/common";
 import type Redis from "ioredis";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
@@ -29,9 +29,10 @@ export class ThumbnailCacheInterceptor implements NestInterceptor {
    public static readonly CachedFilesRedisNamespace = "thumbnail";   // This is prefixed to all cached files in this class
    private static readonly CachedFileTTLSeconds = 60 * 60 * 24 * 30; // 30 days TTL for cached thumbnails
 
+   private readonly logger = new Logger(ThumbnailCacheInterceptor.name);
+
    constructor(
       @Inject(REDIS_CACHE) private readonly cache: Redis,
-      private readonly logger: LoggerToDb,
       private readonly featureFlagService: FeatureFlagService,
    ) {}
 

@@ -1,9 +1,7 @@
-import { Inject, Injectable, HttpException, HttpStatus, MessageEvent } from "@nestjs/common";
-import { InjectDataSource, InjectEntityManager, InjectRepository } from "@nestjs/typeorm";
+import { Inject, Injectable, HttpException, HttpStatus, MessageEvent, Logger } from "@nestjs/common";
+import { InjectDataSource, InjectEntityManager } from "@nestjs/typeorm";
 import { exec } from "child_process";
-import { LoggerToDb } from "../logging";
-import { Log } from "../models/log";
-import { DataSource, EntityManager, In, Repository } from "typeorm";
+import { DataSource, EntityManager } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
 import { promisify } from "util";
@@ -23,9 +21,9 @@ import { CONFIG_FILE_NAME } from "src/config/config.loader";
 export class AdminService {
 
 
+   private readonly logger = new Logger(AdminService.name);
+
    public constructor(
-      @InjectRepository(Log) private readonly logRepo: Repository<Log>,
-      @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
       @InjectDataSource() private readonly dataSource: DataSource,
@@ -33,22 +31,6 @@ export class AdminService {
       @Inject() private readonly fs: AbstractFileSystem,
       @Inject() private readonly fileService: FilesService,
    ) { }
-
-   /**
-    * @returns Returns all logs in the database
-    */
-   public async all(types?: string[]) {
-      const where: any = types?.length ? { type: In(types) } : {};
-      return await this.logRepo.find({ where, relations: ["user"], order: { created_at: "DESC" } });
-   }
-
-   /**
-    * Deletes Logs by their ids
-    * @param ids
-    */
-   public async deleteByIds(ids: number[]) {
-      await this.logRepo.delete(ids);
-   }
 
    /**
     * Database admin methods

@@ -1,8 +1,7 @@
-import { ForbiddenException, Injectable, NestMiddleware, Optional } from "@nestjs/common";
+import { ForbiddenException, Injectable, NestMiddleware, Optional, Logger } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
-import { LoggerToDb } from "src/logging";
 import { normalizeIp, resolveClientIp } from "./client-ip.util";
 
 /**
@@ -12,9 +11,10 @@ import { normalizeIp, resolveClientIp } from "./client-ip.util";
  */
 @Injectable()
 export class TrustedIpMiddleware implements NestMiddleware {
+   private readonly logger = new Logger(TrustedIpMiddleware.name);
+
    constructor(
       @Optional() private readonly featureFlagService: FeatureFlagService,
-      @Optional() private readonly logger: LoggerToDb,
    ) {}
 
    async use(req: Request, res: Response, next: NextFunction) {
@@ -41,7 +41,7 @@ export class TrustedIpMiddleware implements NestMiddleware {
       if (isAllowListed) {
          next();
       } else {
-         if (this.logger) void this.logger.debug(`Refused connection from ${ip}`);
+         void this.logger.debug(`Refused connection from ${ip}`);
          throw new ForbiddenException("Access is allowed only from an allow-listed IP");
       }
    }

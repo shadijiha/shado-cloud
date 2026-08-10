@@ -17,9 +17,7 @@ import { CORPMiddleware } from "./corp.middleware";
 import { CsrfMiddleware } from "./csrf.middleware";
 import { TrafficMiddleware } from "./traffic.middleware";
 import { TrafficService } from "./traffic.service";
-import { LoggerToDb } from "./logging";
-import { Log } from "./models/log";
-import { DataSource } from "typeorm";
+import { AppLogger } from "./logging";
 import { AbstractFileSystem } from "./file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "./file-system/file-system.service";
 import { InstrumentedFileSystemService } from "./file-system/instrumented-file-system.service";
@@ -61,21 +59,11 @@ import { GoogleBackupModule } from "./replication/google-backup.module";
    ],
    providers: [
       {
-         provide: LoggerToDb,
+         provide: AppLogger,
          scope: Scope.TRANSIENT,
-         inject: [DataSource, INQUIRER, FeatureFlagService, ConfigService],
-         useFactory: (
-            dataSource: DataSource,
-            parentClass: object,
-            featureFlagService: FeatureFlagService,
-            config: ConfigService<EnvVariables>,
-         ) => {
-            return new LoggerToDb(
-               parentClass?.constructor.name ?? "UnknownSource",
-               dataSource.getRepository(Log),
-               featureFlagService,
-               config,
-            );
+         inject: [INQUIRER, ConfigService],
+         useFactory: (parentClass: object, config: ConfigService<EnvVariables>) => {
+            return new AppLogger(parentClass?.constructor.name ?? "UnknownSource", config);
          },
       },
       {
@@ -103,7 +91,7 @@ import { GoogleBackupModule } from "./replication/google-backup.module";
       ReplicaLinkRegistry,
       ReplicationGateway,
    ],
-   exports: [LoggerToDb, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, TieredStorageService, ClientsModule, ReplicaLinkRegistry],
+   exports: [AppLogger, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, TieredStorageService, ClientsModule, ReplicaLinkRegistry],
 })
 export class GlobalUtilityModule { }
 

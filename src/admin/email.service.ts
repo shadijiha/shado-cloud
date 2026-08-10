@@ -3,7 +3,6 @@ import { ClientProxy } from "@nestjs/microservices";
 import { ConfigService } from "@nestjs/config";
 import { firstValueFrom, timeout } from "rxjs";
 import { EnvVariables } from "../config/config.validator";
-import { LoggerToDb } from "../logging";
 import { AUTH_SERVICE } from "../auth/auth.constants";
 
 /**

@@ -1,7 +1,7 @@
 import { DirectoriesService } from "src/directories/directories.service";
 import { AuthService } from "src/auth/auth.service";
 import { FilesService } from "src/files/files.service";
-import { LoggerToDb } from "src/logging";
+import { AppLogger } from "src/logging";
 import { ConfigService } from "@nestjs/config";
 import { TieredStorageService } from "src/file-system/tiered-storage.service";
 import { AbstractFileSystem, Dirent, State } from "src/file-system/abstract-file-system.interface";
@@ -14,7 +14,7 @@ describe("DirectoriesService.list", () => {
    let service: DirectoriesService;
    let fileService: jest.Mocked<Pick<FilesService, "absolutePath" | "isOwner" | "getUserRootPath" | "info">>;
    let fs: jest.Mocked<Pick<AbstractFileSystem, "readdirSync" | "statSync">>;
-   let logger: jest.Mocked<Pick<LoggerToDb, "error">>;
+   let logger: jest.Mocked<Pick<AppLogger, "error">>;
 
    beforeEach(() => {
       fileService = {
@@ -36,14 +36,14 @@ describe("DirectoriesService.list", () => {
 
       logger = {
          error: jest.fn(),
-      } as unknown as jest.Mocked<Pick<LoggerToDb, "error">>;
+      } as unknown as jest.Mocked<Pick<AppLogger, "error">>;
 
       service = new DirectoriesService(
          {} as AuthService,
          fileService as unknown as FilesService,
          {} as Repository<UploadedFile>,
          {} as Repository<SearchStat>,
-         logger as unknown as LoggerToDb,
+         logger as unknown as AppLogger,
          fs as unknown as AbstractFileSystem,
          { get: jest.fn() } as unknown as ConfigService<EnvVariables, false>,
          { removeColdData: jest.fn().mockResolvedValue(undefined) } as unknown as TieredStorageService,

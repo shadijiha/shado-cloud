@@ -29,8 +29,6 @@ import { Observable } from "rxjs";
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ServiceKeyGuard } from "src/auth/service-key.guard";
 import { ApiBody, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { LoggerToDb } from "src/logging";
-import { Log } from "src/models/log";
 import { AdminService } from "./admin.service";
 import { AdminGuard } from "./admin.strategy";
 import { ConfigService } from "@nestjs/config";
@@ -57,7 +55,6 @@ import { isStepUpScope, STEP_UP_TTL_SECONDS } from "./step-up.constants";
 export class AdminController {
    constructor(
       private readonly adminService: AdminService,
-      private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
       private readonly featureFlagService: FeatureFlagService,
       private readonly authService: AuthService,
@@ -87,56 +84,6 @@ export class AdminController {
    @UseGuards(JwtAuthGuard, AdminGuard)
    public evacuateColdDrive(@Param("name") name: string) {
       return this.tieredStorage.evacuateDrive(name);
-   }
-
-   @Get("logs")
-   @ApiResponse({ type: [Log] })
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   async logs(@Query("type") type?: string) {
-      try {
-         const types = type ? type.split(",") : undefined;
-         return await this.adminService.all(types);
-      } catch (e) {
-         this.logger.logException(e as Error);
-         return [];
-      }
-   }
-
-   @Get("logInfo")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   async logInfo() {
-      this.logger.log("This is a debug log to test logging");
-   }
-
-   @Delete("delete")
-   @UseGuards(JwtAuthGuard, AdminGuard)
-   @ApiBody({
-      schema: {
-         type: "object",
-         properties: {
-            ids: {
-               type: "array",
-               items: {
-                  type: "string",
-               },
-               description: "An array of ids of the logs you want to delete",
-            },
-         },
-      },
-   })
-   public delete(@Body() body: { ids: string[] }) {
-      if (!Array.isArray(body.ids)) {
-         throw new HttpException("The 'ids' field must be a non-empty array.", HttpStatus.BAD_REQUEST);
-      }
-
-      let ids: number[] = body.ids.map((id) => parseInt(id)).filter((id) => !isNaN(id));
-      if (ids.length == 0) {
-         throw new HttpException("Invalid ids", HttpStatus.BAD_REQUEST);
-      }
-
-      this.adminService.deleteByIds(ids).catch((e) => {
-         this.logger.logException(e);
-      });
    }
 
    /**

@@ -1,8 +1,7 @@
-import { Injectable, Inject, OnModuleInit } from "@nestjs/common";
+import { Injectable, Inject, OnModuleInit, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { spawn } from "child_process";
 import { Subject } from "rxjs";
-import { LoggerToDb } from "src/logging";
 import { EnvVariables } from "src/config/config.validator";
 import { EmailService } from "./email.service";
 import { FeatureFlagService } from "./feature-flag.service";
@@ -91,9 +90,10 @@ export class DeploymentService implements OnModuleInit {
    private currentProcess: ReturnType<typeof spawn> | null = null;
    private cancelled = false;
 
+   private readonly logger = new Logger(DeploymentService.name);
+
    constructor(
       private readonly config: ConfigService<EnvVariables>,
-      @Inject() private readonly logger: LoggerToDb,
       @Inject() private readonly emailService: EmailService,
       @Inject() private readonly featureFlagService: FeatureFlagService,
       @Inject(REDIS_CACHE) private readonly redis: Redis,

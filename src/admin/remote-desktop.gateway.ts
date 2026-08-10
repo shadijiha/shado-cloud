@@ -1,5 +1,5 @@
 import {
-   Inject,
+   Logger,
 } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import {
@@ -15,7 +15,6 @@ import { promisify } from "util";
 import { AuthService } from "../auth/auth.service";
 import { ConfigService } from "@nestjs/config";
 import { EnvVariables } from "../config/config.validator";
-import { LoggerToDb } from "../logging";
 import { DisplayStrategy, DisplayStrategyFactory } from "./display-strategy";
 import { FeatureFlagService } from "./feature-flag.service";
 import { REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY } from "./remote.constants";
@@ -51,9 +50,10 @@ export class RemoteDesktopGateway implements OnGatewayConnection, OnGatewayDisco
    /** Maps connected socket → owning shadoUserId, for grant expiry sweeps. */
    private readonly clientUsers = new Map<string, { userId: string; socket: Socket }>();
 
+   private readonly logger = new Logger(RemoteDesktopGateway.name);
+
    constructor(
       private authService: AuthService,
-      @Inject() private readonly logger: LoggerToDb,
       private readonly featureFlags: FeatureFlagService,
    ) {
       this.display = DisplayStrategyFactory.create();

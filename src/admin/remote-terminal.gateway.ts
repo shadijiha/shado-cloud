@@ -1,4 +1,4 @@
-import { Inject } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import {
    WebSocketGateway,
@@ -13,7 +13,6 @@ import { Server, Socket } from "socket.io";
 import * as os from "os";
 import * as fs from "fs";
 import { AuthService } from "../auth/auth.service";
-import { LoggerToDb } from "../logging";
 import { FeatureFlagService } from "./feature-flag.service";
 import { REMOTE_FLAG_NAMESPACE, REMOTE_FLAG_KEY } from "./remote.constants";
 
@@ -65,9 +64,10 @@ export class RemoteTerminalGateway implements OnGatewayConnection, OnGatewayDisc
    /** One PTY shell per connected admin socket, tagged with the owning user. */
    private readonly sessions = new Map<string, { term: IPty; userId: string; socket: Socket }>();
 
+   private readonly logger = new Logger(RemoteTerminalGateway.name);
+
    constructor(
       private authService: AuthService,
-      @Inject() private readonly logger: LoggerToDb,
       private readonly featureFlags: FeatureFlagService,
    ) {
       if (!pty) {

@@ -20,7 +20,7 @@ import {
 import { Observable } from "rxjs";
 import { JwtAuthGuard } from "src/auth/auth.guard";
 import { ApiParam, ApiTags } from "@nestjs/swagger";
-import { LoggerToDb } from "src/logging";
+import { Logger } from "@nestjs/common";
 import { AdminGuard } from "./admin.strategy";
 import crypto from "crypto";
 import { ConfigService } from "@nestjs/config";
@@ -34,9 +34,10 @@ import * as fs from "fs";
 @Controller("admin")
 @ApiTags("Deployment")
 export class DeploymentController {
+   private readonly logger = new Logger(DeploymentController.name);
+
    constructor(
       private readonly deploymentService: DeploymentService,
-      private readonly logger: LoggerToDb,
       private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly abstractFs: AbstractFileSystem,
    ) {}

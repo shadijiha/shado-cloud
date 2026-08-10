@@ -29,7 +29,7 @@ export class FeatureFlagService {
 
    private readonly eventListeners: Record<string, { listenerId: string, listener: FeatureFlagEventListener }[]> = {};
 
-   // Plain logger (not LoggerToDb) — LoggerToDb depends on FeatureFlagService, so injecting
+   // Plain logger (not AppLogger) — AppLogger depends on FeatureFlagService, so injecting
    // it here would create a circular dependency.
    private readonly logger = new Logger(FeatureFlagService.name);
 

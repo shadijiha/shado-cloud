@@ -1,9 +1,7 @@
 import { Test, type TestingModule } from "@nestjs/testing";
 import { AdminService } from "src/admin/admin.service";
 import { getDataSourceToken, getEntityManagerToken, getRepositoryToken } from "@nestjs/typeorm";
-import { Log } from "src/models/log";
-import { type Repository } from "typeorm";
-import { LoggerToDb } from "src/logging";
+import { AppLogger } from "src/logging";
 import { ConfigService } from "@nestjs/config";
 import { exec } from "child_process";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
@@ -17,8 +15,7 @@ jest.mock("child_process", () => ({
 
 describe("AdminService", () => {
    let service: AdminService;
-   let logRepo: Repository<Log>;
-   let logger: LoggerToDb;
+   let logger: AppLogger;
    let abstractFs: AbstractFileSystem;
 
    const sendMailMock = jest.fn();
@@ -28,14 +25,7 @@ describe("AdminService", () => {
          providers: [
             AdminService,
             {
-               provide: getRepositoryToken(Log),
-               useValue: {
-                  find: jest.fn(),
-                  delete: jest.fn(),
-               },
-            },
-            {
-               provide: LoggerToDb,
+               provide: AppLogger,
                useValue: {
                   log: jest.fn(),
                   error: jest.fn(),
@@ -136,45 +126,17 @@ describe("AdminService", () => {
       }).compile();
 
       service = module.get<AdminService>(AdminService);
-      logRepo = module.get<Repository<Log>>(getRepositoryToken(Log));
-      logger = module.get<LoggerToDb>(LoggerToDb);
+      // AdminService now uses a private `new Logger()`; spy on that instance so assertions
+      // work and console output stays quiet.
+      logger = (service as any).logger;
+      jest.spyOn(logger, "error").mockImplementation();
+      jest.spyOn(logger, "log").mockImplementation();
+      jest.spyOn(logger, "warn").mockImplementation();
       abstractFs = module.get<AbstractFileSystem>(AbstractFileSystem);
    });
 
    afterEach(() => {
       jest.clearAllMocks();
-   });
-
-   describe("all", () => {
-      it("should return logs sorted by created_at in descending order", async () => {
-         // Arrange: Mock data (DB returns pre-sorted via order clause)
-         const logs = [
-            { created_at: new Date("2024-01-01"), user: { id: 2 } } as Log,
-            { created_at: new Date("2023-01-01"), user: { id: 1 } } as Log,
-         ];
-         jest.spyOn(logRepo, "find").mockResolvedValue(logs);
-
-         // Act: Call the method
-         const result = await service.all();
-
-         // Assert: Check that find was called with order and result is returned as-is
-         expect(logRepo.find).toHaveBeenCalledWith({ where: {}, relations: ["user"], order: { created_at: "DESC" } });
-         expect(result).toEqual(logs);
-      });
-   });
-
-   describe("deleteByIds", () => {
-      it("should delete logs by their IDs", async () => {
-         // Arrange: Prepare input
-         const idsToDelete = [1, 2, 3];
-         const deleteSpy = jest.spyOn(logRepo, "delete").mockResolvedValue({ affected: 3, raw: [] });
-
-         // Act: Call the delete method
-         await service.deleteByIds(idsToDelete);
-
-         // Assert: Verify that delete was called with the correct argument
-         expect(deleteSpy).toHaveBeenCalledWith(idsToDelete);
-      });
    });
 
    describe("generateServerSetupBackup", () => {

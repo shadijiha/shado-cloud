@@ -1,10 +1,9 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { EnvVariables } from "src/config/config.validator";
 import { google } from "googleapis";
 import { AdminService } from "src/admin/admin.service";
-import { LoggerToDb } from "src/logging";
 import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 
@@ -18,10 +17,11 @@ const GOOGLE_DRIVE_FOLDER_ID = "1cZIPqmwJkh9gP4DvavzwwJMQ9bBpKWvU";
  */
 @Injectable()
 export class GoogleDriveBackupService {
+    private readonly logger = new Logger(GoogleDriveBackupService.name);
+
     constructor(
         private readonly config: ConfigService<EnvVariables>,
         @Inject() private readonly adminService: AdminService,
-        @Inject() private readonly logger: LoggerToDb,
         @Inject() private readonly featureFlagService: FeatureFlagService,
     ) {}
 
