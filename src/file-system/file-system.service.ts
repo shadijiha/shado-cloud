@@ -6,11 +6,14 @@ import {
    type MakeDirectoryOptions,
    type PathLike,
    type State,
+   StatsFs,
+   symlink,
 } from "./abstract-file-system.interface";
 import { type Readable, type Writable } from "stream";
 
 @Injectable()
 export class NodeFileSystemService extends AbstractFileSystem {
+
    public lstatSync(path: string): State {
       return fs.lstatSync(path);
    }
@@ -66,5 +69,25 @@ export class NodeFileSystemService extends AbstractFileSystem {
 
    public existsSync(path: string): boolean {
       return fs.existsSync(path);
+   }
+
+   public copyFileSync(src: string, dest: string): void {
+      return fs.copyFileSync(src, dest);
+   }
+
+   public symlinkSync(target: string, path: string, type?: symlink.Type | null): void {
+      return fs.symlinkSync(target, path, type);
+   }
+
+   public rmSync(path: string, options?: { recursive?: boolean; force?: boolean; }): void {
+      return fs.rmSync(path, options);
+   }
+
+   public readlinkSync(path: string, options?: BufferEncoding): string {
+      return fs.readlinkSync(path, options);
+   }
+
+   public statfsSync(path: string): StatsFs {
+      return fs.statfsSync(path);
    }
 }

@@ -38,7 +38,9 @@ async function bootstrap() {
    // structured JSON line to stdout, which Vector tails and ships to VictoriaLogs. Application
    // code additionally injects AppLogger via DI (which carries the per-class context); this
    // standalone instance handles framework-level logs and doesn't depend on the DI container.
-   app.useLogger(new AppLogger("Nest", envConfig));
+   if (!isDev(envConfig)) {
+      app.useLogger(new AppLogger("Nest", envConfig));
+   }
 
    const config = new DocumentBuilder()
       .setTitle("Shado Cloud")

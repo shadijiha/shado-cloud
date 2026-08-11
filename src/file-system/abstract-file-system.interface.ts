@@ -196,6 +196,27 @@ export interface Dirent {
    name: string;
 }
 
+export namespace symlink {
+   export type Type = "dir" | "file" | "junction";
+}
+
+export interface StatsFs {
+   /** Type of file system. */
+   type: number;
+   /**  Optimal transfer block size. */
+   bsize: number;
+   /**  Total data blocks in file system. */
+   blocks: number;
+   /** Free blocks in file system. */
+   bfree: number;
+   /** Available blocks for unprivileged users */
+   bavail: number;
+   /** Total file nodes in file system. */
+   files: number;
+   /** Free file nodes in file system. */
+   ffree: number;
+}
+
 export abstract class AbstractFileSystem {
    /**
     * Synchronously writes data to a file.
@@ -320,4 +341,77 @@ export abstract class AbstractFileSystem {
     * @throws Will throw an error if the symbolic link or file cannot be stat-ed.
     */
    public abstract lstatSync(path: string): State;
+
+   /**
+    * Synchronously copies `src` to `dest`. By default, `dest` is overwritten if it
+    * already exists. Returns `undefined`. Node.js makes no guarantees about the
+    * atomicity of the copy operation. If an error occurs after the destination file
+    * has been opened for writing, Node.js will attempt to remove the destination.
+    *
+    * `mode` is an optional integer that specifies the behavior
+    * of the copy operation. It is possible to create a mask consisting of the bitwise
+    * OR of two or more values (e.g.`fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE`).
+    *
+    * * `fs.constants.COPYFILE_EXCL`: The copy operation will fail if `dest` already
+    * exists.
+    * * `fs.constants.COPYFILE_FICLONE`: The copy operation will attempt to create a
+    * copy-on-write reflink. If the platform does not support copy-on-write, then a
+    * fallback copy mechanism is used.
+    * * `fs.constants.COPYFILE_FICLONE_FORCE`: The copy operation will attempt to
+    * create a copy-on-write reflink. If the platform does not support
+    * copy-on-write, then the operation will fail.
+    *
+    * ```js
+    * import { copyFileSync, constants } from 'node:fs';
+    *
+    * // destination.txt will be created or overwritten by default.
+    * copyFileSync('source.txt', 'destination.txt');
+    * console.log('source.txt was copied to destination.txt');
+    *
+    * // By using COPYFILE_EXCL, the operation will fail if destination.txt exists.
+    * copyFileSync('source.txt', 'destination.txt', constants.COPYFILE_EXCL);
+    * ```
+    * @since v8.5.0
+    * @param src source filename to copy
+    * @param dest destination filename of the copy operation
+    * @param [mode=0] modifiers for copy operation.
+    */
+   public abstract copyFileSync(src: string, dest: string): void;
+
+   /**
+    * Returns `undefined`.
+    *
+    * For detailed information, see the documentation of the asynchronous version of
+    * this API: {@link symlink}.
+    * @since v0.1.31
+    * @param [type='null']
+    */
+   public abstract symlinkSync(target: string, path: string, type?: symlink.Type | null): void;
+
+   /**
+    * Synchronously removes files and directories (modeled on the standard POSIX `rm` utility). Returns `undefined`.
+    */
+   public abstract rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
+
+   /**
+    * Returns the symbolic link's string value.
+    *
+    * See the POSIX [`readlink(2)`](http://man7.org/linux/man-pages/man2/readlink.2.html) documentation for more details.
+    *
+    * The optional `options` argument can be a string specifying an encoding, or an
+    * object with an `encoding` property specifying the character encoding to use for
+    * the link path returned. If the `encoding` is set to `'buffer'`,
+    * the link path returned will be passed as a `Buffer` object.
+    */
+   public abstract readlinkSync(path: string, options?: BufferEncoding): string;
+
+   /**
+    * Synchronous [`statfs(2)`](http://man7.org/linux/man-pages/man2/statfs.2.html). Returns information about the mounted file system which
+    * contains `path`.
+    *
+    * In case of an error, the `err.code` will be one of `Common System Errors`.
+    * @since v19.6.0, v18.15.0
+    * @param path A path to an existing file or directory on the file system to be queried.
+    */
+   public abstract statfsSync(path: string): StatsFs;
 }

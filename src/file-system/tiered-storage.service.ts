@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
-import * as fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import type Redis from "ioredis";
@@ -10,6 +9,8 @@ import { FeatureFlagService } from "src/admin/feature-flag.service";
 import { FeatureFlagNamespace } from "src/models/admin/featureFlag";
 import { REDIS_CACHE } from "src/util";
 import { MetricsPusherService } from "../metrics-pusher.service";
+import { Dirent, State } from "./abstract-file-system.interface";
+import { NodeFileSystemService } from "./file-system.service";
 
 /**
  * Tiered storage via symbolic links.
@@ -53,6 +54,7 @@ export class TieredStorageService {
       @Inject() private readonly config: ConfigService<EnvVariables>,
       @Inject() private readonly featureFlag: FeatureFlagService,
       @Inject(REDIS_CACHE) private readonly redis: Redis,
+      @Inject() private readonly fs: NodeFileSystemService,
       @Optional() @Inject(MetricsPusherService) private readonly metrics?: MetricsPusherService,
    ) {}
 
@@ -64,6 +66,9 @@ export class TieredStorageService {
    public async demoteStaleFiles(): Promise<void> {
       if (this.demoting) return;
       if (!(await this.featureFlag.isFeatureFlagEnabled(FeatureFlagNamespace.Files, TieredStorageService.DEMOTION_FLAG))) return;
+
+
+      this.logger.log("Starting tiered-storage demotion sweep (stale files -> cold drive)");
 
       const cloudDir = this.config.get("this-service.cloud-dir", { infer: true });
       if (!cloudDir) {
@@ -88,7 +93,7 @@ export class TieredStorageService {
       try {
          for await (const file of this.walkRealFiles(cloudDir)) {
             try {
-               const stat = await fs.promises.stat(file); // real file (symlinks are skipped by the walk)
+               const stat = this.fs.statSync(file); // real file (symlinks are skipped by the walk)
                if (stat.atimeMs > cutoff) continue;                                  // accessed recently
 
                if (stat.size < TieredStorageService.MIN_DEMOTE_SIZE_BYTES) {
@@ -130,7 +135,7 @@ export class TieredStorageService {
    private async demote(absPath: string, cloudDir: string, coldRoot: string): Promise<void> {
       // Defensive: never demote a path that is already a symlink (handles TOCTOU between
       // the directory walk and this call, and any re-run).
-      const lst = await fs.promises.lstat(absPath).catch(() => null);
+      const lst = this.fs.lstatSync(absPath);
       if (!lst || lst.isSymbolicLink()) return;
 
       const rel = path.relative(cloudDir, absPath);
@@ -139,15 +144,15 @@ export class TieredStorageService {
       // can never collide and cause EEXIST.
       const tmpLink = `${absPath}.tiering-${randomUUID()}`;
 
-      await fs.promises.mkdir(path.dirname(coldPath), { recursive: true });
-      await fs.promises.copyFile(absPath, coldPath); // copyFile works across devices
+      this.fs.mkdirSync(path.dirname(coldPath), { recursive: true });
+      this.fs.copyFileSync(absPath, coldPath); // copyFile works across devices
 
       try {
-         await fs.promises.symlink(coldPath, tmpLink);
-         await fs.promises.rename(tmpLink, absPath); // atomic: replaces the real file with the symlink
+         this.fs.symlinkSync(coldPath, tmpLink);
+         this.fs.renameSync(tmpLink, absPath); // atomic: replaces the real file with the symlink
       } catch (e) {
-         await fs.promises.rm(tmpLink, { force: true }).catch(() => undefined);
-         await fs.promises.rm(coldPath, { force: true }).catch(() => undefined);
+         this.fs.rmSync(tmpLink, { force: true });
+         this.fs.rmSync(coldPath, { force: true });
          throw e;
       }
    }
@@ -171,9 +176,9 @@ export class TieredStorageService {
       if (this.promoting.has(path_)) return; // already promoting this file
 
       // Cheapest check first: only cold symlinks are promotable — avoids a flag lookup on hot files.
-      let stat: import("fs").Stats;
+      let stat: State;
       try {
-         stat = await fs.promises.lstat(path_);
+         stat = await this.fs.lstatSync(path_);
       } catch {
          return;
       }
@@ -207,25 +212,25 @@ export class TieredStorageService {
     * the bytes promoted, or null if `path` wasn't a cold symlink (already promoted/deleted).
     */
    private async promote(path_: string): Promise<number | null> {
-      const stat = await fs.promises.lstat(path_).catch(() => null);
+      const stat = this.fs.lstatSync(path_);
       if (!stat || !stat.isSymbolicLink()) return null; // not a cold file (anymore)
 
-      const target = await fs.promises.readlink(path_);
+      const target = this.fs.readlinkSync(path_);
       if (!this.isUnderColdMount(target)) return null;
 
-      const size = (await fs.promises.stat(target)).size; // size of the cold blob
+      const size = this.fs.statSync(target).size; // size of the cold blob
       const tmp = `${path_}.promoting-${process.pid}-${Date.now()}`;
 
       try {
-         await fs.promises.copyFile(target, tmp);   // cold -> main (works across devices)
-         await fs.promises.rename(tmp, path_);       // atomic: replace symlink with the real file
+         this.fs.copyFileSync(target, tmp);   // cold -> main (works across devices)
+         this.fs.renameSync(tmp, path_);       // atomic: replace symlink with the real file
       } catch (e) {
-         await fs.promises.rm(tmp, { force: true }).catch(() => undefined);
+         this.fs.rmSync(tmp, { force: true });
          throw e;
       }
 
       // Real file is now on the main drive; drop the cold blob (GC would also reclaim it).
-      await fs.promises.rm(target, { force: true }).catch(() => undefined);
+      this.fs.rmSync(target, { force: true });
       return size;
    }
 
@@ -253,7 +258,7 @@ export class TieredStorageService {
       //    it never assumes the cold blob mirrors the file's current path.
       for await (const link of this.walkSymlinks(cloudDir)) {
          try {
-            const target = path.resolve(await fs.promises.readlink(link));
+            const target = path.resolve(await this.fs.readlinkSync(link));
             if (!target.startsWith(coldRoot + path.sep)) continue; // points to a different drive
             const size = await this.promote(link); // copy back + replace symlink + drop the blob
             if (size !== null) {
@@ -270,7 +275,7 @@ export class TieredStorageService {
       //    remove it so the drive ends up empty and can be ejected.
       for await (const blob of this.walkRealFiles(coldRoot)) {
          try {
-            await fs.promises.rm(blob, { force: true });
+            this.fs.rmSync(blob, { force: true });
             result.orphansRemoved++;
          } catch (e) {
             result.errors++;
@@ -317,7 +322,7 @@ export class TieredStorageService {
          let coldBytes = 0;
          for await (const coldFile of this.walkRealFiles(coldRoot)) {
             try {
-               coldBytes += (await fs.promises.stat(coldFile)).size;
+               coldBytes += this.fs.statSync(coldFile).size;
                coldFileCount++;
             } catch {
                // file vanished mid-walk — ignore
@@ -328,7 +333,7 @@ export class TieredStorageService {
          let total = 0;
          let free = 0;
          try {
-            const st = await fs.promises.statfs(coldRoot);
+            const st = this.fs.statfsSync(coldRoot);
             total = st.blocks * st.bsize;
             free = st.bavail * st.bsize;
          } catch {
@@ -356,9 +361,9 @@ export class TieredStorageService {
 
    /** Recursively yields real (non-symlink, non-hidden) files under `dir`. */
    private async *walkRealFiles(dir: string): AsyncGenerator<string> {
-      let entries: fs.Dirent[];
+      let entries: Dirent[];
       try {
-         entries = await fs.promises.readdir(dir, { withFileTypes: true });
+         entries = this.fs.readdirSync(dir);
       } catch {
          return; // unreadable / missing directory
       }
@@ -379,9 +384,9 @@ export class TieredStorageService {
 
    /** Recursively yields every symlink (non-hidden) under `dir`. */
    private async *walkSymlinks(dir: string): AsyncGenerator<string> {
-      let entries: fs.Dirent[];
+      let entries: Dirent[];
       try {
-         entries = await fs.promises.readdir(dir, { withFileTypes: true });
+         entries = this.fs.readdirSync(dir);
       } catch {
          return;
       }
@@ -408,7 +413,7 @@ export class TieredStorageService {
       let best: { name: string; free: number } | null = null;
       for (const name of drives) {
          try {
-            const stats = await fs.promises.statfs(this.mountFor(name));
+            const stats = this.fs.statfsSync(this.mountFor(name));
             const free = stats.bavail * stats.bsize;
             if (!best || free > best.free) {
                best = { name, free };
@@ -441,9 +446,9 @@ export class TieredStorageService {
    /** True if the path is a tiered file: a symlink whose target lives on a cold drive. */
    public isColdFile(absPath: string): boolean {
       try {
-         const st = fs.lstatSync(absPath);
+         const st = this.fs.lstatSync(absPath);
          if (!st.isSymbolicLink()) return false;
-         return this.isUnderColdMount(fs.readlinkSync(absPath));
+         return this.isUnderColdMount(this.fs.readlinkSync(absPath));
       } catch {
          return false;
       }
@@ -456,27 +461,27 @@ export class TieredStorageService {
     * cold blob of every cold symlink underneath.
     */
    public async removeColdData(absPath: string): Promise<void> {
-      let st: fs.Stats;
+      let st: State;
       try {
-         st = await fs.promises.lstat(absPath);
+         st = this.fs.lstatSync(absPath);
       } catch {
          return; // already gone
       }
 
       if (st.isSymbolicLink()) {
          try {
-            const target = await fs.promises.readlink(absPath);
+            const target = this.fs.readlinkSync(absPath);
             if (this.isUnderColdMount(target)) {
-               await fs.promises.rm(target, { force: true });
+               this.fs.rmSync(target, { force: true });
                this.logger.debug(`delete file ${target} (linked to ${absPath}) from cold storage`);
             }
          } catch (e) {
             this.logger.error(`Failed to remove cold data for ${absPath}: ${(e as Error).message}`);
          }
       } else if (st.isDirectory()) {
-         let entries: fs.Dirent[];
+         let entries: Dirent[];
          try {
-            entries = await fs.promises.readdir(absPath, { withFileTypes: true });
+            entries = this.fs.readdirSync(absPath);
          } catch {
             return;
          }
@@ -490,9 +495,9 @@ export class TieredStorageService {
    public coldStats(dir: string): { total: number; cold: number } {
       let total = 0;
       let cold = 0;
-      let entries: fs.Dirent[];
+      let entries: Dirent[];
       try {
-         entries = fs.readdirSync(dir, { withFileTypes: true });
+         entries = this.fs.readdirSync(dir);
       } catch {
          return { total, cold };
       }

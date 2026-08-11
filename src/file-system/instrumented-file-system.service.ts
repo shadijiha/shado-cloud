@@ -1,6 +1,8 @@
 import { Injectable, Inject, Optional } from "@nestjs/common";
 import {
    AbstractFileSystem,
+   StatsFs,
+   symlink,
    type Dirent,
    type MakeDirectoryOptions,
    type PathLike,
@@ -18,6 +20,7 @@ import { TieredStorageService } from "./tiered-storage.service";
  */
 @Injectable()
 export class InstrumentedFileSystemService extends AbstractFileSystem {
+
    constructor(
       private readonly inner: NodeFileSystemService,
       @Optional() @Inject(MetricsPusherService) private readonly metrics?: MetricsPusherService,
@@ -108,4 +111,25 @@ export class InstrumentedFileSystemService extends AbstractFileSystem {
 
    statSync(path: string): State { return this.measure("stat", "meta", () => this.inner.statSync(path)); }
    lstatSync(path: string): State { return this.measure("lstat", "meta", () => this.inner.lstatSync(path)); }
+
+   public copyFileSync(src: string, dest: string): void {
+      this.measure("copyFile", "write", () => this.inner.copyFileSync(src, dest));
+      this.tiered?.onAccess(src);
+   }
+
+   public symlinkSync(target: string, path: string, type?: symlink.Type | null): void {
+      this.measure("symlink", "write", () => this.inner.symlinkSync(target, path, type));
+   }
+
+   public rmSync(path: string, options?: { recursive?: boolean; force?: boolean; }): void {
+      this.measure("rm", "write", () => this.tiered?.removeColdData(path) ?? this.inner.rmSync(path, options));
+   }
+
+   public readlinkSync(path: string, options?: BufferEncoding): string {
+      return this.measure("readlink", "meta", () => this.inner.readlinkSync(path, options));
+   }
+
+   public statfsSync(path: string): StatsFs {
+      return this.measure("statfs", "meta", () => this.inner.statfsSync(path));
+   }
 }
