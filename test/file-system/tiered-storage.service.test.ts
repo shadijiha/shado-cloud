@@ -1,13 +1,36 @@
 import { TieredStorageService } from "src/file-system/tiered-storage.service";
-import * as fs from "fs";
+import type { Dirent } from "src/file-system/abstract-file-system.interface";
 
-const dirent = (name: string, isDir = false): fs.Dirent =>
+const dirent = (name: string, isDir = false): Dirent =>
    ({ name, isDirectory: () => isDir, isFile: () => !isDir, isSymbolicLink: () => false } as any);
+
+const symlinkDirent = (name: string): Dirent =>
+   ({ name, isDirectory: () => false, isFile: () => false, isSymbolicLink: () => true } as any);
+
+/**
+ * The service talks to the filesystem through the injected NodeFileSystemService (synchronous
+ * API), not through `fs.promises` — so the double below stands in for that provider. Every cold
+ * operation is gated behind statfsSync() succeeding on the drive mount, which is why that has to
+ * be stubbed even for tests that never touch a cold blob.
+ */
+const makeFsMock = () => ({
+   statSync: jest.fn().mockReturnValue({ atimeMs: Date.now(), size: 0 }),
+   lstatSync: jest.fn().mockReturnValue({ isSymbolicLink: () => false, isDirectory: () => false }),
+   readdirSync: jest.fn().mockReturnValue([]),
+   readlinkSync: jest.fn().mockReturnValue(""),
+   mkdirSync: jest.fn(),
+   copyFileSync: jest.fn(),
+   symlinkSync: jest.fn(),
+   renameSync: jest.fn(),
+   rmSync: jest.fn(),
+   statfsSync: jest.fn().mockReturnValue({ bavail: 1_000_000, bsize: 4096 }),
+});
 
 describe("TieredStorageService", () => {
    let config: { get: jest.Mock };
    let featureFlag: { isFeatureFlagEnabled: jest.Mock };
    let redis: { info: jest.Mock };
+   let fsMock: ReturnType<typeof makeFsMock>;
    let metrics: {
       coldStorageDemotions: number;
       coldStorageBytesMoved: number;
@@ -43,30 +66,29 @@ describe("TieredStorageService", () => {
          coldStorageLastSweepMs: 0, coldStorageLastSweepAt: 0,
          coldStoragePromotions: 0, coldStorageBytesPromoted: 0, coldStoragePromotionErrors: 0,
       };
-      service = new TieredStorageService(config as any, featureFlag as any, redis as any, metrics as any);
-
-      jest.spyOn(fs.promises, "statfs").mockResolvedValue({ bavail: 1_000_000, bsize: 4096 } as any);
-      jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => false } as any);
-      jest.spyOn(fs.promises, "mkdir").mockResolvedValue(undefined as any);
-      jest.spyOn(fs.promises, "copyFile").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "symlink").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "rename").mockResolvedValue(undefined);
-      jest.spyOn(fs.promises, "rm").mockResolvedValue(undefined);
+      fsMock = makeFsMock();
+      service = new TieredStorageService(
+         config as any,
+         featureFlag as any,
+         redis as any,
+         fsMock as any,
+         metrics as any,
+      );
    });
 
    afterEach(() => jest.restoreAllMocks());
 
    describe("demoteStaleFiles", () => {
       it("demotes a stale, large file: copies to cold then atomically replaces it with a symlink", async () => {
-         jest.spyOn(fs.promises, "readdir").mockResolvedValue([dirent("big.bin")] as any);
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ atimeMs: STALE, size: BIG } as any);
+         fsMock.readdirSync.mockReturnValue([dirent("big.bin")]);
+         fsMock.statSync.mockReturnValue({ atimeMs: STALE, size: BIG });
 
          await service.demoteStaleFiles();
 
          const coldPath = "/mnt/coldhdd/cloud-dir/big.bin";
-         expect(fs.promises.copyFile).toHaveBeenCalledWith("/cloud/big.bin", coldPath);
-         expect(fs.promises.symlink).toHaveBeenCalledWith(coldPath, expect.stringContaining("/cloud/big.bin.tiering-"));
-         expect(fs.promises.rename).toHaveBeenCalledWith(expect.stringContaining("/cloud/big.bin.tiering-"), "/cloud/big.bin");
+         expect(fsMock.copyFileSync).toHaveBeenCalledWith("/cloud/big.bin", coldPath);
+         expect(fsMock.symlinkSync).toHaveBeenCalledWith(coldPath, expect.stringContaining("/cloud/big.bin.tiering-"));
+         expect(fsMock.renameSync).toHaveBeenCalledWith(expect.stringContaining("/cloud/big.bin.tiering-"), "/cloud/big.bin");
          expect(metrics.coldStorageDemotions).toBe(1);
          expect(metrics.coldStorageBytesMoved).toBe(BIG);
          expect(metrics.coldStorageDemotionErrors).toBe(0);
@@ -74,50 +96,61 @@ describe("TieredStorageService", () => {
       });
 
       it("skips a recently-accessed file", async () => {
-         jest.spyOn(fs.promises, "readdir").mockResolvedValue([dirent("recent.bin")] as any);
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ atimeMs: FRESH, size: BIG } as any);
+         fsMock.readdirSync.mockReturnValue([dirent("recent.bin")]);
+         fsMock.statSync.mockReturnValue({ atimeMs: FRESH, size: BIG });
 
          await service.demoteStaleFiles();
 
-         expect(fs.promises.copyFile).not.toHaveBeenCalled();
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
          expect(metrics.coldStorageDemotions).toBe(0);
       });
 
       it("skips a stale but small file", async () => {
-         jest.spyOn(fs.promises, "readdir").mockResolvedValue([dirent("tiny.txt")] as any);
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ atimeMs: STALE, size: 100 } as any);
+         fsMock.readdirSync.mockReturnValue([dirent("tiny.txt")]);
+         fsMock.statSync.mockReturnValue({ atimeMs: STALE, size: 100 });
 
          await service.demoteStaleFiles();
 
-         expect(fs.promises.copyFile).not.toHaveBeenCalled();
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
       });
 
       it("does nothing when the tiered_storage flag is disabled", async () => {
          featureFlag.isFeatureFlagEnabled.mockResolvedValue(false);
-         const readdir = jest.spyOn(fs.promises, "readdir").mockResolvedValue([dirent("big.bin")] as any);
+         fsMock.readdirSync.mockReturnValue([dirent("big.bin")]);
 
          await service.demoteStaleFiles();
 
-         expect(readdir).not.toHaveBeenCalled();
-         expect(fs.promises.copyFile).not.toHaveBeenCalled();
+         expect(fsMock.readdirSync).not.toHaveBeenCalled();
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
       });
 
       it("does nothing when no cold drive is configured", async () => {
          (config.get as jest.Mock).mockImplementation((key: string) =>
             key === "this-service.cloud-dir" ? "/cloud" : { drives: [] },
          );
-         jest.spyOn(fs.promises, "readdir").mockResolvedValue([dirent("big.bin")] as any);
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ atimeMs: STALE, size: BIG } as any);
+         fsMock.readdirSync.mockReturnValue([dirent("big.bin")]);
+         fsMock.statSync.mockReturnValue({ atimeMs: STALE, size: BIG });
 
          await service.demoteStaleFiles();
 
-         expect(fs.promises.copyFile).not.toHaveBeenCalled();
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
+      });
+
+      it("skips a cold drive that is not reachable", async () => {
+         fsMock.statfsSync.mockImplementation(() => { throw new Error("ENOENT"); });
+         fsMock.readdirSync.mockReturnValue([dirent("big.bin")]);
+         fsMock.statSync.mockReturnValue({ atimeMs: STALE, size: BIG });
+
+         await service.demoteStaleFiles();
+
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
+         expect(metrics.coldStorageDemotions).toBe(0);
       });
 
       it("counts an error (without aborting) when a demotion fails", async () => {
-         jest.spyOn(fs.promises, "readdir").mockResolvedValue([dirent("big.bin")] as any);
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ atimeMs: STALE, size: BIG } as any);
-         (fs.promises.copyFile as jest.Mock).mockRejectedValue(new Error("disk full"));
+         fsMock.readdirSync.mockReturnValue([dirent("big.bin")]);
+         fsMock.statSync.mockReturnValue({ atimeMs: STALE, size: BIG });
+         fsMock.copyFileSync.mockImplementation(() => { throw new Error("disk full"); });
 
          await service.demoteStaleFiles();
 
@@ -131,52 +164,52 @@ describe("TieredStorageService", () => {
       const promoteOnAccess = (p: string) => (service as any).promoteOnAccess(p) as Promise<void>;
 
       it("promotes a cold file when it is accessed", async () => {
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => true } as any);
-         jest.spyOn(fs.promises, "readlink").mockResolvedValue(COLD);
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 2048 } as any);
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => true, isDirectory: () => false });
+         fsMock.readlinkSync.mockReturnValue(COLD);
+         fsMock.statSync.mockReturnValue({ size: 2048 });
 
          await promoteOnAccess("/cloud/doc.txt");
 
-         expect(fs.promises.copyFile).toHaveBeenCalledWith(COLD, expect.stringContaining("/cloud/doc.txt.promoting-"));
-         expect(fs.promises.rename).toHaveBeenCalledWith(expect.stringContaining("/cloud/doc.txt.promoting-"), "/cloud/doc.txt");
-         expect(fs.promises.rm).toHaveBeenCalledWith(COLD, { force: true });
+         expect(fsMock.copyFileSync).toHaveBeenCalledWith(COLD, expect.stringContaining("/cloud/doc.txt.promoting-"));
+         expect(fsMock.renameSync).toHaveBeenCalledWith(expect.stringContaining("/cloud/doc.txt.promoting-"), "/cloud/doc.txt");
+         expect(fsMock.rmSync).toHaveBeenCalledWith(COLD, { force: true });
          expect(metrics.coldStoragePromotions).toBe(1);
          expect(metrics.coldStorageBytesPromoted).toBe(2048);
       });
 
       it("is a no-op for a hot file (not a symlink) — without even checking the flag", async () => {
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => false } as any);
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => false, isDirectory: () => false });
 
          await promoteOnAccess("/cloud/hot.txt");
 
-         expect(fs.promises.copyFile).not.toHaveBeenCalled();
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
          expect(featureFlag.isFeatureFlagEnabled).not.toHaveBeenCalled();
          expect(metrics.coldStoragePromotions).toBe(0);
       });
 
       it("does not promote a symlink pointing outside cold storage", async () => {
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => true } as any);
-         jest.spyOn(fs.promises, "readlink").mockResolvedValue("/some/other/place/x");
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => true, isDirectory: () => false });
+         fsMock.readlinkSync.mockReturnValue("/some/other/place/x");
 
          await promoteOnAccess("/cloud/link.txt");
 
-         expect(fs.promises.copyFile).not.toHaveBeenCalled();
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
       });
 
       it("does not promote when the promotion flag is disabled", async () => {
          featureFlag.isFeatureFlagEnabled.mockResolvedValue(false);
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => true } as any);
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => true, isDirectory: () => false });
 
          await promoteOnAccess("/cloud/doc.txt");
 
-         expect(fs.promises.copyFile).not.toHaveBeenCalled();
+         expect(fsMock.copyFileSync).not.toHaveBeenCalled();
       });
 
       it("counts a promotion error and never throws", async () => {
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => true } as any);
-         jest.spyOn(fs.promises, "readlink").mockResolvedValue(COLD);
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 10 } as any);
-         (fs.promises.copyFile as jest.Mock).mockRejectedValue(new Error("io error"));
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => true, isDirectory: () => false });
+         fsMock.readlinkSync.mockReturnValue(COLD);
+         fsMock.statSync.mockReturnValue({ size: 10 });
+         fsMock.copyFileSync.mockImplementation(() => { throw new Error("io error"); });
 
          await expect(promoteOnAccess("/cloud/doc.txt")).resolves.toBeUndefined();
 
@@ -187,16 +220,15 @@ describe("TieredStorageService", () => {
 
    describe("evacuateDrive", () => {
       it("migrates referenced cold files back to main and removes orphans", async () => {
-         const link = { name: "ref.bin", isSymbolicLink: () => true, isDirectory: () => false, isFile: () => false };
          // /cloud has a cold symlink; /mnt/coldhdd/cloud-dir has a leftover orphan blob
-         jest.spyOn(fs.promises, "readdir").mockImplementation(async (dir: any) => {
-            if (String(dir) === "/cloud") return [link] as any;
+         fsMock.readdirSync.mockImplementation((dir: any) => {
+            if (String(dir) === "/cloud") return [symlinkDirent("ref.bin")] as any;
             if (String(dir) === "/mnt/coldhdd/cloud-dir") return [dirent("orphan.bin")] as any;
             return [] as any;
          });
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => true } as any);
-         jest.spyOn(fs.promises, "readlink").mockResolvedValue("/mnt/coldhdd/cloud-dir/ref.bin");
-         jest.spyOn(fs.promises, "stat").mockResolvedValue({ size: 100 } as any);
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => true, isDirectory: () => false });
+         fsMock.readlinkSync.mockReturnValue("/mnt/coldhdd/cloud-dir/ref.bin");
+         fsMock.statSync.mockReturnValue({ size: 100 });
 
          const result = await service.evacuateDrive("coldhdd");
 
@@ -204,53 +236,51 @@ describe("TieredStorageService", () => {
          expect(result.orphansRemoved).toBe(1);
          expect(result.errors).toBe(0);
          // referenced file copied back + symlink replaced
-         expect(fs.promises.copyFile).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/ref.bin", expect.stringContaining("/cloud/ref.bin.promoting-"));
+         expect(fsMock.copyFileSync).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/ref.bin", expect.stringContaining("/cloud/ref.bin.promoting-"));
          // leftover orphan blob removed
-         expect(fs.promises.rm).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/orphan.bin", { force: true });
+         expect(fsMock.rmSync).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/orphan.bin", { force: true });
          expect(metrics.coldStoragePromotions).toBe(1);
          expect(metrics.coldStorageBytesPromoted).toBe(100);
       });
 
       it("is a no-op for an unknown (non-configured) drive", async () => {
-         const readdir = jest.spyOn(fs.promises, "readdir");
-
          const result = await service.evacuateDrive("not-a-drive");
 
          expect(result).toEqual({ migrated: 0, bytes: 0, errors: 0, orphansRemoved: 0 });
-         expect(readdir).not.toHaveBeenCalled();
+         expect(fsMock.readdirSync).not.toHaveBeenCalled();
       });
    });
 
    describe("removeColdData", () => {
       it("removes the cold blob backing a cold symlink", async () => {
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => true, isDirectory: () => false } as any);
-         jest.spyOn(fs.promises, "readlink").mockResolvedValue("/mnt/coldhdd/cloud-dir/x.png");
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => true, isDirectory: () => false });
+         fsMock.readlinkSync.mockReturnValue("/mnt/coldhdd/cloud-dir/x.png");
 
          await service.removeColdData("/cloud/x.png");
 
-         expect(fs.promises.rm).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/x.png", { force: true });
+         expect(fsMock.rmSync).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/x.png", { force: true });
       });
 
       it("does nothing for a hot (non-symlink) file", async () => {
-         jest.spyOn(fs.promises, "lstat").mockResolvedValue({ isSymbolicLink: () => false, isDirectory: () => false } as any);
+         fsMock.lstatSync.mockReturnValue({ isSymbolicLink: () => false, isDirectory: () => false });
 
          await service.removeColdData("/cloud/hot.png");
 
-         expect(fs.promises.rm).not.toHaveBeenCalled();
+         expect(fsMock.rmSync).not.toHaveBeenCalled();
       });
 
       it("recurses into a directory and removes each cold blob", async () => {
-         jest.spyOn(fs.promises, "lstat").mockImplementation(async (p: any) =>
+         fsMock.lstatSync.mockImplementation((p: any) =>
             String(p) === "/cloud/d"
                ? ({ isSymbolicLink: () => false, isDirectory: () => true } as any)
                : ({ isSymbolicLink: () => true, isDirectory: () => false } as any),
          );
-         jest.spyOn(fs.promises, "readdir").mockResolvedValue([dirent("a.png")] as any);
-         jest.spyOn(fs.promises, "readlink").mockResolvedValue("/mnt/coldhdd/cloud-dir/d/a.png");
+         fsMock.readdirSync.mockReturnValue([dirent("a.png")]);
+         fsMock.readlinkSync.mockReturnValue("/mnt/coldhdd/cloud-dir/d/a.png");
 
          await service.removeColdData("/cloud/d");
 
-         expect(fs.promises.rm).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/d/a.png", { force: true });
+         expect(fsMock.rmSync).toHaveBeenCalledWith("/mnt/coldhdd/cloud-dir/d/a.png", { force: true });
       });
    });
 
