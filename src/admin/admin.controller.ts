@@ -133,6 +133,25 @@ export class AdminController {
       return { enabled: await this.featureFlagService.isFeatureFlagEnabled(namespace, key) };
    }
 
+   /**
+    * Service-to-service read that also returns the flag's payload, for flags whose payload
+    * is configuration in its own right (e.g. shado-music-api's YouTube cookies).
+    *
+    * Kept separate from `/enabled` so the common "is it on?" check stays a plain boolean
+    * and callers only receive payloads — which may hold credentials — when they ask.
+    */
+   @Get("featureFlag/:namespace/:key/payload")
+   @UseGuards(ServiceKeyGuard)
+   public async getFeatureFlagPayloadForService(
+      @Param("namespace", new ParseEnumPipe(FeatureFlagNamespace)) namespace: FeatureFlagNamespace,
+      @Param("key") key: string,
+   ): Promise<{ enabled: boolean; payload: string | null }> {
+      // getFeatureFlag() returns null the very first time it auto-creates a flag, so treat
+      // a missing row as disabled with no payload.
+      const flag = await this.featureFlagService.getFeatureFlag(namespace, key);
+      return { enabled: flag?.enabled === true, payload: flag?.payload ?? null };
+   }
+
    @Patch("featureFlag/:namespace/:key/enable")
    @ApiParam({
       name: "namespace",

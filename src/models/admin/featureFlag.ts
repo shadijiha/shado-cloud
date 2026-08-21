@@ -5,6 +5,7 @@ export enum FeatureFlagNamespace {
    Files = "files",
    Admin = "admin",
    Replication = "replication",
+   Music = "music",
 }
 
 @Entity()

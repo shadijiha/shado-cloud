@@ -25,6 +25,35 @@ export class FeatureFlagService {
             "(beyond the local network) permitted to reach the /replication endpoints.",
          payload: JSON.stringify({ allowedIps: [] as string[] }, null, 2),
       },
+      [`${FeatureFlagNamespace.Music}:enable_yt_dl_enhanced_bitrate_with_cookies`]: {
+         description:
+            "shado-music-api: use an authenticated YouTube session so pulls can reach the higher audio " +
+            "tiers instead of the unauthenticated fallback. Disable to pull anonymously at lower bitrate. " +
+            "Payload: `cookiesTxt` is the raw text of a Netscape cookies.txt exported for youtube.com " +
+            "(tab-separated); `cookiesFromBrowser` is a local-dev fallback naming a browser profile to " +
+            "read cookies from (chrome | firefox | safari | edge | brave) and must be left empty in " +
+            "Docker, where no browser exists. cookiesTxt wins when both are set. " +
+            "WARNING: cookiesTxt holds live Google session tokens — treat it as a credential. Export " +
+            "from a private window and close it without browsing, or YouTube rotates the session.",
+         payload: JSON.stringify(
+            {
+               cookiesTxt: "",
+               cookiesFromBrowser: "",
+            },
+            null,
+            2,
+         ),
+      },
+      [`${FeatureFlagNamespace.Music}:music_reconvert_flac`]: {
+         description:
+            "shado-music-api: hourly backfill that re-pulls shared songs still stored as legacy .flac " +
+            "so they land in YouTube's native codec, then deletes the oversized original. Those files " +
+            "date from when the pipeline transcoded to FLAC, which inflated the same lossy audio ~32x. " +
+            "Paced to avoid YouTube throttling (small batches, jittered gaps, backs off on rate-limits) " +
+            "and skips itself entirely unless usable cookies are available, since converting without " +
+            "them would lock songs to the lowest bitrate. No payload.",
+         payload: JSON.stringify({}, null, 2),
+      },
    };
 
    private readonly eventListeners: Record<string, { listenerId: string, listener: FeatureFlagEventListener }[]> = {};
