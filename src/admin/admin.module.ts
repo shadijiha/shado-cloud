@@ -16,14 +16,54 @@ import { DeploymentService } from "./deployment.service";
 import { DeploymentProject } from "../models/admin/deploymentProject";
 import { TwoFactorGuard } from "./two-factor.guard";
 import { CronAdminService } from "./cron.service";
+import { PipelineController } from "./pipelines/pipeline.controller";
+import { PipelineService } from "./pipelines/pipeline.service";
+import { PipelineConfigService } from "./pipelines/pipeline-config.service";
+import { PromotionBlockerService } from "./pipelines/promotion-blocker.service";
+import { StepRunnerService } from "./pipelines/step-runner.service";
+import { Pipeline } from "../models/admin/pipeline/pipeline";
+import { PipelineWave } from "../models/admin/pipeline/pipelineWave";
+import { PipelineStage } from "../models/admin/pipeline/pipelineStage";
+import { PipelineTarget } from "../models/admin/pipeline/pipelineTarget";
+import { PipelinePromotion } from "../models/admin/pipeline/pipelinePromotion";
+import { PipelinePromotionBlocker } from "../models/admin/pipeline/pipelinePromotionBlocker";
+import { ApprovalWorkflow } from "../models/admin/pipeline/approvalWorkflow";
+import { ApprovalWorkflowStep } from "../models/admin/pipeline/approvalWorkflowStep";
+import { PipelineRun } from "../models/admin/pipeline/pipelineRun";
 
 @Module({
-   controllers: [AdminController, ServiceFunctionsController, DeploymentController],
-   imports: [TypeOrmModule.forFeature([User, FeatureFlag, ServiceFunction, DeploymentProject]),
+   controllers: [AdminController, ServiceFunctionsController, DeploymentController, PipelineController],
+   imports: [TypeOrmModule.forFeature([
+      User,
+      FeatureFlag,
+      ServiceFunction,
+      DeploymentProject,
+      Pipeline,
+      PipelineWave,
+      PipelineStage,
+      PipelineTarget,
+      PipelinePromotion,
+      PipelinePromotionBlocker,
+      ApprovalWorkflow,
+      ApprovalWorkflowStep,
+      PipelineRun,
+   ]),
       FilesModule,
       DirectoriesModule
    ],
-   providers: [AdminService, FeatureFlagService, EmailService, RemoteTerminalGateway, DeploymentService, TwoFactorGuard, CronAdminService],
+   providers: [
+      AdminService,
+      FeatureFlagService,
+      EmailService,
+      RemoteTerminalGateway,
+      DeploymentService,
+      TwoFactorGuard,
+      CronAdminService,
+      StepRunnerService,
+      PromotionBlockerService,
+      PipelineConfigService,
+      PipelineService,
+   ],
    exports: [AdminService],
 })
 export class AdminModule { }
