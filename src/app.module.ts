@@ -35,6 +35,7 @@ import { FeatureFlag } from "./models/admin/featureFlag";
 import { ReplicationModule } from "./replication/replication.module";
 import { ReplicaLinkRegistry } from "./replication/replica-link.registry";
 import { ReplicationGateway } from "./replication/replication.gateway";
+import { ReplicaDeploymentCoordinator } from "./replication/replica-deployment.coordinator";
 import yamlConfigLoader from "./config/config.loader";
 import { GoogleBackupModule } from "./replication/google-backup.module";
 
@@ -90,8 +91,9 @@ import { GoogleBackupModule } from "./replication/google-backup.module";
       TrafficService,
       ReplicaLinkRegistry,
       ReplicationGateway,
+      ReplicaDeploymentCoordinator,
    ],
-   exports: [AppLogger, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, TieredStorageService, ClientsModule, ReplicaLinkRegistry],
+   exports: [AppLogger, AbstractFileSystem, REDIS_CACHE, FeatureFlagService, TrafficService, MetricsPusherService, TieredStorageService, ClientsModule, ReplicaLinkRegistry, ReplicaDeploymentCoordinator],
 })
 export class GlobalUtilityModule { }
 

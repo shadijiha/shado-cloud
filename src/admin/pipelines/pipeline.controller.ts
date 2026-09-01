@@ -94,6 +94,16 @@ export class PipelineController {
       }));
    }
 
+   @Get("replicas")
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   @ApiOperation({ summary: "Replicas currently connected, and whether fan-out is possible here" })
+   public listReplicas() {
+      return {
+         available: this.pipelines.replicaDeploymentsAvailable(),
+         nodes: this.pipelines.describeReplicas(),
+      };
+   }
+
    @Get()
    @UseGuards(JwtAuthGuard, AdminGuard)
    @ApiOperation({ summary: "List every pipeline" })

@@ -23,6 +23,32 @@ this-service:
     ignore-patterns: []
 
     mirror-dirs: []
+    # Optional (replica only). Deployments the PRIMARY is allowed to trigger on this
+    # node, by name. The primary sends only a task name — never a command — so it can
+    # never make this replica run something not listed here. Omit the key entirely to
+    # refuse all deploy requests, which is the default.
+    deploy-tasks:
+      - name: redeploy
+        work-dir: __CWD__
+        steps:
+          - name: git pull
+            cmd: git
+            args: ["pull"]
+          - name: npm install
+            cmd: npm
+            args: ["install"]
+            timeout-ms: 600000
+          - name: build
+            cmd: npm
+            args: ["run", "build"]
+            timeout-ms: 600000
+          # `triggers-restart` steps are reported as successful and the whole result is
+          # flushed to the primary BEFORE the command fires, because afterwards this
+          # process is gone and could not report anything.
+          - name: restart
+            cmd: pm2
+            args: ["restart", "shado-cloud-replica"]
+            triggers-restart: true
 
     # Optional (replica only). Set to false to skip database replication entirely
     # (the hourly DB dump/restore cycle); only files will be mirrored. Defaults to

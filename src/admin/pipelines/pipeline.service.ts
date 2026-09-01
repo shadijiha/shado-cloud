@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Not, Repository } from "typeorm";
@@ -24,12 +24,18 @@ import {
    isTerminalRunStatus,
    PipelineEvent,
    PromotionState,
+   ReplicaStepResult,
    RunStatus,
    StageKind,
    StageResult,
    StepResult,
    StepStatus,
+   TargetKind,
 } from "src/models/admin/pipeline/pipeline.types";
+import {
+   ReplicaDeploymentCoordinator,
+   type ReplicaDeploymentSummary,
+} from "src/replication/replica-deployment.coordinator";
 import { StepRunnerService } from "./step-runner.service";
 import { PromotionBlockerService } from "./promotion-blocker.service";
 import { DEFAULT_PIPELINE_BLUEPRINTS, PipelineBlueprint, blueprintFromLegacyProject } from "./pipeline.blueprints";
@@ -90,6 +96,10 @@ export class PipelineService implements OnModuleInit {
       @InjectRepository(ApprovalWorkflowStep) private readonly workflowStepRepo: Repository<ApprovalWorkflowStep>,
       @InjectRepository(PipelineRun) private readonly runRepo: Repository<PipelineRun>,
       @InjectRepository(DeploymentProject) private readonly legacyProjectRepo: Repository<DeploymentProject>,
+      // Only provided on a master boot (it lives in the global module alongside the
+      // replica-link registry), so it is optional exactly like FilesService's use of
+      // the registry. A REPLICA target on a non-master node fails with a clear reason.
+      @Optional() private readonly replicaDeployments?: ReplicaDeploymentCoordinator,
    ) {}
 
    // ────────────────────────────────────────────────────────────────────────
@@ -223,6 +233,15 @@ export class PipelineService implements OnModuleInit {
       return this.pipelineRepo.find({ order: { id: "ASC" } });
    }
 
+   /** True when this node can fan a deployment out to replicas (master boots only). */
+   public replicaDeploymentsAvailable(): boolean {
+      return !!this.replicaDeployments;
+   }
+
+   public describeReplicas(): { ip: string; deviceName: string; mirrorDirs: number }[] {
+      return this.replicaDeployments?.describeConnected() ?? [];
+   }
+
    public async getPipeline(slug: string): Promise<Pipeline | null> {
       return this.pipelineRepo.findOneBy({ slug });
    }
@@ -309,6 +328,13 @@ export class PipelineService implements OnModuleInit {
          isRunning: !!live && !isTerminalRunStatus(live.run.status),
          fitness: this.computeFitness(graph, promotions),
          queue: await this.getQueue(slug),
+         // Surfaced so the editor can show what a replica fan-out would reach, and
+         // whether this node can do one at all.
+         replicas: {
+            available: !!this.replicaDeployments,
+            connected: this.replicaDeployments?.connectedCount() ?? 0,
+            nodes: this.replicaDeployments?.describeConnected() ?? [],
+         },
       };
    }
 
@@ -1120,6 +1146,27 @@ export class PipelineService implements OnModuleInit {
 
          const cwd = this.runner.resolveWorkDir(target.workDir, graph.pipeline.workDir);
 
+         // Replica fan-out: not a local command, so it bypasses the runner entirely.
+         if (target.kind === TargetKind.Replica) {
+            const succeeded = await this.runReplicaTarget(slug, live, stage.id, step, target.cmd);
+            if (!succeeded) {
+               result.status = "failed";
+               result.error = `Replica target "${target.name}" failed: ${step.error}`;
+               result.finishedAt = new Date().toISOString();
+               await this.persist(live);
+               this.emit(slug, {
+                  type: "stage_complete",
+                  runId: live.run.runId,
+                  stageId: stage.id,
+                  stageName: stage.name,
+                  status: "failed",
+                  error: result.error,
+               });
+               return "failed";
+            }
+            continue;
+         }
+
          if (target.triggersRestart) {
             // Mark done *before* firing, because we are about to be killed.
             step.status = "success";
@@ -1166,6 +1213,156 @@ export class PipelineService implements OnModuleInit {
       await this.persist(live);
       this.emit(slug, { type: "stage_complete", runId: live.run.runId, stageId: stage.id, stageName: stage.name, status: "success" });
       return "success";
+   }
+
+   /**
+    * Runs a REPLICA target: propagate the deployment to every connected replica and
+    * fold their reports back into this step.
+    *
+    * Policy, deliberately:
+    *  - Any connected replica that fails, times out or drops fails the target.
+    *  - A replica that *rejects* the task (it does not declare that task) is
+    *    reported but does not fail the target — that is a statement about its
+    *    configuration, not a broken deployment.
+    *  - Zero connected replicas succeeds with a warning. Replicas are mirrors;
+    *    blocking the primary's release because one is offline would be worse than
+    *    the release going out unmirrored, and the run record says so plainly.
+    */
+   private async runReplicaTarget(
+      slug: string,
+      live: LiveRun,
+      stageId: number,
+      step: StepResult,
+      task: string,
+   ): Promise<boolean> {
+      step.status = "running";
+      step.startedAt = new Date().toISOString();
+      step.attempt = 1;
+      step.maxAttempts = 1;
+
+      const emitOutput = (chunk: string) => {
+         this.appendOutput(step, chunk);
+         this.emit(slug, { type: "step_output", runId: live.run.runId, stageId, key: step.key, output: chunk });
+      };
+
+      if (!this.replicaDeployments) {
+         // Only wired on a master boot; on any other topology this is a misconfiguration.
+         step.status = "failed";
+         step.error = "Replica deployment is not available on this node";
+         step.finishedAt = new Date().toISOString();
+         emitOutput(`${step.error}\n`);
+         await this.persist(live);
+         return false;
+      }
+
+      if (!task?.trim()) {
+         step.status = "failed";
+         step.error = "No replica task configured on this target";
+         step.finishedAt = new Date().toISOString();
+         emitOutput(`${step.error}\n`);
+         await this.persist(live);
+         return false;
+      }
+
+      this.emit(slug, {
+         type: "step_start",
+         runId: live.run.runId,
+         stageId,
+         key: step.key,
+         startedAt: step.startedAt,
+      });
+
+      const connected = this.replicaDeployments.connectedCount();
+      emitOutput(`Propagating task "${task}" to ${connected} connected replica(s)…\n`);
+
+      const summary = await this.replicaDeployments.deploy(task, {
+         revision: live.run.revision,
+         commitSha: live.run.commitSha ?? undefined,
+         onProgress: (event) => {
+            const label = `${event.replica.deviceName} @ ${event.replica.ip}`;
+            switch (event.type) {
+               case "accepted":
+                  emitOutput(`[${label}] accepted (${event.steps.length} step(s))\n`);
+                  break;
+               case "rejected":
+                  emitOutput(`[${label}] rejected: ${event.reason}\n`);
+                  break;
+               case "output":
+                  // Prefix every line so interleaved replica output stays attributable.
+                  emitOutput(
+                     event.chunk
+                        .split("\n")
+                        .map((line, index, lines) =>
+                           index === lines.length - 1 && line === "" ? "" : `[${label}] ${line}\n`,
+                        )
+                        .join(""),
+                  );
+                  break;
+               case "step":
+                  emitOutput(`[${label}] ${event.step}: ${event.status}${event.error ? ` — ${event.error}` : ""}\n`);
+                  break;
+               case "settled":
+                  emitOutput(`[${label}] ${event.state}${event.reason ? `: ${event.reason}` : ""}\n`);
+                  break;
+            }
+         },
+      });
+
+      step.replicas = this.replicaReports(summary);
+
+      if (summary.attempted === 0) {
+         step.status = "success";
+         step.finishedAt = new Date().toISOString();
+         emitOutput("No replicas were connected — nothing was propagated.\n");
+         await this.persist(live);
+         this.emit(slug, {
+            type: "step_complete",
+            runId: live.run.runId,
+            stageId,
+            key: step.key,
+            status: "success",
+            finishedAt: step.finishedAt,
+         });
+         return true;
+      }
+
+      emitOutput(
+         `Replica fan-out complete: ${summary.succeeded} succeeded, ${summary.failed} failed ` +
+            `of ${summary.attempted} attempted.\n`,
+      );
+
+      step.status = summary.ok ? "success" : "failed";
+      step.finishedAt = new Date().toISOString();
+      if (!summary.ok) {
+         step.error = summary.reports
+            .filter((report) => ["failed", "timed_out", "disconnected"].includes(report.state))
+            .map((report) => `${report.deviceName} @ ${report.ip}: ${report.state}${report.reason ? ` (${report.reason})` : ""}`)
+            .join("; ");
+      }
+      await this.persist(live);
+      this.emit(slug, {
+         type: "step_complete",
+         runId: live.run.runId,
+         stageId,
+         key: step.key,
+         status: step.status,
+         error: step.error,
+         finishedAt: step.finishedAt,
+      });
+      return summary.ok;
+   }
+
+   /** Flattens a coordinator summary into the shape stored on the run. */
+   private replicaReports(summary: ReplicaDeploymentSummary | null): ReplicaStepResult[] {
+      if (!summary) return [];
+      return summary.reports.map((report) => ({
+         ip: report.ip,
+         deviceName: report.deviceName,
+         state: report.state,
+         reason: report.reason,
+         durationMs: report.durationMs,
+         steps: report.steps.map((s) => ({ name: s.name, status: s.status, error: s.error, output: s.output })),
+      }));
    }
 
    /** Runs one command with retry/backoff, streaming output into `step`. */

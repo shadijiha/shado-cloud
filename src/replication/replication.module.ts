@@ -4,6 +4,8 @@ import { GoogleDriveBackupService } from "./google-drive-backup.service";
 import { TrustedIpMiddleware } from "./trusted-ip.middleware";
 import { ReplicationController } from "./replication.controller";
 import { ReplicaLinkClient } from "./replica-link.client";
+import { ReplicaDeploymentExecutor } from "./replica-deployment.executor";
+import { StepRunnerService } from "src/admin/pipelines/step-runner.service";
 import { ConditionalModule, ConfigModule, ConfigService } from "@nestjs/config";
 import { AbstractFileSystem } from "src/file-system/abstract-file-system.interface";
 import { NodeFileSystemService } from "src/file-system/file-system.service";
@@ -68,6 +70,12 @@ import { SignedServiceSerializer } from "src/auth/service-auth.util";
    providers: [
       ReplicationService,
       ReplicaLinkClient,
+      // Deployments the master may trigger on this replica, by name. The runner is
+      // reused from the pipeline engine rather than duplicated: it is a dependency-free
+      // utility (spawn + ANSI stripping + timeouts + a deliberately minimal child env),
+      // and having one definition of "run a command and stream its output" is the point.
+      ReplicaDeploymentExecutor,
+      StepRunnerService,
       {
          provide: AbstractFileSystem,
          useClass: NodeFileSystemService,

@@ -117,6 +117,60 @@ export enum ReplicationRole {
 }
 
 /* ---------------- THIS SERVICE ---------------- */
+
+/**
+ * One command in a replica deploy task.
+ *
+ * These live in the REPLICA's own config on purpose. The master triggers a
+ * deployment by task *name* only, so it can never make a replica run a command
+ * its operator has not declared here — see replica-link.constants.ts for why.
+ */
+class ReplicaDeployStepConfig {
+   @IsString()
+   name: string;
+
+   @IsString()
+   cmd: string;
+
+   @IsArray()
+   @IsString({ each: true })
+   @IsOptional()
+   args?: string[];
+
+   // Overrides the task's work-dir for this step. `__CWD__` = the process directory.
+   @IsString()
+   @IsOptional()
+   "work-dir"?: string;
+
+   // Kill the command after this many milliseconds. Omitted/0 = no limit.
+   @IsNumber()
+   @IsOptional()
+   "timeout-ms"?: number;
+
+   // This command restarts the replica's own process. The step is reported as
+   // successful and the final result is sent BEFORE the command fires, because
+   // afterwards the socket is gone and nothing could be reported.
+   @IsBoolean()
+   @IsOptional()
+   "triggers-restart"?: boolean;
+}
+
+/** A named, locally-declared sequence of commands the master may trigger by name. */
+class ReplicaDeployTaskConfig {
+   @IsString()
+   name: string;
+
+   // Default working directory for the task's steps. `__CWD__` = process directory.
+   @IsString()
+   @IsOptional()
+   "work-dir"?: string;
+
+   @IsArray()
+   @ValidateNested({ each: true })
+   @Type(() => ReplicaDeployStepConfig)
+   steps: ReplicaDeployStepConfig[];
+}
+
 class ReplicationConfig {
    @IsEnum(ReplicationRole)
    role: ReplicationRole
@@ -146,7 +200,18 @@ class ReplicationConfig {
    @IsString({ each: true })
    @IsOptional()
    "mirror-dirs"?: string[];
+
+   // Replica only. Deployments the master is allowed to trigger on this node, by
+   // name. A replica with no tasks declared rejects every deploy request, which is
+   // the safe default for an existing installation that has not opted in.
+   @IsArray()
+   @ValidateNested({ each: true })
+   @Type(() => ReplicaDeployTaskConfig)
+   @IsOptional()
+   "deploy-tasks"?: ReplicaDeployTaskConfig[];
 }
+
+export type { ReplicaDeployTaskConfig, ReplicaDeployStepConfig };
 
 class GoogleConfig {
    @IsEmail()

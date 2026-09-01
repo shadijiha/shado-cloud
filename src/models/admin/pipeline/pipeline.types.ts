@@ -28,6 +28,14 @@ export enum TargetKind {
    VersionSet = "VS",
    Environment = "ENV",
    Generic = "GEN",
+   /**
+    * Fan-out to every connected replica.
+    *
+    * The target's `cmd` holds the *task name* to run, not a command: replicas
+    * resolve it against their own local config, so the primary cannot make a
+    * replica execute anything its operator has not declared. `args` is unused.
+    */
+   Replica = "REPLICA",
 }
 
 /**
@@ -101,6 +109,17 @@ export function isTerminalRunStatus(status: RunStatus): boolean {
    return TERMINAL_RUN_STATUSES.includes(status);
 }
 
+/** One replica's outcome inside a REPLICA fan-out target. */
+export interface ReplicaStepResult {
+   ip: string;
+   deviceName: string;
+   /** "rejected" | "running" | "success" | "failed" | "timed_out" | "disconnected". */
+   state: string;
+   reason?: string;
+   durationMs: number;
+   steps: { name: string; status: StepStatus | string; error?: string; output: string }[];
+}
+
 /** Result of executing a single target (or workflow step) within a run. */
 export interface StepResult {
    /** Stable key: target name or workflow step name. */
@@ -114,6 +133,11 @@ export interface StepResult {
    attempt?: number;
    maxAttempts?: number;
    exitCode?: number | null;
+   /**
+    * Present only for REPLICA targets: the per-replica breakdown, so the UI can
+    * show each replica's own steps and console output rather than one merged blob.
+    */
+   replicas?: ReplicaStepResult[];
 }
 
 /** Result of running one stage within a run. */
